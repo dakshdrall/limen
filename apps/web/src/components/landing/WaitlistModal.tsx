@@ -22,6 +22,23 @@ export const QUALIFIERS = [
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
+ * Whether the dialog is open *in the top layer*, which is the only state that
+ * carries focus containment and an inert background.
+ *
+ * `:modal` is unsupported in engines older than the dialog behaviour this
+ * component depends on, and `matches()` throws on a selector it cannot parse.
+ * There, treat an open dialog as modal: reopening it on every effect run would
+ * be worse than trusting the one `showModal()` call that opened it.
+ */
+function isModal(dialog: HTMLDialogElement): boolean {
+  try {
+    return dialog.matches(':modal');
+  } catch {
+    return dialog.open;
+  }
+}
+
+/**
  * Native `<dialog>`, opened with `showModal()`.
  *
  * That gives focus containment, Escape-to-close, an inert background, and
@@ -42,11 +59,27 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
   // whether it is open. Submission state is not reset here: the caller remounts
   // this component on each open, so a reopened modal starts fresh by
   // construction rather than by an effect racing the render that opened it.
+  //
+  // The state that matters is "open as a modal", not "open". `dialog.open` is
+  // true for both, so guarding on it alone means a dialog that has ended up
+  // open non-modally — via the `open` attribute, which puts it in normal flow
+  // with no focus containment, no Escape, and no inert background — never gets
+  // `showModal()` called on it, and stays that way. Reconciled by closing it
+  // first and reopening it properly.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog === null) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
+
+    if (!open) {
+      if (dialog.open) dialog.close();
+      return;
+    }
+    if (isModal(dialog)) return;
+    // `showModal()` throws InvalidStateError on an already-open dialog, so a
+    // non-modal one has to be closed before it can be reopened in the top
+    // layer.
+    if (dialog.open) dialog.close();
+    dialog.showModal();
   }, [open]);
 
   // On success the form is replaced, so focus has to be moved deliberately or

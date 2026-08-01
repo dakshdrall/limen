@@ -306,12 +306,23 @@ body {
    focus restoration on close are all browser behaviour rather than hand-rolled
    key handling.
 --------------------------------------------------------------------------- */
+/* Centring is stated outright rather than inherited from the UA stylesheet.
+   A modal dialog is centred by `position: fixed; inset: 0` plus `margin:
+   auto` — the first two from the UA's `dialog:modal` rule, the third from the
+   `dialog` rule, which the CSS reset zeroes along with every other margin.
+   Restoring only the margin leaves the result dependent on a UA rule this
+   file never states, and it opens against the top-left corner in any engine
+   that does not supply it. All three are set here. */
 .modal {
-  width: min(30rem, calc(100vw - 2rem));
-  /* A modal dialog centres itself with the UA's `margin: auto`, which the CSS
-     reset zeroes along with every other margin. Restated, or the dialog opens
-     against the top-left corner. */
+  position: fixed;
+  inset: 0;
   margin: auto;
+  width: min(30rem, calc(100vw - 2rem));
+  height: fit-content;
+  /* Long viewport-relative units, so a short window scrolls the modal's own
+     content instead of pushing it off-screen. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   padding: 0;
   border: 1px solid var(--border-bright);
   border-radius: 6px;
