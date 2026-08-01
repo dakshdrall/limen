@@ -21,11 +21,10 @@ jobs:
 
       - run: npm ci
 
-      # packages/core is dependency-free and must compile on its own before
-      # anything imports it.
-      - name: Build @limen/core
-        run: npm run build -w @limen/core
-
+      # No explicit @limen/core build step: apps/web has a `prebuild` that
+      # builds the core workspace first, so the "Build @limen/web" step below
+      # compiles core as its first action. The tests import core from `src`,
+      # not `dist`, so they do not need a build either.
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
