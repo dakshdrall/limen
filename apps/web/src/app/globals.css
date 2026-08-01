@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* Dark, dense, technical. This is read by developers and grant reviewers.
+   The palette is fixed rather than theme-aware: the deny table's PERMIT/DENY
+   contrast is the point of the page, and it must not shift under a light
+   theme. */
+:root {
+  --background: #08090b;
+  --surface: #0e1013;
+  --surface-raised: #14171c;
+  --border: #23272e;
+  --border-bright: #333941;
+  --foreground: #e6e8eb;
+  --muted: #8b949e;
+  --muted-dim: #5b636d;
+  --permit: #3fb950;
+  --permit-dim: #0f2915;
+  --deny: #f85149;
+  --deny-dim: #2d1113;
+  --accent: #58a6ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-subtle: var(--border);
+  --color-border-bright: var(--border-bright);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-dim: var(--muted-dim);
+  --color-permit: var(--permit);
+  --color-permit-dim: var(--permit-dim);
+  --color-deny: var(--deny);
+  --color-deny-dim: var(--deny-dim);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Wide content scrolls inside its own container; the page body never scrolls
+   horizontally. */
+.scroll-x {
+  overflow-x: auto;
+}
