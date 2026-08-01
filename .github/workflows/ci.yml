@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The deny-case suite is the load-bearing check here. If it goes red, the
+# product claim — that a derived policy refuses everything adjacent to the
+# observed flow — is false, and the build must not be green.
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # packages/core is dependency-free and must compile on its own before
+      # anything imports it.
+      - name: Build @limen/core
+        run: npm run build -w @limen/core
+
+      - name: Test @limen/core (deny-case harness)
+        run: npm run test -w @limen/core
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build @limen/web
+        run: npm run build -w @limen/web
