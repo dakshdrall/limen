@@ -30,6 +30,13 @@ export function DenyTable({
 }) {
   const overPermissive = cases.filter(({ decision }) => decision.permitted);
 
+  // Counted over every adjudicated row, the observed flow included, so the
+  // summary can never disagree with the table under it. On a correct policy
+  // this reads "1 permitted · 6 refused"; an over-permissive dimension moves a
+  // row from one side to the other and the line moves with it.
+  const permittedCount = (observedDecision.permitted ? 1 : 0) + overPermissive.length;
+  const refusedCount = cases.length + 1 - permittedCount;
+
   return (
     <div className="flex flex-col gap-4">
       {overPermissive.length > 0 && (
@@ -52,6 +59,20 @@ export function DenyTable({
           </p>
         </div>
       )}
+
+      {/* Same colour, glyph, and weight as the verdict column below, so the
+          summary reads in greyscale exactly as the rows do. */}
+      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="value font-bold tracking-[0.06em] text-permit">
+          <span aria-hidden="true">✓</span> {permittedCount} permitted
+        </span>
+        <span aria-hidden="true" className="text-faint">
+          ·
+        </span>
+        <span className="value font-bold tracking-[0.06em] text-deny">
+          <span aria-hidden="true">✕</span> {refusedCount} refused
+        </span>
+      </p>
 
       <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
         <table className="w-full min-w-[58rem] border-collapse text-left">
