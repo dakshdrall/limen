@@ -157,14 +157,96 @@ pretend otherwise.
 - **No Rust policy codegen, no MCP server, no mainnet, no multi-account
   management, no wallet.** Each is marked with a `TODO(roadmap)` comment at the
   point where it will attach.
-- **`npm audit` is not clean.** Production dependencies report 36 advisories
-  (1 critical, 10 high). The critical one is arbitrary code execution in
-  `protobufjs`, reached through `@trezor/*` — which the wallet kit pulls in for
-  its Trezor hardware-wallet module. The install flow imports only the Freighter
-  and xBull modules via subpath imports, so that code is never bundled or
-  executed here, but it is still in the dependency tree and has not been
-  properly triaged. On a security-adjacent repository this should not be
-  mistaken for a clean bill of health.
+- **`npm audit` is not clean** — 23 low-severity advisories remain, all of them
+  unfixable at the dependency level. See [Dependency
+  advisories](#dependency-advisories) for the full accounting.
+
+---
+
+## Dependency advisories
+
+`npm audit --omit=dev` on production dependencies:
+
+| | critical | high | moderate | low | total |
+|---|---|---|---|---|---|
+| before overrides | 1 | 10 | 6 | 19 | **36** |
+| after overrides | 0 | 0 | 0 | 23 | **23** |
+
+### What the overrides fix
+
+The root `package.json` pins five transitive packages:
+
+```json
+"overrides": {
+  "protobufjs": "7.6.5",
+  "axios":      ">=1.18.0",
+  "uuid":       ">=11.1.1",
+  "postcss":    ">=8.5.18",
+  "sharp":      ">=0.35.0"
+}
+```
+
+This clears every critical, high, and moderate advisory — including the critical
+one, arbitrary code execution in `protobufjs` (GHSA-xq3m-2v4x-88gg), which
+arrived via `@trezor/*`. All five resolve within a compatible range, so nothing
+is force-upgraded across a breaking major. `npm test`, `npm run lint`, and
+`npm run build` all pass with them applied, and the app was smoke-tested
+end-to-end afterwards.
+
+> **Reproducing this:** npm seeds resolution from an existing `node_modules`, so
+> adding an override to a populated tree appears to do nothing — the old version
+> stays pinned and the audit count does not move. Delete both `node_modules` and
+> `package-lock.json` before re-resolving, or you will conclude the overrides
+> are broken. They are not.
+
+### What cannot be fixed, and why
+
+The 23 remaining advisories are all low severity and all reduce to a single
+root cause: **`elliptic`** (GHSA-848j-6mx2-7j84, "uses a cryptographic primitive
+with a risky implementation"). The advisory covers `*` — every published
+version, including the current 6.6.1 — so there is no version to pin to. An
+override cannot fix it; only removing the dependency can.
+
+It arrives through two independent paths, both inside the wallet kit:
+
+```
+@creit.tech/stellar-wallets-kit
+├─ @hot-wallet/sdk → @near-js/crypto → secp256k1 → elliptic
+└─ @trezor/connect-plugin-stellar → @trezor/connect
+     ├─ @trezor/blockchain-link → crypto-browserify → browserify-sign → elliptic
+     └─ @trezor/utxo-lib → tiny-secp256k1 → elliptic
+```
+
+Both are unconditional dependencies of `@creit.tech/stellar-wallets-kit`. They
+are installed whether or not the HOT Wallet and Trezor modules are used, because
+npm installs a package's dependency tree regardless of which subpaths an
+application imports.
+
+### Subpath importing, and what it does not do
+
+The install flow imports only the two modules it uses:
+
+```ts
+import('@creit.tech/stellar-wallets-kit/modules/freighter')
+import('@creit.tech/stellar-wallets-kit/modules/xbull')
+```
+
+Neither pulls in `@hot-wallet/sdk` or `@trezor/*`, so `elliptic` is never
+bundled into the client and never executes at runtime.
+
+**This is a mitigation of runtime exposure, not of supply-chain exposure.** Be
+precise about the distinction:
+
+- ✅ `elliptic` is not in the shipped browser bundle and no code path reaches it.
+- ❌ It is still installed on every `npm ci`, in CI and on any developer machine.
+- ❌ It still runs its install scripts and still appears in `npm audit`, SBOMs,
+  and any supply-chain scan.
+
+So subpath importing is the *only* available mitigation for the `elliptic`
+advisories, and it is a partial one. Removing them entirely would require the
+wallet kit to move its wallet modules to optional peer dependencies, or
+replacing the kit with per-wallet integrations. Neither is in scope for this
+MVP, and neither is something this repository can fix on its own.
 
 ---
 
