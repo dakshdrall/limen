@@ -121,3 +121,236 @@ body {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
+
+/* ---------------------------------------------------------------------------
+   Landing type scale.
+
+   The landing runs at a different scale from the demo — few words, held one
+   screen at a time — so it gets its own sizes rather than overloading the
+   demo's. Everything is fluid between a phone and a wide desktop so an entry
+   fits one viewport without a breakpoint per size.
+
+   The sans/mono split is the same rule as the demo: prose in sans, every
+   on-chain name, field, and value in mono.
+--------------------------------------------------------------------------- */
+
+/* The header eyebrow and each entry's numeral. Uppercased in CSS so the text
+   content stays lowercase and remains readable when copied. */
+.eyebrow-lead {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: clamp(9.5px, 1.1vw, 11px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.wordmark {
+  font-size: clamp(19px, 2.6vw, 25px);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+}
+
+.entry-h {
+  font-size: clamp(27px, 4.6vw, 52px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+/* Entry 03 is a single sentence and carries the page, so it runs one step
+   above every other heading. */
+.entry-h-lead {
+  font-size: clamp(31px, 5.6vw, 64px);
+}
+
+.entry-p {
+  font-size: clamp(14.5px, 1.5vw, 19px);
+  line-height: 1.55;
+}
+
+/* Numerals in the mechanism steps and field names in the boundary list. */
+.entry-mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: clamp(11px, 1.15vw, 13.5px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Scroll-pinned entries.
+
+   Each entry is a sticky block one viewport tall, stacked in source order with
+   an ascending z-index. Because they share one containing block, an entry
+   holds at `top: 0` while the next one — drawn above it — slides up and
+   covers it. The page therefore reads as a sequence of held statements: scroll
+   distance advances the sequence rather than moving the current statement.
+
+   Every entry paints an opaque background; that is what makes the occlusion
+   read as a replacement rather than a blend.
+
+   Pinning is confined to the `no-preference` query below. Under
+   `prefers-reduced-motion: reduce` — and on viewports too short to hold an
+   entry — the same markup lays out as plain stacked blocks with no sticky
+   positioning, no transitions, and no progress indicator.
+--------------------------------------------------------------------------- */
+.pin-stack {
+  position: relative;
+}
+
+/* The opening statement is held the same way the entries are, so it gets the
+   same screen. Without this the header sits in the top quarter of the viewport
+   above a band of empty background — the gap left by entry 01, whose content
+   is centred in its own screen below. */
+.landing-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100svh;
+  padding-block: clamp(4rem, 9vh, 7rem);
+}
+
+.pin-entry {
+  display: flex;
+  align-items: center;
+  background: var(--background);
+  padding-block: clamp(4rem, 9vh, 7rem);
+}
+
+.entry-inner {
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
+  padding-inline: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+@media (prefers-reduced-motion: no-preference) and (min-height: 620px) {
+  .pin-entry {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+  }
+}
+
+/* Stacked-block fallback: without occlusion the entries need a rule between
+   them to stay distinguishable. */
+@media (prefers-reduced-motion: reduce), (max-height: 619px) {
+  .pin-entry + .pin-entry {
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+/* The enter transition.
+
+   `data-motion` is set by the client component after mount, so the hidden
+   start state never applies to server-rendered HTML. With JavaScript disabled
+   or still loading, every entry is simply visible. */
+@media (prefers-reduced-motion: no-preference) {
+  .pin-stack[data-motion='on'] .entry-inner {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 400ms ease-out,
+      transform 400ms ease-out;
+  }
+
+  .pin-stack[data-motion='on'] .pin-entry[data-entered='true'] .entry-inner {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Sequence position, fixed bottom-right. Decorative: the entries themselves
+   are labelled sections, so this is hidden from assistive technology. */
+.entry-progress {
+  position: fixed;
+  right: clamp(1rem, 2.5vw, 1.75rem);
+  bottom: clamp(1rem, 2.5vw, 1.75rem);
+  z-index: 40;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--muted-dim);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  pointer-events: none;
+}
+
+.entry-progress[data-visible='false'] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .entry-progress {
+    transition: opacity 300ms ease-out;
+  }
+}
+
+/* Nothing is being pinned, so a sequence position would describe motion that
+   is not happening. */
+@media (prefers-reduced-motion: reduce), (max-height: 619px) {
+  .entry-progress {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Waitlist modal.
+
+   A native <dialog>: focus containment, Escape-to-close, inert background and
+   focus restoration on close are all browser behaviour rather than hand-rolled
+   key handling.
+--------------------------------------------------------------------------- */
+.modal {
+  width: min(30rem, calc(100vw - 2rem));
+  /* A modal dialog centres itself with the UA's `margin: auto`, which the CSS
+     reset zeroes along with every other margin. Restated, or the dialog opens
+     against the top-left corner. */
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.modal::backdrop {
+  background: rgb(4 5 7 / 0.84);
+}
+
+.modal:focus-visible {
+  outline: none;
+}
+
+/* Native form controls default to the UA's light palette; these have to be
+   restated or the modal renders white-on-white. */
+.field {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.field:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.field::placeholder {
+  color: var(--faint);
+}
+
+select.field option {
+  background: var(--surface);
+  color: var(--foreground);
+}
