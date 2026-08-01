@@ -1,53 +1,123 @@
 @import "tailwindcss";
 
-/* Dark, dense, technical. This is read by developers and grant reviewers.
-   The palette is fixed rather than theme-aware: the deny table's PERMIT/DENY
-   contrast is the point of the page, and it must not shift under a light
-   theme. */
+/* ---------------------------------------------------------------------------
+   Colour system.
+
+   Fixed dark palette rather than theme-aware: the PERMIT/DENY contrast is the
+   point of the page and must not shift under a light theme.
+
+   The text ramp has four deliberate contrast steps against the page
+   background, so hierarchy is carried by weight and colour rather than by size
+   alone:
+
+     foreground  ~13:1   primary data and headings
+     muted        ~7:1   supporting prose, table headers
+     muted-dim    ~4.5:1 secondary annotations, captions
+     faint        ~2.8:1 decorative only — section numerals, rule marks
+
+   PERMIT and DENY never rely on hue alone. Each pairs its colour with a
+   glyph, a border, and bold weight, so the table reads correctly in greyscale
+   and for colour-blind reviewers.
+--------------------------------------------------------------------------- */
 :root {
-  --background: #08090b;
-  --surface: #0e1013;
-  --surface-raised: #14171c;
-  --border: #23272e;
-  --border-bright: #333941;
-  --foreground: #e6e8eb;
-  --muted: #8b949e;
-  --muted-dim: #5b636d;
-  --permit: #3fb950;
-  --permit-dim: #0f2915;
-  --deny: #f85149;
-  --deny-dim: #2d1113;
-  --accent: #58a6ff;
+  --background: #0a0b0d;
+  --surface: #0f1116;
+  --surface-raised: #14171d;
+  --surface-hover: #12151a;
+
+  --border-subtle: #1b1f25;
+  --border: #262b33;
+  --border-bright: #343a44;
+
+  --foreground: #e7eaee;
+  --muted: #9aa2ac;
+  --muted-dim: #6c747e;
+  --faint: #464d56;
+
+  --permit: #4ac95e;
+  --permit-dim: #0d2413;
+  --permit-line: #1f5c2c;
+
+  --deny: #ff6b62;
+  --deny-dim: #2a0f0f;
+  --deny-line: #7a2b27;
+
+  --accent: #6cb6ff;
+  --accent-dim: #0e1c2c;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
-  --color-border-subtle: var(--border);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border);
   --color-border-bright: var(--border-bright);
+
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-muted-dim: var(--muted-dim);
+  --color-faint: var(--faint);
+
   --color-permit: var(--permit);
   --color-permit-dim: var(--permit-dim);
+  --color-permit-line: var(--permit-line);
+
   --color-deny: var(--deny);
   --color-deny-dim: var(--deny-dim);
+  --color-deny-line: var(--deny-line);
+
   --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+/* Prose is sans; every piece of on-chain data is mono. The split is the
+   primary signal for "this is a value you can verify" versus "this is us
+   describing it". */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.5;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Wide content scrolls inside its own container; the page body never scrolls
    horizontally. */
 .scroll-x {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* Section eyebrow numerals: small, faint, monospaced, non-selectable so
+   copying a section never picks up its index. */
+.eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+/* Column headers across every table on the page. */
+.col-head {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Monospaced value cells: aligned digits, tight tracking. */
+.value {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }

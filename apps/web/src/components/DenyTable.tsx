@@ -14,6 +14,10 @@ export interface AdjudicatedCase {
  * Every row is a single-axis mutation of the observed transaction, adjudicated
  * by the same `evaluate` the test suite runs. The observed flow sits at the top
  * as the one PERMIT, so the contrast is visible without scrolling.
+ *
+ * This table carries the most visual weight on the page: it sits on a raised
+ * surface, its rows respond to hover, and the verdict column is a fixed-width
+ * gutter so the PERMIT/DENY stripe reads as a single vertical signal.
  */
 export function DenyTable({
   observed,
@@ -27,51 +31,64 @@ export function DenyTable({
   const overPermissive = cases.filter(({ decision }) => decision.permitted);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {overPermissive.length > 0 && (
         <div
           role="alert"
-          className="rounded-sm border border-deny bg-deny-dim px-3 py-2 text-deny"
+          className="flex items-start gap-2.5 rounded-[4px] border border-deny-line bg-deny-dim px-4 py-3 text-[13px] text-deny"
         >
-          <strong>Over-permissive.</strong> {overPermissive.length} adjacent transaction
-          {overPermissive.length === 1 ? '' : 's'} that this policy must refuse
-          {overPermissive.length === 1 ? ' was' : ' were'} permitted:{' '}
-          {overPermissive.map(({ denyCase }) => denyCase.axis).join(', ')}.
+          <span aria-hidden="true" className="mt-px font-bold">
+            ✕
+          </span>
+          <p>
+            <strong className="font-semibold">Over-permissive.</strong> {overPermissive.length}{' '}
+            adjacent transaction
+            {overPermissive.length === 1 ? '' : 's'} that this policy must refuse
+            {overPermissive.length === 1 ? ' was' : ' were'} permitted:{' '}
+            <span className="font-mono">
+              {overPermissive.map(({ denyCase }) => denyCase.axis).join(', ')}
+            </span>
+            .
+          </p>
         </div>
       )}
 
-      <div className="scroll-x rounded-sm border border-border-subtle">
-        <table className="w-full min-w-[52rem] border-collapse text-left">
+      <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
+        <table className="w-full min-w-[58rem] border-collapse text-left">
           <thead>
-            <tr className="border-b border-border-bright bg-surface-raised text-muted">
-              <th scope="col" className="w-[7rem] px-3 py-2 font-medium tracking-wide uppercase">
+            <tr className="border-b border-border-bright bg-surface-raised text-muted-dim">
+              <th scope="col" className="col-head w-[9rem] px-5 py-3">
                 Verdict
               </th>
-              <th scope="col" className="w-[6.5rem] px-3 py-2 font-medium tracking-wide uppercase">
+              <th scope="col" className="col-head w-[7rem] px-4 py-3">
                 Axis
               </th>
-              <th scope="col" className="px-3 py-2 font-medium tracking-wide uppercase">
+              <th scope="col" className="col-head px-4 py-3">
                 Transaction
               </th>
-              <th scope="col" className="px-3 py-2 font-medium tracking-wide uppercase">
+              <th scope="col" className="col-head px-4 py-3">
                 Reason
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-border-bright bg-permit-dim/30">
-              <td className="px-3 py-3 align-top">
-                <Verdict permitted={observedDecision.permitted} />
+            <tr className="border-b-2 border-border-bright bg-permit-dim/25">
+              <td className="px-5 py-4 align-top">
+                <Verdict permitted={observedDecision.permitted} size="lg" />
               </td>
-              <td className="px-3 py-3 align-top text-muted-dim">observed</td>
-              <td className="px-3 py-3 align-top">
-                <div className="text-foreground">the transaction the policy was derived from</div>
-                <div className="text-muted-dim">
+              <td className="px-4 py-4 align-top">
+                <span className="value text-muted-dim">observed</span>
+              </td>
+              <td className="px-4 py-4 align-top">
+                <div className="text-[13px] text-foreground">
+                  the transaction the policy was derived from
+                </div>
+                <div className="value mt-1 text-muted-dim">
                   {observed.invocations.length} invocation
                   {observed.invocations.length === 1 ? '' : 's'} at ledger {observed.ledger}
                 </div>
               </td>
-              <td className="px-3 py-3 align-top text-muted">
+              <td className="px-4 py-4 align-top text-[12.5px] text-muted">
                 {observedDecision.permitted
                   ? 'within every derived constraint'
                   : observedDecision.reasons.join('; ')}
@@ -83,27 +100,36 @@ export function DenyTable({
               return (
                 <tr
                   key={denyCase.axis}
-                  className={`border-b border-border-subtle last:border-b-0 ${
-                    wrong ? 'bg-deny-dim/40' : ''
+                  className={`border-b border-border-subtle transition-colors last:border-b-0 ${
+                    wrong ? 'bg-deny-dim/40' : 'hover:bg-surface-hover'
                   }`}
                 >
-                  <td className="px-3 py-3 align-top">
-                    <Verdict permitted={decision.permitted} />
+                  <td className="px-5 py-4 align-top">
+                    <Verdict permitted={decision.permitted} size="lg" />
                   </td>
-                  <td className="px-3 py-3 align-top text-muted-dim">{denyCase.axis}</td>
-                  <td className="px-3 py-3 align-top">
-                    <div className="text-foreground">{denyCase.label}</div>
-                    <div className="text-muted-dim">{denyCase.why}</div>
+                  <td className="px-4 py-4 align-top">
+                    <span className="value text-muted-dim">{denyCase.axis}</span>
                   </td>
-                  <td className="px-3 py-3 align-top text-muted">
+                  <td className="px-4 py-4 align-top">
+                    <div className="text-[13px] text-foreground">{denyCase.label}</div>
+                    <div className="mt-1 max-w-[46ch] text-[12.5px] leading-relaxed text-muted-dim">
+                      {denyCase.why}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 align-top">
                     {decision.reasons.length > 0 ? (
-                      <ul className="flex flex-col gap-1">
+                      <ul className="flex flex-col gap-1.5">
                         {decision.reasons.map((reason) => (
-                          <li key={reason}>{reason}</li>
+                          <li
+                            key={reason}
+                            className="value max-w-[52ch] leading-relaxed text-muted"
+                          >
+                            {reason}
+                          </li>
                         ))}
                       </ul>
                     ) : (
-                      <span className="text-deny">
+                      <span className="text-[12.5px] font-semibold text-deny">
                         no objection raised — this dimension of the policy is too wide
                       </span>
                     )}
@@ -115,11 +141,12 @@ export function DenyTable({
         </table>
       </div>
 
-      <p className="text-muted-dim">
+      <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
         Each row changes exactly one dimension of the observed transaction, so a PERMIT here names
         the single over-permissive dimension. Rows are generated by{' '}
-        <code className="text-muted">generateDenyCases</code> and adjudicated by{' '}
-        <code className="text-muted">evaluate</code> — the same functions the test suite runs.
+        <code className="font-mono text-muted">generateDenyCases</code> and adjudicated by{' '}
+        <code className="font-mono text-muted">evaluate</code> — the same functions the test suite
+        runs.
       </p>
     </div>
   );

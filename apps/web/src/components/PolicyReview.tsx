@@ -142,9 +142,9 @@ export function PolicyReview({
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-14">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted">transaction:</span>
+        <span className="col-head mr-1 text-muted-dim">transaction</span>
         {fixtureKeys.map((key) => (
           <button
             key={key}
@@ -152,17 +152,17 @@ export function PolicyReview({
             disabled={loading}
             onClick={() => void loadFixture(key)}
             aria-pressed={key === activeKey}
-            className={`cursor-pointer rounded-sm border px-2 py-1 hover:border-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`value cursor-pointer rounded-[4px] border px-2.5 py-1 transition-colors hover:border-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 ${
               key === activeKey
-                ? 'border-accent bg-accent/10 text-foreground'
-                : 'border-border-bright text-muted'
+                ? 'border-accent bg-accent-dim text-foreground'
+                : 'border-border-default text-muted hover:bg-surface-hover'
             }`}
           >
             {key}
           </button>
         ))}
-        {loading && <span className="text-muted">loading…</span>}
-        {ingestError !== null && <span className="text-deny">{ingestError}</span>}
+        {loading && <span className="text-[12.5px] text-muted-dim">loading…</span>}
+        {ingestError !== null && <span className="text-[12.5px] text-deny">{ingestError}</span>}
       </div>
 
       <Section index={1} title="Observed" subtitle="A transaction that was performed.">
@@ -175,7 +175,7 @@ export function PolicyReview({
         subtitle="The minimum context rule and policy set that permits exactly that flow. Composed from audited OpenZeppelin primitives — no generated code."
       >
         {proposal === null ? (
-          <p className="text-deny">Synthesis refused this transaction — {synthesisError}</p>
+          <p className="text-[13px] text-deny">Synthesis refused this transaction — {synthesisError}</p>
         ) : (
           <DerivedSection
             proposal={proposal}
@@ -192,11 +192,12 @@ export function PolicyReview({
 
       <Section
         index={3}
+        emphasis
         title="What this policy now refuses"
         subtitle="Adjacent transactions, one mutated dimension each. Every row must read DENY."
       >
         {proposal === null ? (
-          <p className="text-muted">No proposal to evaluate.</p>
+          <p className="text-[13px] text-muted">No proposal to evaluate.</p>
         ) : (
           <DenyTable observed={observed} observedDecision={observedDecision} cases={adjudicated} />
         )}
@@ -204,7 +205,7 @@ export function PolicyReview({
 
       <Section index={4} title="Install" subtitle="Client-side signing. Testnet only.">
         {proposal === null ? (
-          <p className="text-muted">No proposal to install.</p>
+          <p className="text-[13px] text-muted">No proposal to install.</p>
         ) : (
           <InstallSection proposal={proposal} />
         )}
