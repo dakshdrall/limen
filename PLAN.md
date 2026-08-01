@@ -323,6 +323,9 @@ Node 22. Badge in the README.
 ## 7. Out of scope — `TODO(roadmap)` anchors
 
 Rust policy codegen (anchored at the `compositionOnly` gate in `synthesize.ts`),
+
+
+
 the MCP server (anchored at `packages/core/src/index.ts`, which is why core has
 no Next.js or browser globals), mainnet (anchored at the network union in
 `types.ts`), multi-account management, wallet.
