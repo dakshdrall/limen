@@ -95,30 +95,33 @@ export function InstallSection({ proposal }: { proposal: PolicyProposal }) {
   return (
     <div className="flex flex-col gap-3">
       {!installable && (
-        <div className="rounded-sm border border-border-bright bg-surface-raised px-3 py-2">
-          <p className="text-foreground">
-            <strong>Preview only.</strong> No OpenZeppelin smart account is configured, so there is
-            nothing to install onto.
+        <div className="flex flex-col gap-1.5 rounded-[5px] border border-border-bright bg-surface-raised px-4 py-3.5">
+          <p className="text-[13px] text-foreground">
+            <strong className="font-semibold">Preview only.</strong> No OpenZeppelin smart account
+            is configured, so there is nothing to install onto.
           </p>
-          <p className="text-muted-dim">
-            Set <code className="text-muted">NEXT_PUBLIC_SMART_ACCOUNT_ID</code> to a deployed
+          <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
+            Set <code className="value text-muted">NEXT_PUBLIC_SMART_ACCOUNT_ID</code> to a deployed
             testnet account contract to enable signing. The payload below is real and is exactly
             what would be submitted.
           </p>
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <h3 className="text-muted uppercase tracking-wide">
-          Install payload <span className="text-muted-dim">(Soroban ScVal, base64 XDR)</span>
+      <div className="flex flex-col gap-2">
+        <h3 className="col-head flex items-baseline gap-2 text-muted">
+          Install payload
+          <span className="text-faint normal-case tracking-normal">
+            (Soroban ScVal, base64 XDR)
+          </span>
         </h3>
         {error !== null ? (
-          <p className="text-deny">{error}</p>
+          <p className="text-[13px] text-deny">{error}</p>
         ) : xdr === null ? (
-          <p className="text-muted">Serializing…</p>
+          <p className="text-[13px] text-muted-dim">Serializing…</p>
         ) : (
-          <pre className="scroll-x rounded-sm border border-border-subtle bg-surface p-3 text-muted-dim">
-            <code className="break-all whitespace-pre-wrap">{xdr}</code>
+          <pre className="scroll-x max-h-52 overflow-y-auto rounded-[5px] border border-border-subtle bg-surface px-4 py-3.5">
+            <code className="value break-all whitespace-pre-wrap text-muted-dim">{xdr}</code>
           </pre>
         )}
       </div>
@@ -128,19 +131,19 @@ export function InstallSection({ proposal }: { proposal: PolicyProposal }) {
           type="button"
           disabled={!installable || xdr === null}
           onClick={() => void onInstall()}
-          className="cursor-pointer rounded-sm border border-accent bg-accent/10 px-3 py-1.5 text-foreground disabled:cursor-not-allowed disabled:border-border-bright disabled:bg-transparent disabled:text-muted-dim"
+          className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:border-border-default disabled:bg-transparent disabled:text-faint"
         >
           Sign &amp; install on testnet
         </button>
         {!installable && (
-          <span className="text-muted-dim">
+          <span className="text-[12.5px] text-muted-dim">
             disabled — no smart account contract to install onto
           </span>
         )}
-        {status !== null && <span className="text-muted">{status}</span>}
+        {status !== null && <span className="text-[12.5px] text-muted">{status}</span>}
       </div>
 
-      <p className="text-muted-dim">
+      <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
         Limen custodies nothing. Signing is client-side only, via
         stellar-wallets-kit; no secret key reaches the server, an environment variable, or browser
         storage. There is no code path in this repository that can move funds.
