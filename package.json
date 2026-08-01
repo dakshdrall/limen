@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @limen/core && npm run build -w @limen/web",
+    "build": "npm run build -w @limen/web",
     "build:core": "npm run build -w @limen/core",
     "test": "npm run build -w @limen/core && npm run test -w @limen/core",
     "lint": "npm run lint -w @limen/web",
