@@ -34,3 +34,15 @@ jobs:
 
       - name: Build @limen/web
         run: npm run build -w @limen/web
+
+      # Runs last so build and test results are always visible even when this
+      # fails. Threshold is `moderate`, not `low`, because 23 low-severity
+      # advisories are currently unfixable: they all reduce to `elliptic`,
+      # whose advisory covers every published version, so there is no version
+      # to pin to. See "Dependency advisories" in the README.
+      #
+      # This gate exists so a future dependency bump cannot quietly reintroduce
+      # a high or critical. If it starts failing, fix the advisory or move the
+      # threshold deliberately — do not silence it.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
