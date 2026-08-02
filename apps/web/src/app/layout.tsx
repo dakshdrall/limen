@@ -1,15 +1,39 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * IBM Plex, self-hosted.
+ *
+ * `next/font/google` downloads the files at build time and serves them from
+ * this origin — there is no request to Google at runtime, and no system-font
+ * fallback stack anywhere in the cascade. The previous typeface was Geist,
+ * loaded from the Next.js default helper, which is the single clearest tell
+ * that a page was generated rather than designed.
+ *
+ * Plex was drawn for IBM's technical documentation, and its mono is a true
+ * companion to its sans rather than an unrelated face. That is what lets "mono
+ * is reserved for on-chain values" read as one system rather than as a mix:
+ * the two share a skeleton, so switching between them signals provenance
+ * without signalling a change of voice.
+ *
+ * `adjustFontFallback` stays on. It generates a metrics-matched local face used
+ * only for the swap frame before the webfont paints; it is not a fallback
+ * *stack*, and turning it off buys a layout shift for nothing.
+ */
+const plexSans = IBM_Plex_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 const TITLE = "Limen — the permission layer for agentic money on Stellar";
@@ -53,9 +77,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <TopBar />
+        {children}
+      </body>
     </html>
   );
 }

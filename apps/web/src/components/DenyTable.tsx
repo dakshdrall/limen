@@ -95,7 +95,7 @@ export function DenyTable({
           <tbody>
             <tr className="border-b-2 border-border-bright bg-permit-dim/25">
               <td className="px-5 py-4 align-top">
-                <Verdict permitted={observedDecision.permitted} size="lg" />
+                <Verdict state={observedDecision.permitted ? 'permitted' : 'denied'} size="lg" />
               </td>
               <td className="px-4 py-4 align-top">
                 <span className="value text-muted-dim">observed</span>
@@ -126,7 +126,7 @@ export function DenyTable({
                   }`}
                 >
                   <td className="px-5 py-4 align-top">
-                    <Verdict permitted={decision.permitted} size="lg" />
+                    <Verdict state={decision.permitted ? 'permitted' : 'denied'} size="lg" />
                   </td>
                   <td className="px-4 py-4 align-top">
                     <span className="value text-muted-dim">{denyCase.axis}</span>
@@ -143,7 +143,11 @@ export function DenyTable({
                         {decision.reasons.map((reason) => (
                           <li
                             key={reason}
-                            className="value max-w-[52ch] leading-relaxed text-muted"
+                            // Reasons quote 56-character contract addresses.
+                            // Without an explicit break they push the column
+                            // past the viewport and the table has to be
+                            // scrolled sideways to be read at all.
+                            className="value max-w-[52ch] leading-relaxed break-all text-muted"
                           >
                             {reason}
                           </li>

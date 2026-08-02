@@ -1,49 +1,98 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------------------------
-   Colour system.
+/* ===========================================================================
+   BLUEPRINT
 
-   Fixed dark palette rather than theme-aware: the PERMIT/DENY contrast is the
-   point of the page and must not shift under a light theme.
+   The frame of reference is a technical drawing: deep blue-black ground, thin
+   rules on a visible grid, one accent, nothing that glows. The user is reading
+   state and making a consequential decision, so density beats air and
+   legibility beats atmosphere.
 
-   The text ramp has four deliberate contrast steps against the page
-   background, so hierarchy is carried by weight and colour rather than by size
-   alone:
+   Rules this file holds itself to, because they are the difference between a
+   system and a set of decorations:
 
-     foreground  ~13:1   primary data and headings
-     muted        ~7:1   supporting prose, table headers
-     muted-dim    ~4.5:1 secondary annotations, captions
-     faint        ~2.8:1 decorative only — section numerals, rule marks
+     - Colour is never the only carrier of meaning. Every verdict pairs hue
+       with a glyph and a border treatment, so the page survives greyscale.
+     - Every number is tabular. Set once on `body`, so a new table cannot
+       forget it.
+     - Column widths are tokens, not judgement. A contract address occupies the
+       same width on every screen because it is the same class on every screen.
+     - No gradient fills, no glass, no glow, no shadow depth. The two repeating
+       gradients below draw 1px rules; that is a hairline technique, not a
+       decorative fill.
+=========================================================================== */
 
-   PERMIT and DENY never rely on hue alone. Each pairs its colour with a
-   glyph, a border, and bold weight, so the table reads correctly in greyscale
-   and for colour-blind reviewers.
---------------------------------------------------------------------------- */
 :root {
-  --background: #0a0b0d;
-  --surface: #0f1116;
-  --surface-raised: #14171d;
-  --surface-hover: #12151a;
+  /* --- ground ----------------------------------------------------------- */
+  /* Deep blue-black rather than neutral black: the whole palette is cool, so
+     the single warm signal (DENY) has somewhere to stand out from. */
+  --background: #060a11;
+  --surface: #0b111b;
+  --surface-raised: #101826;
+  --surface-hover: #0e1521;
+  /* A surface that is present but not yet active — an unreached step, a
+     disabled panel. Opaque, and one value step *below* `--surface` rather than
+     `--surface` at reduced alpha: alpha lets the ground's grid through, and a
+     card the floor shows through does not read as sitting on anything. */
+  --surface-sunken: #080d15;
 
-  --border-subtle: #1b1f25;
-  --border: #262b33;
-  --border-bright: #343a44;
+  /* --- rules ------------------------------------------------------------ */
+  /* Three weights, all thin. Depth comes from which rule you use, never from
+     a shadow — against #060a11 a shadow is invisible and costs a repaint. */
+  --border-subtle: #16202f;
+  --border: #1f2c3f;
+  --border-bright: #2b3b52;
 
-  --foreground: #e7eaee;
-  --muted: #9aa2ac;
-  --muted-dim: #6c747e;
-  --faint: #464d56;
+  /* --- text ramp -------------------------------------------------------- */
+  /* Four deliberate contrast steps against the ground, so hierarchy is carried
+     by weight and value rather than by size alone:
+         foreground  ~14:1   primary data and headings
+         muted        ~7:1   supporting prose, table headers
+         muted-dim  ~4.5:1   secondary annotations, captions
+         faint      ~2.6:1   decorative only — numerals, rule marks */
+  --foreground: #e3e9f2;
+  --muted: #97a4b8;
+  --muted-dim: #68758a;
+  --faint: #414d60;
 
-  --permit: #4ac95e;
-  --permit-dim: #0d2413;
-  --permit-line: #1f5c2c;
+  /* --- state ------------------------------------------------------------ */
+  /* PERMIT and DENY carry hue AND glyph AND border. Never hue alone. */
+  --permit: #45c86a;
+  --permit-dim: #08210f;
+  --permit-line: #1c5730;
 
-  --deny: #ff6b62;
-  --deny-dim: #2a0f0f;
-  --deny-line: #7a2b27;
+  --deny: #f9695f;
+  --deny-dim: #250c0c;
+  --deny-line: #762824;
 
-  --accent: #6cb6ff;
-  --accent-dim: #0e1c2c;
+  /* The third verdict. A boundary refusal that never reached a ledger is not
+     the same claim as one that did, so it must not borrow DENY's red — but it
+     must not become a fourth hue either, or the palette stops meaning
+     anything. It is drawn in the neutral ramp with a dashed border: visibly
+     a refusal, visibly a weaker one. */
+  --unproven: #97a4b8;
+  --unproven-dim: #0e1521;
+  --unproven-line: #3b4859;
+
+  /* One accent. Active navigation, focus, and the copy affordance. Nothing
+     else earns it. */
+  --accent: #58b0e8;
+  --accent-dim: #08192a;
+
+  /* --- grid ------------------------------------------------------------- */
+  /* Two pitches, like drafting paper: a minor rule you read as texture and a
+     major rule you read as structure. Both sit below the threshold of
+     distraction — if you notice the grid rather than the depth, it is too
+     strong. */
+  --grid-minor: rgb(120 170 220 / 0.026);
+  --grid-major: rgb(120 170 220 / 0.048);
+  --grid-pitch: 32px;
+  --grid-pitch-major: 160px;
+  --grid-image:
+    repeating-linear-gradient(to right, var(--grid-major) 0 1px, transparent 1px var(--grid-pitch-major)),
+    repeating-linear-gradient(to bottom, var(--grid-major) 0 1px, transparent 1px var(--grid-pitch-major)),
+    repeating-linear-gradient(to right, var(--grid-minor) 0 1px, transparent 1px var(--grid-pitch)),
+    repeating-linear-gradient(to bottom, var(--grid-minor) 0 1px, transparent 1px var(--grid-pitch));
 }
 
 @theme inline {
@@ -51,6 +100,7 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-hover: var(--surface-hover);
+  --color-surface-sunken: var(--surface-sunken);
 
   --color-border-subtle: var(--border-subtle);
   --color-border-default: var(--border);
@@ -69,50 +119,62 @@
   --color-deny-dim: var(--deny-dim);
   --color-deny-line: var(--deny-line);
 
+  --color-unproven: var(--unproven);
+  --color-unproven-dim: var(--unproven-dim);
+  --color-unproven-line: var(--unproven-line);
+
   --color-accent: var(--accent);
   --color-accent-dim: var(--accent-dim);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-/* Prose is sans; every piece of on-chain data is mono. The split is the
-   primary signal for "this is a value you can verify" versus "this is us
-   describing it". */
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  font-size: 13.5px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
+  /* IBM Plex, self-hosted by next/font. No system-font fallback stack: the
+     face is either the one that was chosen or the metrics-matched swap frame
+     next/font generates for it. */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 /* ---------------------------------------------------------------------------
-   The ground.
+   Base.
 
-   The page was flat — not undecorated, flat: content and background sat on the
-   same plane, so nothing read as *on* anything. This is a ruled grid at the
-   very bottom of the stack, barely above the threshold of perception, so the
-   page has a floor and surfaces have something to sit on.
-
-   Deliberately structural rather than decorative: two 1px gradients, no noise
-   texture, no imagery, no blur, no animation. It must never resolve into a
-   pattern a reader can name — if you notice the grid rather than the depth, it
-   is too strong.
-
-   `--grid-line` is derived from `--border-subtle` at low alpha, so the ground
-   belongs to the same colour system as every border on the page rather than
-   introducing a value of its own.
+   Prose is sans; every on-chain value is mono. The split is the primary signal
+   for "this is a value you can verify" versus "this is us describing it", and
+   it only works because Plex Sans and Plex Mono share a skeleton — the change
+   reads as a change of register, not a change of voice.
 --------------------------------------------------------------------------- */
-:root {
-  --grid-line: rgb(255 255 255 / 0.016);
-  --grid-pitch: 64px;
-  --grid-image:
-    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px var(--grid-pitch)),
-    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--grid-pitch));
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.6;
+  /* Every digit on every screen, set once. A table that forgets this shifts
+     its columns between rows, and then it is not an instrument. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Focus is visible everywhere, in the accent, at a consistent offset. An
+   instrument that cannot be driven from the keyboard is a picture of one. */
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* Motion is opt-in. Anything that animates must be inside this query, so the
+   reduced-motion path is the default rather than the exception. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The ground. Fixed, behind everything, never scrolls with content. */
 body::before {
   content: '';
   position: fixed;
@@ -122,14 +184,12 @@ body::before {
   background-image: var(--grid-image);
 }
 
-/* A section that sits on the ground rather than being cut out of it. Depth
-   comes from a border and a surface step, not from a shadow: against a
-   #0a0b0d background a shadow is nearly invisible and costs more than it
-   returns. */
+/* A surface that sits on the ground rather than being cut out of it. Depth is
+   a border plus one value step — no shadow. */
 .on-ground {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 /* Wide content scrolls inside its own container; the page body never scrolls
@@ -139,53 +199,229 @@ body::before {
   overscroll-behavior-x: contain;
 }
 
-/* Section eyebrow numerals: small, faint, monospaced, non-selectable so
-   copying a section never picks up its index. */
+/* ---------------------------------------------------------------------------
+   Type scale.
+
+   Small, tight, and mono-forward. Headings are set in sans at moderate weight
+   and near-zero tracking; nothing on an app screen runs larger than 22px,
+   because size is not how this interface builds hierarchy.
+--------------------------------------------------------------------------- */
+
+/* Section eyebrow numerals: small, faint, non-selectable so copying a section
+   never picks up its index. */
 .eyebrow {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.14em;
-  font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
-/* Column headers across every table on the page. */
+/* Column headers across every table in the app. */
 .col-head {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--muted-dim);
+  white-space: nowrap;
 }
 
 /* Monospaced value cells: aligned digits, tight tracking. */
 .value {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
-  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   The grid, in the sense that matters: column widths.
+
+   These are the reason a contract address is the same width on every screen.
+   Applied to the `col` element or the cell, never re-derived per table. A new
+   column type gets a token here rather than an inline width somewhere.
+
+   Widths are in `ch`, which under a monospaced face is exactly the number of
+   characters the column holds — so `--col-hash: 18ch` is a statement about
+   content, not a guess about pixels.
+--------------------------------------------------------------------------- */
+:root {
+  --col-addr: 22ch;
+  --col-hash: 18ch;
+  --col-amount: 14ch;
+  --col-ledger: 9ch;
+  --col-verdict: 11ch;
+  --col-label: 10ch;
+}
+
+.col-addr { width: var(--col-addr); }
+.col-hash { width: var(--col-hash); }
+.col-amount { width: var(--col-amount); text-align: right; }
+.col-ledger { width: var(--col-ledger); text-align: right; }
+.col-verdict { width: var(--col-verdict); }
+.col-label { width: var(--col-label); }
+
+/* ---------------------------------------------------------------------------
+   Tables.
+
+   Compact and scannable. Rows are separated by the subtlest rule in the
+   system; the header by the next one up. Nothing is striped — striping is a
+   substitute for alignment, and the columns above are already aligned.
+--------------------------------------------------------------------------- */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+
+.tbl thead th {
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.tbl tbody td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.tbl tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tbl tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+/* Numeric cells inherit the mono face so column alignment is real rather than
+   approximate. */
+.tbl .num {
+  font-family: var(--font-mono);
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Status labels.
+
+   `TESTNET ONLY`, `NOT AUDITED`, and the rest. Deliberately plain: a small
+   mono label in the neutral ramp, distinguished from prose by a border rather
+   than by colour. A project that states its own limits precisely reads as more
+   trustworthy than one that stays vague, and colouring those statements would
+   make them look like badges rather than facts.
+--------------------------------------------------------------------------- */
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--muted-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* The one label that gets weight, because it is the one a person must read
+   before they sign something. Still not a hue of its own — brighter rule and
+   brighter text within the existing ramp. */
+.status-label[data-weight='loud'] {
+  border-color: var(--border-bright);
+  color: var(--foreground);
+}
+
+/* ---------------------------------------------------------------------------
+   Modal.
+
+   A native <dialog>: focus containment, Escape-to-close, inert background and
+   focus restoration on close are browser behaviour rather than hand-rolled key
+   handling.
+--------------------------------------------------------------------------- */
+/* Centring is stated outright rather than inherited from the UA stylesheet.
+   A modal dialog is centred by `position: fixed; inset: 0` plus `margin:
+   auto` — the first two from the UA's `dialog:modal` rule, the third from the
+   `dialog` rule, which the CSS reset zeroes along with every other margin.
+   Restoring only the margin leaves the result dependent on a UA rule this
+   file never states, and it opens against the top-left corner in any engine
+   that does not supply it. All three are set here. */
+.modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(30rem, calc(100vw - 2rem));
+  height: fit-content;
+  /* Long viewport-relative units, so a short window scrolls the modal's own
+     content instead of pushing it off-screen. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  padding: 0;
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.modal::backdrop {
+  background: rgb(2 4 8 / 0.86);
+}
+
+.modal:focus-visible {
+  outline: none;
+}
+
+/* Native form controls default to the UA's light palette; these have to be
+   restated or the modal renders white-on-white. */
+.field {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.field:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.field::placeholder {
+  color: var(--faint);
+}
+
+select.field option {
+  background: var(--surface);
+  color: var(--foreground);
 }
 
 /* ---------------------------------------------------------------------------
    Landing type scale.
 
-   The landing runs at a different scale from the demo — few words, held one
+   The landing runs at a different scale from the app — few words, held one
    screen at a time — so it gets its own sizes rather than overloading the
-   demo's. Everything is fluid between a phone and a wide desktop so an entry
-   fits one viewport without a breakpoint per size.
+   app's. Everything is fluid between a phone and a wide desktop.
 
-   The sans/mono split is the same rule as the demo: prose in sans, every
-   on-chain name, field, and value in mono.
+   TODO(v3 step 12): the scroll-pinned landing is replaced by a dense,
+   substantive page. These rules stay until then so the current landing keeps
+   working; they are not part of the app's design system.
 --------------------------------------------------------------------------- */
 
-/* The header eyebrow and each entry's numeral. Uppercased in CSS so the text
-   content stays lowercase and remains readable when copied. */
 .eyebrow-lead {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: clamp(9.5px, 1.1vw, 11px);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
@@ -203,8 +439,6 @@ body::before {
   text-wrap: balance;
 }
 
-/* Entry 03 is a single sentence and carries the page, so it runs one step
-   above every other heading. */
 .entry-h-lead {
   font-size: clamp(31px, 5.6vw, 64px);
 }
@@ -214,39 +448,16 @@ body::before {
   line-height: 1.55;
 }
 
-/* Numerals in the mechanism steps and field names in the boundary list. */
 .entry-mono {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: clamp(11px, 1.15vw, 13.5px);
-  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 
-/* ---------------------------------------------------------------------------
-   Scroll-pinned entries.
-
-   Each entry is a sticky block one viewport tall, stacked in source order with
-   an ascending z-index. Because they share one containing block, an entry
-   holds at `top: 0` while the next one — drawn above it — slides up and
-   covers it. The page therefore reads as a sequence of held statements: scroll
-   distance advances the sequence rather than moving the current statement.
-
-   Every entry paints an opaque background; that is what makes the occlusion
-   read as a replacement rather than a blend.
-
-   Pinning is confined to the `no-preference` query below. Under
-   `prefers-reduced-motion: reduce` — and on viewports too short to hold an
-   entry — the same markup lays out as plain stacked blocks with no sticky
-   positioning, no transitions, and no progress indicator.
---------------------------------------------------------------------------- */
 .pin-stack {
   position: relative;
 }
 
-/* The opening statement is held the same way the entries are, so it gets the
-   same screen. Without this the header sits in the top quarter of the viewport
-   above a band of empty background — the gap left by entry 01, whose content
-   is centred in its own screen below. */
 .landing-header {
   display: flex;
   flex-direction: column;
@@ -260,10 +471,7 @@ body::before {
   align-items: center;
   padding-block: clamp(4rem, 9vh, 7rem);
   /* Opaque colour first, grid painted over it. The opacity is what makes the
-     pinned occlusion read as a replacement rather than a blend, so this must
-     stay a solid `background-color` — the page's fixed grid sits at z-index -1
-     and would otherwise be hidden by every entry, leaving the landing flat
-     while the demo below it had a floor. */
+     pinned occlusion read as a replacement rather than a blend. */
   background-color: var(--background);
   background-image: var(--grid-image);
 }
@@ -291,11 +499,6 @@ body::before {
   }
 }
 
-/* The enter transition.
-
-   `data-motion` is set by the client component after mount, so the hidden
-   start state never applies to server-rendered HTML. With JavaScript disabled
-   or still loading, every entry is simply visible. */
 @media (prefers-reduced-motion: no-preference) {
   .pin-stack[data-motion='on'] .entry-inner {
     opacity: 0;
@@ -311,8 +514,6 @@ body::before {
   }
 }
 
-/* Sequence position, fixed bottom-right. Decorative: the entries themselves
-   are labelled sections, so this is hidden from assistive technology. */
 .entry-progress {
   position: fixed;
   right: clamp(1rem, 2.5vw, 1.75rem);
@@ -320,13 +521,12 @@ body::before {
   z-index: 40;
   padding: 0.35rem 0.6rem;
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--surface);
   color: var(--muted-dim);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.16em;
-  font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: none;
 }
@@ -347,71 +547,4 @@ body::before {
   .entry-progress {
     display: none;
   }
-}
-
-/* ---------------------------------------------------------------------------
-   Waitlist modal.
-
-   A native <dialog>: focus containment, Escape-to-close, inert background and
-   focus restoration on close are all browser behaviour rather than hand-rolled
-   key handling.
---------------------------------------------------------------------------- */
-/* Centring is stated outright rather than inherited from the UA stylesheet.
-   A modal dialog is centred by `position: fixed; inset: 0` plus `margin:
-   auto` — the first two from the UA's `dialog:modal` rule, the third from the
-   `dialog` rule, which the CSS reset zeroes along with every other margin.
-   Restoring only the margin leaves the result dependent on a UA rule this
-   file never states, and it opens against the top-left corner in any engine
-   that does not supply it. All three are set here. */
-.modal {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(30rem, calc(100vw - 2rem));
-  height: fit-content;
-  /* Long viewport-relative units, so a short window scrolls the modal's own
-     content instead of pushing it off-screen. */
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-  padding: 0;
-  border: 1px solid var(--border-bright);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--foreground);
-}
-
-.modal::backdrop {
-  background: rgb(4 5 7 / 0.84);
-}
-
-.modal:focus-visible {
-  outline: none;
-}
-
-/* Native form controls default to the UA's light palette; these have to be
-   restated or the modal renders white-on-white. */
-.field {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 13px;
-}
-
-.field:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 0;
-  border-color: var(--accent);
-}
-
-.field::placeholder {
-  color: var(--faint);
-}
-
-select.field option {
-  background: var(--surface);
-  color: var(--foreground);
 }

@@ -37,7 +37,7 @@ export function Beat({
   return (
     <li
       className={`flex flex-col gap-4 rounded-[6px] border p-5 transition-colors sm:p-6 ${
-        reached ? 'border-border-default bg-surface' : 'border-border-subtle bg-surface/40'
+        reached ? 'border-border-default bg-surface' : 'border-border-subtle bg-surface-sunken'
       }`}
       aria-current={busy ? 'step' : undefined}
     >
