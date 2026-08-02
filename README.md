@@ -32,7 +32,7 @@ suite runs, executing in the browser.
 ```bash
 npm ci
 npm run build      # builds @limen/core, then the web app
-npm test           # the deny-case harness
+npm test           # the deny-case harness, then extraction and route tests
 npm run dev        # http://localhost:3000
 ```
 
@@ -40,11 +40,24 @@ No credentials are required. The app ships JSON fixtures and loads one by
 default, so the whole pipeline — ingest → synthesize → deny table → install
 payload — runs with no RPC access and no API key.
 
+### The two screens
+
+- **`/`** — the argument, then the review: a transaction, the policy derived
+  from it, the deny table, and the install payload. Paste any Soroban testnet
+  transaction hash to run it on your own flow, or pick a shipped preset.
+- **`/demo`** — a five-step guided walkthrough that performs a real testnet
+  transaction for you, observes it live, derives the boundary, and tries to
+  exceed it. No wallet and no funded account needed. Each step states whether
+  what happened was **on-chain** or **computed locally**; the two are never
+  blurred.
+
 ### Optional configuration
 
 | Variable | Effect when unset |
 |---|---|
-| `SOROBAN_RPC_URL` | Live testnet ingest is unavailable; fixtures still work. Server-side only — never exposed to the browser. |
+| `SOROBAN_RPC_URL` | Live testnet ingest is unavailable and the hash input is disabled with the reason on screen; fixtures still work. It never silently substitutes a fixture for the transaction you asked for. Server-side only — never exposed to the browser. |
+| `LIMEN_DEMO_SECRET` | Step 1 of `/demo` is unavailable and the walkthrough starts from a shipped transaction instead. Testnet seed for the disposable demo account. Server-side only. |
+| `LIMEN_DEMO_DESTINATION` | As above. The fixed account the demo transfer is sent to. |
 | `ANTHROPIC_API_KEY` | The plain-English explanation is skipped and the raw structured rationale is shown instead. The deny table is unaffected. |
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
@@ -70,10 +83,16 @@ Rust is generated. If a constraint cannot be expressed by composing those,
 `synthesize` throws with the constraint named rather than guessing. Future
 codegen is gated behind a `compositionOnly: false` flag that is never set.
 
-**3. Limen custodies nothing.** No secret key reaches the server, an environment
-variable, or browser storage. Signing is client-side only, via
-`@creit.tech/stellar-wallets-kit`. There is no code path in this repository that
-can move user funds.
+**3. Limen custodies nothing of yours.** No *user's* secret key reaches the
+server, an environment variable, or browser storage. Signing for install is
+client-side only, via `@creit.tech/stellar-wallets-kit`. There is no code path
+in this repository that can move a user's funds.
+
+There is exactly one code path that can move any funds at all:
+`apps/web/src/lib/demo-signer.ts`, which signs the guided demo's first step with
+a disposable testnet account this project owns. It is fenced four ways — see
+[The demo account](#the-demo-account) — and it can never touch a user's key,
+because it only ever holds its own.
 
 **4. `evaluate` is an independent implementation of `synthesize`.** The two
 share no code path and no helper — the outflow summation is deliberately written
@@ -106,6 +125,63 @@ loudly if anyone ever "optimizes" the summation into a balance delta.
 rule expires before the window rolls, and the "rolling" cap is really a one-shot
 lifetime allowance wearing a costume. `synthesize` throws instead.
 
+**Ingest is accurate or absent, never quietly narrowed.** If a transaction
+contains a token transfer the extractor cannot fully read, ingest fails and
+names the field it could not read. It does not record the transfers it managed
+to parse and drop the one it did not — that would under-derive the cap, which
+*sounds* conservative and is actually worse: every number on the page would then
+describe a flow that never happened. A wrong `ObservedTransaction` produces a
+wrong policy, so the only acceptable outcomes are correct or refused.
+
+**Movements are attributed only as far as the chain says.** Soroban contract
+events name the token contract that emitted them, not the invocation that caused
+them. With one invocation, attribution is exact. With more, `ObservedTransaction`
+carries `attribution: 'transaction-level'` and the UI says the metadata does not
+say which call caused what, rather than drawing every movement under the first
+call. No derived value depends on this either way — `synthesize` sums outflow
+across the whole transaction — which is precisely why representing the
+uncertainty costs nothing and asserting a guess would have cost the truth.
+
+**Refusal is a rendered result, not an error.** When synthesis exceeds the
+five-policy limit, or a constraint cannot be composed from audited primitives,
+the page shows what was attempted, why Limen refused, and what it specifically
+did *not* do — approximate, drop a constraint, or widen a cap to fit. The
+`over-limit` preset exists to demonstrate this on demand. A system that can only
+be seen succeeding gives you no evidence about when it declines.
+
+---
+
+## The demo account
+
+Step 1 of `/demo` submits a real transaction to Stellar testnet so a reviewer
+with no wallet can still complete the walkthrough. That account is **disposable
+and holds trivial funds; its compromise is uninteresting by design.**
+
+The signer is fenced four ways, and the fourth is the only one that is proof
+rather than intent:
+
+1. **`import 'server-only'`** — importing it from a Client Component is a build
+   error, not a runtime one.
+2. **A hard `throw` on any non-testnet network passphrase.** Not a config flag,
+   not a default, not a warning. No value of any environment variable produces a
+   mainnet signer from that module.
+3. **It signs only a transaction it built itself**, from a fixed template.
+   `performDemoTransfer()` takes no arguments, so nothing a request contains can
+   influence the destination, the asset, or the amount. There is no
+   "sign this XDR" entry point.
+4. **CI greps the built client bundle** and fails if the signer's sentinel or
+   the name of its secret appears there. The check is two-sided: it first
+   asserts the sentinel *is* present in the server bundle, because a grep that
+   can never match would pass forever while proving nothing.
+
+The account is rate-limited per address and under a global ceiling, and
+submissions are serialized so concurrent reviewers cannot collide on its
+sequence number.
+
+The transfer is a Stellar Asset Contract invocation rather than a classic
+payment, because a classic payment emits no contract invocations — the extractor
+would correctly refuse it, and step 2 would fail on step 1's own output.
+
 ---
 
 ## Layout
@@ -120,8 +196,13 @@ apps/web/           Next.js 16, App Router, TypeScript, Tailwind
   src/app/api/ingest/          tx hash -> ObservedTransaction (nodejs runtime)
   src/app/api/explain/         Claude: structured rationale -> plain English
   src/app/api/install-preview/ proposal -> Soroban ScVal XDR
-  src/app/page.tsx             the demo screen
+  src/app/api/demo/perform/    submits the guided demo's testnet transaction
+  src/app/page.tsx             the review screen
+  src/app/demo/page.tsx        the five-step guided walkthrough
+  src/lib/extract.ts           XDR -> domain model; accurate or absent
+  src/lib/demo-signer.ts       the only signer in the repo; testnet-fenced
   src/fixtures/                shipped JSON transactions
+  test/                        extraction, ingest refusals, the signer fence
 ```
 
 `packages/core` is free of Next.js and browser globals so a future MCP server
@@ -145,12 +226,19 @@ pretend otherwise.
   implementation of the same rules, which is a real check against a wrong
   synthesizer — but it is not the OpenZeppelin contract. Nothing here has been
   tested against a deployed policy contract.
-- **Live RPC ingest is lightly exercised.** The extraction path against Soroban
-  RPC is implemented but has been tested against fixtures rather than a broad
-  range of live testnet transactions. Movement→invocation attribution is
-  approximate: contract events carry the token contract, not the invocation that
-  caused them, so all movements are attached to the first invocation. This is
-  presentational only — no derived cap, allowlist, or deny case depends on it.
+- **Live RPC ingest has not met the long tail of real transactions.** The
+  extraction path is implemented, and its refusal behaviour is covered by tests
+  built on constructed Soroban metadata — a readable transfer, a transfer with a
+  non-integer amount, a missing topic, a malformed emitting contract, a good
+  transfer sitting next to a bad one. What it has *not* seen is the breadth of
+  what testnet actually contains. Every unknown shape it meets will either
+  extract correctly or refuse and name the field; neither of those is silent
+  corruption, but the refusal rate on real traffic is unmeasured.
+- **The cache and the rate limits are process-local.** Both live in memory, so
+  they reset on a cold start and do not compose across instances. They raise the
+  cost of a flood rather than bounding it. This is a deliberate choice — it
+  survives a Vercel cold start with no new dependency and no provisioning — not
+  an oversight. `TODO(roadmap)`: a shared backing store, alongside the waitlist.
 - **Fixture transactions are illustrative.** Their addresses are real
   StrKey-valid Stellar addresses, but the transactions were not observed on a
   live network. They are marked `"network": "simulated"` for that reason.
