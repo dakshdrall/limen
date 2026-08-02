@@ -20,11 +20,11 @@ export function singleTransfer(): ObservedTransaction {
         contractId: USDC,
         functionName: 'transfer',
         args: [SOURCE, RECIPIENT, '500000000'],
-        movements: [
-          { asset: USDC, from: SOURCE, to: RECIPIENT, amount: '500000000' },
-        ],
       },
     ],
+    // One invocation, so there is only one call these movements can belong to.
+    attribution: 'exact',
+    movements: [{ asset: USDC, from: SOURCE, to: RECIPIENT, amount: '500000000' }],
   };
 }
 
@@ -40,17 +40,18 @@ export function twoInvocations(): ObservedTransaction {
         contractId: USDC,
         functionName: 'approve',
         args: [SOURCE, ROUTER, '500000000'],
-        movements: [],
       },
       {
         contractId: ROUTER,
         functionName: 'swap',
         args: [USDC, XLM, '500000000'],
-        movements: [
-          { asset: USDC, from: SOURCE, to: ROUTER, amount: '500000000' },
-          { asset: XLM, from: ROUTER, to: SOURCE, amount: '1200000000' },
-        ],
       },
+    ],
+    // Two invocations: the meta does not say which call emitted which transfer.
+    attribution: 'transaction-level',
+    movements: [
+      { asset: USDC, from: SOURCE, to: ROUTER, amount: '500000000' },
+      { asset: XLM, from: ROUTER, to: SOURCE, amount: '1200000000' },
     ],
   };
 }
@@ -70,11 +71,12 @@ export function roundTrip(): ObservedTransaction {
         contractId: ROUTER,
         functionName: 'round_trip',
         args: [],
-        movements: [
-          { asset: USDC, from: SOURCE, to: ROUTER, amount: '1000' },
-          { asset: USDC, from: ROUTER, to: SOURCE, amount: '1000' },
-        ],
       },
+    ],
+    attribution: 'exact',
+    movements: [
+      { asset: USDC, from: SOURCE, to: ROUTER, amount: '1000' },
+      { asset: USDC, from: ROUTER, to: SOURCE, amount: '1000' },
     ],
   };
 }
@@ -90,7 +92,30 @@ export function manyContracts(count: number): ObservedTransaction {
       contractId: `CCONTRACT${String(i).padStart(2, '0')}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
       functionName: 'ping',
       args: [],
-      movements: [],
+    })),
+    attribution: count === 1 ? 'exact' : 'transaction-level',
+    movements: [],
+  };
+}
+
+/**
+ * N assets moving out of the source in one call, so the derived proposal is
+ * N spending limits + 1 allowlist. Used to trip the 5-policy cap on a flow
+ * that spends, rather than on one that only pings.
+ */
+export function manyAssets(count: number): ObservedTransaction {
+  return {
+    hash: 'e'.repeat(64),
+    network: 'simulated',
+    ledger: OBSERVED_LEDGER,
+    source: SOURCE,
+    invocations: [{ contractId: ROUTER, functionName: 'multi_send', args: [] }],
+    attribution: 'exact',
+    movements: Array.from({ length: count }, (_, i) => ({
+      asset: `CASSET${String(i).padStart(2, '0')}AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+      from: SOURCE,
+      to: RECIPIENT,
+      amount: '1000',
     })),
   };
 }

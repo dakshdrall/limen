@@ -8,7 +8,16 @@ import {
   synthesize,
   type PolicyConfig,
 } from '../src/index.js';
-import { OBSERVED_LEDGER, ROUTER, USDC, manyContracts, roundTrip, singleTransfer, twoInvocations } from './factories.js';
+import {
+  OBSERVED_LEDGER,
+  ROUTER,
+  USDC,
+  manyAssets,
+  manyContracts,
+  roundTrip,
+  singleTransfer,
+  twoInvocations,
+} from './factories.js';
 
 function spendingLimit(policies: PolicyConfig[], asset: string): string {
   const policy = policies.find((p) => p.kind === 'spending_limit' && p.asset === asset);
@@ -48,9 +57,8 @@ describe('gross outflow is never netted against inflows', () => {
 
     // Sends 1001 out, receives 1001 back. Nets to zero; spends 1001.
     const candidate = structuredCloneTx(observed);
-    const movements = candidate.invocations[0]!.movements;
-    movements[0]!.amount = '1001';
-    movements[1]!.amount = '1001';
+    candidate.movements[0]!.amount = '1001';
+    candidate.movements[1]!.amount = '1001';
 
     const decision = evaluate(proposal, candidate);
     expect(
@@ -84,7 +92,7 @@ describe('headroom', () => {
     expect(spendingLimit(proposal.policies, USDC)).toBe('500150000');
 
     const odd = synthesize(
-      { ...observed, invocations: [{ ...observed.invocations[0]!, movements: [{ ...observed.invocations[0]!.movements[0]!, amount: '7' }] }] },
+      { ...observed, movements: [{ ...observed.movements[0]!, amount: '7' }] },
       { ...DEFAULT_SYNTHESIS_OPTIONS, headroomBps: 15_000 },
     );
     // 7 * 1.5 = 10.5 -> 10, not 11.
@@ -145,8 +153,15 @@ describe('breadth', () => {
 
   it('refuses a non-integer amount rather than coercing it', () => {
     const observed = singleTransfer();
-    observed.invocations[0]!.movements[0]!.amount = '50.5';
+    observed.movements[0]!.amount = '50.5';
     expect(() => synthesize(observed)).toThrow(/smallest unit/);
+  });
+
+  it('throws above the policy limit on a flow that spends, not just one that calls', () => {
+    // manyContracts trips the cap with allowlists; this trips it with spending
+    // limits, so the check is proven on both halves of the policy count.
+    expect(() => synthesize(manyAssets(MAX_POLICIES))).toThrow(SynthesisError);
+    expect(() => synthesize(manyAssets(MAX_POLICIES))).toThrow(/at most 5/);
   });
 });
 

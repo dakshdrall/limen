@@ -24,8 +24,27 @@ export interface Invocation {
   contractId: Address;
   functionName: string;
   args: string[];
-  movements: TokenMovement[];
 }
+
+/**
+ * How confidently `ObservedTransaction.movements` can be tied to a specific
+ * invocation.
+ *
+ * Soroban contract events carry the *token* contract that emitted them, not the
+ * invocation that caused them. With one invocation in the transaction there is
+ * only one call the movements can belong to, so attribution is `'exact'`. With
+ * more than one — a router call plus the token transfers it triggers — the meta
+ * does not say which call produced which movement, and the honest answer is
+ * `'transaction-level'`: these movements happened in this transaction.
+ *
+ * This is a rendering distinction, not a policy one. `synthesize` sums outflow
+ * across the whole transaction and derives contracts and functions from the
+ * invocation list independently, so no cap, allowlist, or deny case depends on
+ * it. The field exists so the UI can decline to assert something the chain did
+ * not say, rather than drawing a movement under a call that may not have caused
+ * it.
+ */
+export type MovementAttribution = 'exact' | 'transaction-level';
 
 export interface ObservedTransaction {
   hash: string;
@@ -36,6 +55,12 @@ export interface ObservedTransaction {
   /** The account the policy installs on. */
   source: Address;
   invocations: Invocation[];
+  /**
+   * Every token movement observed in the transaction. Transaction-level rather
+   * than per-invocation — see `MovementAttribution`.
+   */
+  movements: TokenMovement[];
+  attribution: MovementAttribution;
 }
 
 export interface ContextRule {

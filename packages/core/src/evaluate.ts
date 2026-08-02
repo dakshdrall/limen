@@ -78,25 +78,23 @@ export function evaluate(proposal: PolicyProposal, candidate: ObservedTransactio
   const outflowByAsset = new Map<string, bigint>();
   let amountsWellFormed = true;
 
-  for (const invocation of candidate.invocations) {
-    for (const movement of invocation.movements) {
-      if (movement.from !== candidate.source) continue;
+  for (const [index, movement] of candidate.movements.entries()) {
+    if (movement.from !== candidate.source) continue;
 
-      let value: bigint;
-      try {
-        if (!/^(?:0|[1-9][0-9]*)$/.test(movement.amount)) throw new Error('not an integer amount');
-        value = BigInt(movement.amount);
-      } catch {
-        amountsWellFormed = false;
-        reasons.push(
-          `unparseable amount on ${invocation.contractId}.${invocation.functionName} for asset ${movement.asset}: ${JSON.stringify(movement.amount)}`,
-        );
-        continue;
-      }
-
-      const running = outflowByAsset.get(movement.asset);
-      outflowByAsset.set(movement.asset, running === undefined ? value : running + value);
+    let value: bigint;
+    try {
+      if (!/^(?:0|[1-9][0-9]*)$/.test(movement.amount)) throw new Error('not an integer amount');
+      value = BigInt(movement.amount);
+    } catch {
+      amountsWellFormed = false;
+      reasons.push(
+        `unparseable amount on movement ${index} for asset ${movement.asset}: ${JSON.stringify(movement.amount)}`,
+      );
+      continue;
     }
+
+    const running = outflowByAsset.get(movement.asset);
+    outflowByAsset.set(movement.asset, running === undefined ? value : running + value);
   }
 
   const limitByAsset = new Map<string, bigint>();

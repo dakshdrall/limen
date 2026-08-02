@@ -131,18 +131,13 @@ export function synthesize(
   // window, which is the property that makes the cap a spending bound at all.
   // Do not "simplify" this into a balance delta.
   const grossOutflow = new Map<Address, bigint>();
-  for (const invocation of observed.invocations) {
-    for (const movement of invocation.movements) {
-      // Every amount is validated, including ones that do not affect the cap,
-      // so malformed input fails at synthesis rather than surviving into a
-      // proposal.
-      const amount = parseAmount(
-        movement.amount,
-        `${invocation.contractId}.${invocation.functionName} movement of ${movement.asset}`,
-      );
-      if (movement.from !== observed.source) continue;
-      grossOutflow.set(movement.asset, (grossOutflow.get(movement.asset) ?? 0n) + amount);
-    }
+  for (const [index, movement] of observed.movements.entries()) {
+    // Every amount is validated, including ones that do not affect the cap,
+    // so malformed input fails at synthesis rather than surviving into a
+    // proposal.
+    const amount = parseAmount(movement.amount, `movement ${index} of ${movement.asset}`);
+    if (movement.from !== observed.source) continue;
+    grossOutflow.set(movement.asset, (grossOutflow.get(movement.asset) ?? 0n) + amount);
   }
 
   const spentAssets = [...grossOutflow.entries()]
