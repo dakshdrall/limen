@@ -28,6 +28,9 @@ jobs:
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
+      - name: Test @limen/web (XDR extraction)
+        run: npm run test -w @limen/web
+
       - name: Lint
         run: npm run lint
 
