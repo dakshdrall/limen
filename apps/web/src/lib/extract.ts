@@ -106,9 +106,27 @@ function bigintSafe(_key: string, value: unknown): unknown {
 }
 
 /**
- * Soroban metadata lives on the v3 arm. Older arms carry classic operation meta
- * only, which genuinely has no contract events — that is an empty list, not an
- * unreadable one. A v3 arm that throws on access is unreadable, and throws.
+ * Contract events, wherever the metadata version in question keeps them.
+ *
+ * Arms 0–2 are classic, pre-Soroban metadata: they genuinely carry no contract
+ * events, so an empty list is the accurate answer rather than a narrowed one.
+ *
+ * Arm 3 (`TransactionMetaV3`) keeps them under `sorobanMeta().events()`.
+ *
+ * Arm 4 (`TransactionMetaV4`, Protocol 23) moved them. Contract invocations now
+ * emit their events per-operation, and the transaction carries a separate
+ * stage-marked list for fee charges and refunds. Both are read: the classifier
+ * below decides what is a token transfer, and it is not this function's job to
+ * pre-judge which list one might arrive in.
+ *
+ * **An unrecognised arm throws.** This is the case that matters, and the one an
+ * earlier version of this file got wrong: it returned `[]` for every arm that
+ * was not 3, which silently reclassified Protocol 23 metadata as "classic, no
+ * events" and produced a transaction whose real transfer went unrecorded. That
+ * is exactly the narrowing this module exists to prevent — applied to the
+ * metadata version rather than to a field, which is why it slipped through.
+ * A version we cannot read may contain transfers we cannot see, and the honest
+ * answer is to refuse.
  */
 function readContractEvents(meta: xdr.TransactionMeta): xdr.ContractEvent[] {
   let arm: number;
@@ -122,17 +140,44 @@ function readContractEvents(meta: xdr.TransactionMeta): xdr.ContractEvent[] {
     );
   }
 
-  if (arm !== 3) return [];
+  // Classic metadata. No contract events exist to read.
+  if (arm === 0 || arm === 1 || arm === 2) return [];
 
-  try {
-    return meta.v3().sorobanMeta()?.events() ?? [];
-  } catch (error) {
-    throw new ExtractionError(
-      'unreadable_meta',
-      'transaction carries Soroban metadata whose event list could not be read; token movements cannot be established',
-      error instanceof Error ? error.message : String(error),
-    );
+  if (arm === 3) {
+    try {
+      return meta.v3().sorobanMeta()?.events() ?? [];
+    } catch (error) {
+      throw new ExtractionError(
+        'unreadable_meta',
+        'transaction carries Soroban metadata whose event list could not be read; token movements cannot be established',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
+
+  if (arm === 4) {
+    try {
+      const v4 = meta.v4();
+      const events: xdr.ContractEvent[] = [];
+      // Transaction-level, stage-marked: fee charges and refunds live here.
+      for (const transactionEvent of v4.events()) events.push(transactionEvent.event());
+      // Per-operation: where an invoked contract's own events are emitted.
+      for (const operation of v4.operations()) events.push(...operation.events());
+      return events;
+    } catch (error) {
+      throw new ExtractionError(
+        'unreadable_meta',
+        'transaction carries Protocol 23 metadata whose event list could not be read; token movements cannot be established',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  throw new ExtractionError(
+    'unreadable_meta',
+    `transaction metadata version ${arm} is not one this extractor knows how to read, so it cannot establish which tokens moved; it may contain transfers that would go uncounted`,
+    'supported: classic (v0–v2), Soroban v3, Protocol 23 v4',
+  );
 }
 
 /**

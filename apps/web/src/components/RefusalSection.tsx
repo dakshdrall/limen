@@ -34,7 +34,7 @@ const EXPLANATIONS: Record<string, string> = {
   unreadable_movement:
     'This transaction contains a token transfer whose amount could not be established. Limen will not record the transfers it could read and drop the one it could not: the resulting cap would be derived from a flow that never happened, and every number on this page would be quietly wrong rather than loudly absent.',
   unreadable_meta:
-    'This transaction’s Soroban metadata could not be read, so the token movements it contains cannot be established. A policy derived from an unknown set of movements is not a conservative policy — it is a fictional one.',
+    'This transaction’s metadata could not be read — either it is malformed, or it is a version this build has no reader for — so the token movements it contains cannot be established. A policy derived from an unknown set of movements is not a conservative policy — it is a fictional one.',
   mainnet_out_of_scope:
     'Mainnet is out of scope for this MVP. It is refused explicitly rather than silently treated as testnet, because a policy derived under one network’s assumptions and installed under another’s is exactly the class of mistake this project exists to prevent.',
 };
