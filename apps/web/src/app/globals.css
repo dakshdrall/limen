@@ -88,6 +88,50 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------------------------------------------------------------------------
+   The ground.
+
+   The page was flat — not undecorated, flat: content and background sat on the
+   same plane, so nothing read as *on* anything. This is a ruled grid at the
+   very bottom of the stack, barely above the threshold of perception, so the
+   page has a floor and surfaces have something to sit on.
+
+   Deliberately structural rather than decorative: two 1px gradients, no noise
+   texture, no imagery, no blur, no animation. It must never resolve into a
+   pattern a reader can name — if you notice the grid rather than the depth, it
+   is too strong.
+
+   `--grid-line` is derived from `--border-subtle` at low alpha, so the ground
+   belongs to the same colour system as every border on the page rather than
+   introducing a value of its own.
+--------------------------------------------------------------------------- */
+:root {
+  --grid-line: rgb(255 255 255 / 0.016);
+  --grid-pitch: 64px;
+  --grid-image:
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px var(--grid-pitch)),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--grid-pitch));
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--grid-image);
+}
+
+/* A section that sits on the ground rather than being cut out of it. Depth
+   comes from a border and a surface step, not from a shadow: against a
+   #0a0b0d background a shadow is nearly invisible and costs more than it
+   returns. */
+.on-ground {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
 /* Wide content scrolls inside its own container; the page body never scrolls
    horizontally. */
 .scroll-x {
@@ -214,8 +258,14 @@ body {
 .pin-entry {
   display: flex;
   align-items: center;
-  background: var(--background);
   padding-block: clamp(4rem, 9vh, 7rem);
+  /* Opaque colour first, grid painted over it. The opacity is what makes the
+     pinned occlusion read as a replacement rather than a blend, so this must
+     stay a solid `background-color` — the page's fixed grid sits at z-index -1
+     and would otherwise be hidden by every entry, leaving the landing flat
+     while the demo below it had a floor. */
+  background-color: var(--background);
+  background-image: var(--grid-image);
 }
 
 .entry-inner {
