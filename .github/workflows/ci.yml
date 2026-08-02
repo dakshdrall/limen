@@ -32,6 +32,17 @@ jobs:
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
+      # The lowering harness. If this goes red, a proposal is being installed
+      # onto the chain as something broader than what was derived and reviewed,
+      # or a refusal that should have named its constraint did not. Neither is
+      # visible from the core suite, which never looks at what installs.
+      #
+      # These tests reach no network. The testnet scripts that confirm the same
+      # claims against a live host are deliberately not run here, for the same
+      # reason the e2e suite is not: every run spends testnet funds.
+      - name: Test @limen/chain (lowering, refusals, encodings)
+        run: npm run test -w @limen/chain
+
       - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web
 

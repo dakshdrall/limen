@@ -25,8 +25,53 @@ over-permissive dimension of the derived policy. The rows are produced by
 `generateDenyCases` and adjudicated by `evaluate` — the same functions the test
 suite runs, executing in the browser.
 
-That pipeline runs against live testnet, not only against shipped fixtures. A
-worked example, checkable in an explorer rather than taken on trust:
+### The boundary is now enforced by the network, not only by our evaluator
+
+A smart account is deployed on testnet, a derived boundary is installed on it,
+and an agent holding its own key operates inside it. Four hashes, all checkable
+in an explorer:
+
+| | |
+|---|---|
+| Smart account deployed | [`d9e735f3…`](https://stellar.expert/explorer/testnet/tx/d9e735f3ac9d58f17c405d0cee2b21042592e947fe349651d8d5d76c6e76dc8a) → [`CBNPFNPW…`](https://stellar.expert/explorer/testnet/contract/CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V) |
+| Policy installed | [`173bcdef…`](https://stellar.expert/explorer/testnet/tx/173bcdef575913366e7e2d52cdefdba29d238084916f965f31caa383f21c6702) |
+| Permitted transaction | [`59cfaf37…`](https://stellar.expert/explorer/testnet/tx/59cfaf3718fbe19887b9efb19a2284de4d6f85090506a132aff26d29a37841e9) |
+| **Network-rejected transaction** | [`c4fff69b…`](https://stellar.expert/explorer/testnet/tx/c4fff69b5aedfc89d696e99cb90fdc435ae4c7a8e0eda817f49ab681826f004b) — `SpendingLimitExceeded#3221` |
+
+The rejection is the OpenZeppelin `spending_limit` policy refusing inside
+`__check_auth`, in a ledger, with fees burned. Not our evaluator's verdict.
+
+**All six deny axes are refused on-chain**, each with its own failed transaction:
+
+| Axis | The attempt | Contract error |
+|---|---|---|
+| `amount` | transfer above the cap | [`SpendingLimitExceeded#3221`](https://stellar.expert/explorer/testnet/tx/ac4775493a581f2ddc8b72c54bebf1e8ba9e09ba33be5aa4e48e9f7fb0117a77) |
+| `function` | `approve` on the permitted token | [`NotAllowed#3223`](https://stellar.expert/explorer/testnet/tx/45a0eb2002ac8002d4abe3206979887ba189614794748cb30d2365b0b8c21f58) |
+| `asset` | transfer of a different token | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/1312be89cf3b659e825071253be2972ce1aa9167afb65eca5d0d8f785ec64880) |
+| `contract` | a call to a different contract | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/6b7f4dedfd0e563da16e9510b09cfe2a035e2f340ed8f238c428561ace1c9389) |
+| `invocation` | an appended second invocation | [`ContextRuleIdsLengthMismatch#3014`](https://stellar.expert/explorer/testnet/tx/e365e6819908a8567cec5afba2a203274df8591f895e34ea21405af202867149) |
+| `expiry` | the same call after `valid_until` | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/f5ebce5170494ddd40eb73096cceaa32de4b287ec9b08bb9d1e53b7e1a848405) — see note below |
+
+One honest caveat on the last row: that transaction failed on-ledger, but the
+survey run did not recover a contract error code from its diagnostic events, so
+only the simulation error is attributed to it. It is recorded as it happened
+rather than filled in from the simulation.
+
+**A failure is not a refusal until its error code says so.** The first
+over-limit submission returned `FAILED` and was nearly recorded as proof; it was
+`resourceLimitExceeded`, because the footprint came from a recording-mode
+simulation that never runs `__check_auth` and therefore never reaches the
+policy. Every submission is now simulated a second time with the signed auth
+entry attached, and every failure is decoded to a contract error code before it
+is called a refusal — see `isBoundaryRefusal` in `packages/chain/src/errors.ts`.
+
+Full record, including the WASM hashes and the OpenZeppelin tag they were built
+from: [`packages/chain/deployments/testnet.json`](./packages/chain/deployments/testnet.json).
+
+### Deriving from a live transaction
+
+The derivation pipeline runs against live testnet too, not only against shipped
+fixtures. A worked example, checkable in an explorer rather than taken on trust:
 [`525d5cf0…fb97a35e`](https://stellar.expert/explorer/testnet/tx/525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e)
 is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of
 `/demo` in ledger 3929381, read back through RPC, and turned into a policy whose
@@ -113,10 +158,18 @@ English. Its answers become *arguments* to the synthesizer, never its output.
 There is no LLM anywhere in the path that produces authorization logic.
 
 **2. Composition only.** Every policy emitted is a configuration of an existing
-audited OpenZeppelin primitive — `spending_limit` and function allowlists. No
-Rust is generated. If a constraint cannot be expressed by composing those,
+audited OpenZeppelin primitive. No Rust is generated, and none is written by
+hand either. If a constraint cannot be expressed by composing those,
 `synthesize` throws with the constraint named rather than guessing. Future
 codegen is gated behind a `compositionOnly: false` flag that is never set.
+
+This rule now has teeth at install time as well as at derivation time.
+`lower` refuses a proposal it cannot install using only audited primitives, and
+`lower` refuses outright to lower anything with `compositionOnly: false`. The
+temptation this resists is concrete: a ~80-line Rust function-allowlist policy
+would close the multi-contract gap tomorrow. It would also be unaudited code in
+the authorization path, which is the one place this project has said it will not
+put any.
 
 **3. Limen custodies nothing of yours.** No *user's* secret key reaches the
 server, an environment variable, or browser storage. Signing for install is
@@ -227,6 +280,14 @@ packages/core/      @limen/core — dependency-free, no network IO, no DOM
   synthesize.ts     deterministic derivation
   evaluate.ts       independent adjudication
   denycases.ts      single-axis mutations
+packages/chain/     @limen/chain — everything that touches the network
+  lower.ts          PolicyProposal -> InstallPlan; refuses what it cannot enforce
+  plan.ts           plan types and the OpenZeppelin limits they respect
+  authpayload.ts    the AuthPayload __check_auth expects, and the auth digest
+  errors.ts         contract error tables; is this a refusal or a resource failure
+  wasm/manifest.json  the OZ tag, build command, and four WASM hashes
+  deployments/      recorded testnet addresses and transaction hashes
+  scripts/          the testnet scripts behind those hashes
 apps/web/           Next.js 16, App Router, TypeScript, Tailwind
   src/app/api/ingest/          tx hash -> ObservedTransaction (nodejs runtime)
   src/app/api/explain/         Claude: structured rationale -> plain English
@@ -241,7 +302,51 @@ apps/web/           Next.js 16, App Router, TypeScript, Tailwind
 ```
 
 `packages/core` is free of Next.js and browser globals so a future MCP server
-can import it directly.
+can import it directly. It has no dependency on `packages/chain`, and the
+dependency never runs the other way: the synthesizer is the only thing that
+produces policy, and lowering it onto someone else's primitives must never be
+able to reach back and change what was derived.
+
+`lower.ts` is pure — no SDK, no network, no clock — for the same reason
+`synthesize` is: it can then be tested exhaustively without either.
+
+### Reproducing the chain layer
+
+The four contract WASMs come from
+[`OpenZeppelin/stellar-contracts`](https://github.com/OpenZeppelin/stellar-contracts)
+at the tag pinned in `packages/chain/src/wasm/manifest.json`. Limen writes no
+Rust; the build is a one-time step whose output is recorded by hash, not
+committed:
+
+```bash
+git clone --depth 1 --branch v0.7.2 https://github.com/OpenZeppelin/stellar-contracts
+cd stellar-contracts
+stellar contract build --package multisig-account-example
+stellar contract build --package multisig-ed25519-verifier-example
+stellar contract build --package multisig-webauthn-verifier-example
+stellar contract build --package multisig-spending-limit-policy-example
+```
+
+Byte-for-byte reproducibility across toolchains is **not** claimed and has not
+been tested. The manifest records the `stellar` CLI and `rustc` versions the
+recorded hashes were produced with; rebuild and compare if it matters to you.
+
+To re-run the walkthrough against testnet:
+
+```bash
+npm run build:chain
+LIMEN_DEPLOYER_SECRET=S... LIMEN_OWNER_SECRET=S... LIMEN_AGENT_SECRET=S... \
+  node packages/chain/scripts/testnet.mjs walkthrough
+```
+
+It installs a fresh context rule, submits an over-limit transfer, and then
+submits the permitted one, printing all three hashes. Like the e2e suite, it is
+deliberately not in CI: every run spends testnet funds.
+
+The agent's secret is a **separate key from the owner's**, and that separation
+is the claim. Limen does not assert that an agent holds no key — it asserts that
+the key an agent holds cannot exceed the installed boundary, which is what the
+rejected transaction above demonstrates.
 
 ---
 
@@ -250,17 +355,34 @@ can import it directly.
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
 
-- **No smart account is deployed.** Installing requires an OpenZeppelin smart
-  account to install *onto*, and this MVP does not deploy one. The Install
-  section serializes the real payload — a Soroban `ScVal`, verified to
-  round-trip through XDR — and disables the button. The enclosing transaction
-  (entrypoint name, sequence number, fee, auth entries) depends on the deployed
-  account's interface and is not assembled.
-- **The deny table proves refusal as adjudicated by this repository's
-  evaluator, not as enforced on-chain.** `evaluate` is an independent
-  implementation of the same rules, which is a real check against a wrong
-  synthesizer — but it is not the OpenZeppelin contract. Nothing here has been
-  tested against a deployed policy contract.
+- **None of the above is in the UI yet.** The chain layer is real and proven by
+  script; the app still shows the demo. Accounts, install, activity, and the
+  refusal screen are not built. See [`PLAN-V3.md`](./PLAN-V3.md) for what is
+  built and what is not.
+- **On the two screens that exist, the deny table proves refusal as adjudicated
+  by this repository's evaluator, not as enforced on-chain.** The network
+  enforcement above is real, but nothing renders it yet; `/` and `/demo` still
+  run `evaluate` in the browser. `evaluate` is an independent implementation of
+  the same rules, which is a real check against a wrong synthesizer — it is not
+  the OpenZeppelin contract. Do not read the demo's DENY rows as network
+  refusals; the ones with transaction hashes above are the network's.
+- **Only single-token transfer flows can be installed.** OpenZeppelin ships
+  three policies — `simple_threshold`, `weighted_threshold`, `spending_limit` —
+  and none of them is a function allowlist. A `['transfer']` allowlist needs no
+  allowlist policy, because `spending_limit::enforce` panics `NotAllowed` for
+  every other function name; that subsumption is asserted explicitly in
+  `packages/chain/src/lower.ts` and confirmed on testnet. **Any other function
+  set, and any contract with no spending limit to constrain it, refuses to
+  install** and names the constraint. A router call beside a token transfer is
+  the common case that refuses: a context rule with no policy would permit every
+  function on that router, which is broader than what was derived and reviewed.
+  Those flows stay in the simulator, evaluated locally, marked not installable.
+  Closing that gap needs a policy contract nobody has audited, so it is the
+  trigger for the codegen work rather than a reason to write Rust now.
+- **`validFromLedger` is not installed.** An OpenZeppelin `ContextRule` has
+  `valid_until` and no lower bound. The field stays in the domain model as
+  provenance — the ledger the policy was derived from — is labelled as computed
+  locally, and is never rendered inside an on-chain rule block.
 - **Live RPC ingest has not met the long tail of real transactions.** The
   extraction path is implemented, and its refusal behaviour is covered by tests
   built on constructed Soroban metadata — a readable transfer, a transfer with a

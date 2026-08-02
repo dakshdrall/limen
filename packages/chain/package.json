@@ -1,0 +1,31 @@
+{
+  "name": "@limen/chain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Everything in Limen that touches the network: lowering a proposal onto OpenZeppelin primitives, deploying, installing, revoking, and reading events.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@limen/core": "*",
+    "@stellar/stellar-sdk": "^16.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}

@@ -57,10 +57,45 @@ describe('the evaluator caveat survives', () => {
     expect(stepper).toContain('not by a deployed policy contract');
   });
 
-  it('is stated in the README too', () => {
+  it('is stated in the README too, and scoped to the screens it is true of', () => {
+    // The chain layer now produces genuine network refusals, so the unqualified
+    // form of this caveat became false. The scoped form must survive, because
+    // the two screens that exist still adjudicate locally and a reader who
+    // conflates the two would credit the demo with something it does not do.
     expect(README).toContain(
-      "The deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
+      "On the two screens that exist, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
     );
+    expect(README).toContain("the ones with transaction hashes above are the network's");
+  });
+});
+
+describe('a failure is not a refusal until its error code says so', () => {
+  // The trap that nearly put a false claim in this README: a transaction built
+  // on a recording-mode footprint fails with `resourceLimitExceeded` before the
+  // policy is ever reached, and reports the same operation result a genuine
+  // refusal does. If this wording goes, so does the reason anyone checks.
+  it('is stated in the README', () => {
+    expect(README).toContain('A failure is not a refusal until its error code says so.');
+    expect(README).toContain('never runs `__check_auth` and therefore never reaches the policy');
+  });
+
+  it('is enforced in the chain layer, not only described', () => {
+    const errors = flat(
+      readFileSync(fileURLToPath(new URL('../../../packages/chain/src/errors.ts', import.meta.url)), 'utf8'),
+    );
+    expect(errors).toContain('export function isBoundaryRefusal');
+    expect(errors).toContain('resourceLimitExceeded');
+  });
+});
+
+describe('the composition-only claim is not quietly widened', () => {
+  it('says no Rust is generated and none is hand-written either', () => {
+    expect(README).toContain('No Rust is generated, and none is written by hand either.');
+  });
+
+  it('names what refusing to write that policy costs', () => {
+    // A rule with no stated cost reads as a rule nobody was tempted to break.
+    expect(README).toContain('would close the multi-contract gap tomorrow');
   });
 });
 
