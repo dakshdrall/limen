@@ -9,7 +9,7 @@
   "scripts": {
     "build": "npm run build -w @limen/web",
     "build:core": "npm run build -w @limen/core",
-    "test": "npm run build -w @limen/core && npm run test -w @limen/core",
+    "test": "npm run build -w @limen/core && npm run test -w @limen/core && npm run test -w @limen/web",
     "lint": "npm run lint -w @limen/web",
     "dev": "npm run build -w @limen/core && npm run dev -w @limen/web"
   },
