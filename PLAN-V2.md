@@ -2,56 +2,96 @@
 
 Status: **implemented 2026-08-02.** All four decisions resolved — see §8.
 
-Verification against §6, honestly: items 1, 2, 4, 5, 6 and 7 all pass and are
-enforced by CI. **Item 3 — the stepper completing end to end against real
-testnet, twice, from a clean browser profile — is still NOT fully met**, but it
-is no longer wholly unproven, and the reason it was originally blocked has since
-gone away.
+Verification against §6: items 1 through 7 all pass. **Item 3 — the stepper
+completing end to end against real testnet, twice, from a clean browser profile
+— is now met**, and it is reproducible rather than attested:
+`npm run e2e -w @limen/web` drives the walkthrough in a real Chromium against
+live testnet.
 
-Updated 2026-08-02: this environment now does have a funded testnet demo account
-configured, so the original reason for the block — no credentials here — is
-stale. Two full perform→ingest cycles have since been run against live testnet:
+Five live runs are on record. The first two called `/api/demo/perform` and
+`/api/ingest` with curl, because no browser automation was available in the
+environment that produced them; the next two drove the stepper UI under
+Playwright; the fifth was driven by hand and is described below the table.
 
-| | run 1 | run 2 |
-|---|---|---|
-| tx hash | `33504c53…190f917d` | `0fd54ac8…30d155dc` |
-| ledger | 3929005 | 3929091 |
-| ingest result | 1 movement, `attribution: "exact"` | 1 movement, `attribution: "exact"` |
-| meta arm | 4 | 4 |
-| balance delta | −0.1013826 XLM | −0.1013826 XLM |
+| | curl 1 | curl 2 | browser 1 | browser 2 |
+|---|---|---|---|---|
+| tx hash | `33504c53…190f917d` | `0fd54ac8…30d155dc` | `7fde0d6e…aafccb43` | `2135c800…bb14edf5` |
+| ledger | 3929005 | 3929091 | 3929721 | 3929788 |
+| movements | 1, `attribution: "exact"` | 1, `"exact"` | 1, `"exact"` | 1, `"exact"` |
+| balance delta | −0.1013826 XLM | −0.1013826 XLM | −0.1013826 XLM | −0.1013826 XLM |
 
-Run 2 was taken after waiting out the full per-address rate-limit window (the
-limiter was confirmed live first: an immediate retry returned 429 and spent
-nothing) and after restarting the dev server, so it ran against a cold process
-rather than a warm one.
+Both browser runs were confirmed against Horizon independently of the suite that
+produced them: `successful: true`, source the demo account, fee 13826 stroops
+against a 1000000 stroop transfer. Each `npm run e2e` starts its own
+`next start`, so run 2 was a cold process — empty rate-limit windows, empty
+transaction cache — and it was taken *after* waiting out the real five-minute
+per-address `perform` window, rather than leaning on the restart to clear it.
 
-**Two findings worth keeping.** First, live testnet metadata is arm **4**: the
-transfer arrives in the per-operation list, alongside two transaction-level
-CAP-67 `fee` events staged `beforeAllTxes`/`afterAllTxes`. So the V4 reader is
-not defensive futureproofing — before it, the extractor would have returned zero
-movements for the demo's *own* transaction, and the derived cap would have
-bounded nothing. Second, ingest returned exactly one movement both times: the
-fee events are correctly classified as non-transfers against real data, not just
-against constructed fixtures.
+A further run, driven **by hand rather than by the suite**, is recorded
+separately because it covers the one gap the automated runs cannot close:
+`525d5cf0…fb97a35e`, ledger 3929381 — earlier in the same session than the two
+above. It completed all five beats in a real browser rather than headless
+Chromium, and its derived cap was 1000000 stroops against a 1000000 stroop
+transfer, so the boundary was exactly the observed flow. It is the hash the
+README cites as the worked example.
 
-**Item 3 is still NOT met, and should not be marked met.** §6.3 asks for the
-run to be driven *through the stepper UI, from a clean browser profile*. These
-two runs called `/api/demo/perform` and `/api/ingest` directly with curl,
-because no browser automation was available in the environment that produced
-them. That leaves the server path, the on-chain submission, and repeatability
-across a cold process evidenced — and the client half untouched. Specifically
-unexercised: the `sessionStorage` rehydration at `DemoStepper.tsx:111`, which is
-the actual warm-state surface item 3 is aimed at. Closing it needs a human with
-a browser, or a connected automation extension.
+A second attempt immediately afterwards was refused at beat 1 with
+`rate_limited`. That is the limiter behaving correctly, and it is worth keeping
+as evidence: it confirms the per-address window works *through the UI*, on the
+real route, and not only in `rate-limit.test.ts` against an injected clock.
 
-A note on how big that residual gap is, in fairness to whoever picks it up: the
-stepper persists to `sessionStorage`, not `localStorage`, so it dies with the
-tab, and `demo-state.ts:37` already allowlists the persisted fields with a test
-behind it. The clean-profile property is therefore narrower than the §6.3
-wording suggests. Narrower is not verified, which is why this stays open.
+**Findings worth keeping.** Live testnet metadata is arm **4**: the transfer
+arrives in the per-operation list, alongside two transaction-level CAP-67 `fee`
+events staged `beforeAllTxes`/`afterAllTxes`. So the V4 reader is not defensive
+futureproofing — before it, the extractor would have returned zero movements for
+the demo's *own* transaction, and the derived cap would have bounded nothing.
+Ingest returned exactly one movement on every run: the fee events are correctly
+classified as non-transfers against real data, not only against constructed
+fixtures.
+
+### What the browser runs added, and what they still do not prove
+
+Added: the client half. `apps/web/e2e/demo-stepper.spec.ts` performs, observes,
+derives, adjudicates, and reads the payload — then reloads the tab and asserts
+the walkthrough comes back. That reload is the `sessionStorage` rehydration at
+`DemoStepper.tsx:111` plus the resume-observe effect below it, which is the
+surface item 3 was actually aimed at. It also asserts §0 from inside a browser:
+the persisted object is exactly `{version, beat, hash}`, so a stored proposal or
+cap fails the run rather than waiting on review to catch it.
+
+Not proved, and worth stating plainly:
+
+- **One engine, and the repeatable evidence is headless.** Chromium only, at
+  Playwright's `Desktop Chrome` viewport. A fresh Playwright context is a
+  genuinely clean profile — no cookies, no storage — but it is not Firefox, not
+  WebKit, and not a phone. The hand-driven run above did happen in a real
+  browser, which is the stronger artefact; it is also the one that cannot be
+  re-run on demand, so the two kinds of evidence cover for each other rather
+  than either being sufficient alone.
+- **The resume read was cache-served.** The reload hits the same process, and
+  `/api/ingest` checks `tx-cache.ts` *before* the limiter, so beat 2's second
+  observation came from memory rather than a second RPC round trip. The client
+  path is exercised; a cold re-read on resume is not.
+- **Happy path only, in the suite.** A refusal rendering through
+  `RefusalSection` and the `no_secret` preset route are covered by unit tests
+  and by earlier manual checks, not by this suite. A rate-limited beat 1 has now
+  been seen live through the UI, but by hand — the suite still never drives it,
+  because asserting it would mean spending a transaction to set it up.
+- **Not gated by CI.** The suite spends a real testnet transaction per run, and
+  `perform` allows one per address per five minutes, so it stays on demand; the
+  README carries the reasoning. CI type-checks it but never runs it, which means
+  it can rot without going red.
 
 Unchanged and still verified: every step of that path degrades correctly when
 the account is absent — beat 1 reports `no_secret` and offers the preset route.
+
+**One thing the browser found.** Beat 2's *"Derive the boundary"* continue
+button is unreachable. `applyOutcome` sets `beat: 3` in the same handler that
+sets `observed`, so `shown={state.beat === 2}` is never true once there is
+anything to show, and beat 3 derives itself the moment beat 2 lands. Harmless —
+the walkthrough is four clicks rather than five — but it is dead code, and
+§2.1's "five beats, each a button" is not quite what ships. Left as found: a
+verification pass is the wrong place to quietly change the interaction model.
 
 - **[V2-D1]** → **(b)**, represent the uncertainty. Implied by "accurate-or-absent,
   never silently narrow": attaching movements to `invocations[0]` asserts
@@ -436,7 +476,9 @@ Nothing is called done until all of this holds:
    README's evaluator-not-on-chain caveat. Asserted by test, not by eye.
 3. The demo stepper completes end to end against real testnet, **twice, from a
    clean browser profile** — the second run proving nothing depended on warm
-   state.
+   state. Met by `apps/web/e2e/demo-stepper.spec.ts`, run on demand rather than
+   in CI; see the status note at the top for what those runs do and do not
+   establish.
 4. CI proves zero demo-signer code in the production client bundle, and proves
    the check is non-vacuous (§3.2).
 5. A malformed hash (`zzz…`), a well-formed but nonexistent hash, a classic
