@@ -21,6 +21,19 @@ export {
 } from './errors.js';
 
 export {
+  ContractReadError,
+  isLive,
+  readAllContextRules,
+  readContextRule,
+  readContextRuleCount,
+  readSpendingLimit,
+  type InstalledContextRule,
+  type InstalledSigner,
+  type InstalledSpendingLimit,
+  type ReadOptions,
+} from './read.js';
+
+export {
   authDigest,
   authPayload,
   callContractType,

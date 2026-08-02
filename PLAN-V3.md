@@ -561,8 +561,8 @@ gated: if a gate fails, work stops and I report rather than build around it.
 | 4 | Install a spending limit; submit an over-limit transfer; record the failure | permitted hash + rejected hash, both in README | **done** |
 | 5 | Per-axis refusal survey: which of the six produce an on-ledger hash and which are simulation-only | a table, recorded, feeding §4's labels | **done — all six on-ledger** |
 | 6 | `lower.ts` + the lowering harness; wire the synthesizer's output into step 4's path | deny-case harness green against lowered plans; live agreement with step 5 | **done — 26 tests** |
-| 7 | Persistence and the account/policy data model | chain re-read on reload, verified | not started |
-| 8 | Type and grid tokens | before any new screen | not started |
+| 7 | Persistence and the account/policy data model | chain re-read on reload, verified | **done** |
+| 8 | Type and grid tokens | before any new screen | **done** |
 | 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | not started |
 | 10 | Simulator (demoted demo) and docs | | not started |
 | 11 | Design system pass across everything | | not started |
@@ -590,6 +590,61 @@ Steps 1–5 produce no UI at all. That is deliberate.
 - `deployments/testnet.json` — every hash above.
 
 `packages/core` is unchanged: `git diff --stat packages/core` is empty.
+
+### What step 8 landed
+
+The blueprint token layer, in `globals.css`, `layout.tsx`, and three components.
+IBM Plex Sans + Plex Mono self-hosted by `next/font`; deep blue-black ground
+with a two-pitch grid; one accent; tabular numerals set once on `body`; column
+widths as `--col-*` tokens so an address is the same width everywhere.
+`Verdict` gains `refused-at-simulation`, drawn in the neutral ramp with a
+dashed border rather than a fourth hue. `TopBar` is on every screen with a
+`TESTNET` indicator reading the same constant transaction-building reads, and
+renders unbuilt sections as unavailable rather than linking to 404s.
+
+`test/design-system.test.ts` pins the rules that can rot silently: no
+system-font fallback stack, tabular numerals on `body`, every column width a
+token, three verdict states each with a glyph, one accent, no gradient fills or
+shadow depth, focus visible, reduced motion respected.
+
+Three bugs came from looking at the rendered page rather than from the tests:
+translucent cards let the grid show through and stopped reading as surfaces; the
+top bar was 95% opaque with no blur, so content bled through the chrome; and the
+deny table's reason column pushed 56-character addresses past the viewport.
+Verified in full greyscale — PERMIT and DENY stay distinguishable with every hue
+removed.
+
+### What step 7 landed
+
+The rule the whole layer is built on: **the chain is the source of truth for
+what is installed, and the browser stores only what the chain does not know.**
+
+`packages/chain/src/read.ts` reads context rules, their signers and policies,
+and the spending limit each policy currently holds — all by simulation, so a
+read costs no fee and needs no signature and account state can be shown to
+someone who cannot sign for it. `spentInWindow` is the policy contract's own
+running total rather than a number re-derived here from event history;
+re-deriving it would mean reimplementing the contract's eviction rule in
+TypeScript and quietly disagreeing with it at the edges.
+
+`apps/web/src/lib/store.ts` holds two things and refuses to hold a third:
+which smart accounts this browser has seen, and the derivation provenance for
+each installed policy — the observed transaction, the synthesis options, and
+`validFromLedger`, which has no on-chain counterpart and exists nowhere else.
+It stores nothing about caps, spend, or liveness, and a test asserts the
+serialized form contains none of those words. A corrupt or future-versioned
+record is discarded rather than migrated, and a failed write returns `false`
+rather than presenting itself as saved.
+
+Reading the live account found a decoding bug the unit tests could not have:
+`ContextRuleType::Default` arrives as a one-element vec, not a bare string, so
+the account's own Default rule was being labelled `CreateContract`. The decoder
+now matches variants exhaustively and throws on an unknown one rather than
+reporting whichever branch happened to be last.
+
+Verified against the deployed account at ledger 3,936,227 — six rules, with
+rule 3 correctly reported expired and rules 1 and 5 correctly reporting their
+caps fully spent by the walkthrough runs.
 
 ---
 
