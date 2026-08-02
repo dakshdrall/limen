@@ -21,10 +21,14 @@ jobs:
 
       - run: npm ci
 
-      # No explicit @limen/core build step: apps/web has a `prebuild` that
-      # builds the core workspace first, so the "Build @limen/web" step below
-      # compiles core as its first action. The tests import core from `src`,
-      # not `dist`, so they do not need a build either.
+      # No explicit @limen/core build step: apps/web has both a `prebuild` and
+      # a `pretest` that build the core workspace first, so whichever apps/web
+      # step runs earliest compiles core as its first action.
+      #
+      # The core suite genuinely needs no build — it imports from `src`. The
+      # web suite does: `@limen/core`'s `exports` point at `dist/`, which a
+      # fresh checkout has never produced. That distinction cost a red build
+      # once, because a warm `dist/` on a developer machine hides it entirely.
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
