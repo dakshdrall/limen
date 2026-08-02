@@ -3,8 +3,12 @@
 import type { ObservedTransaction } from '@limen/core';
 import { Address } from './Address';
 import { decimalise } from '@/lib/format';
+import { UNREADABLE_ARG } from '@/lib/markers';
+import { explorerTxUrl } from '@/lib/explorer';
 
 export function ObservedSection({ observed }: { observed: ObservedTransaction }) {
+  const explorer = explorerTxUrl(observed);
+
   return (
     <div className="flex flex-col gap-5">
       <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-baseline gap-x-5 gap-y-2.5">
@@ -16,9 +20,31 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
         <dt className="col-head text-muted-dim">network</dt>
         <dd className="value text-foreground">
           {observed.network}
+          {/* The fixture caveat and the live-ingest marker occupy the same slot
+              and carry the same weight, so the two can never be confused for
+              one another at a glance. */}
           {observed.network === 'simulated' && (
             <span className="ml-2 font-sans text-[12.5px] text-muted-dim">
               (shipped fixture — not observed on a live network)
+            </span>
+          )}
+          {observed.network === 'testnet' && (
+            <span className="ml-2 font-sans text-[12.5px] text-permit">
+              (observed on testnet
+              {explorer !== undefined && (
+                <>
+                  {' — '}
+                  <a
+                    href={explorer}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-[3px] underline decoration-permit-line underline-offset-4 transition-colors hover:decoration-permit focus-visible:outline focus-visible:outline-1 focus-visible:outline-permit"
+                  >
+                    view on stellar.expert
+                  </a>
+                </>
+              )}
+              )
             </span>
           )}
         </dd>
@@ -34,7 +60,7 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
       </dl>
 
       <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-        <table className="w-full min-w-[48rem] border-collapse text-left">
+        <table className="w-full min-w-[44rem] border-collapse text-left">
           <thead>
             <tr className="border-b border-border-bright bg-surface-raised text-muted-dim">
               <th scope="col" className="col-head w-[3rem] px-4 py-2.5">
@@ -47,7 +73,7 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
                 Function
               </th>
               <th scope="col" className="col-head px-4 py-2.5">
-                Token movements
+                Arguments
               </th>
             </tr>
           </thead>
@@ -65,40 +91,24 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
                   {invocation.functionName}()
                 </td>
                 <td className="px-4 py-3.5 align-top">
-                  {invocation.movements.length === 0 ? (
+                  {invocation.args.length === 0 ? (
                     <span className="text-[12.5px] text-muted-dim">none</span>
                   ) : (
-                    <ul className="grid grid-cols-[2.75rem_auto_auto_1fr] items-baseline gap-x-3 gap-y-2">
-                      {invocation.movements.map((movement, movementIndex) => {
-                        const outbound = movement.from === observed.source;
-                        return (
-                          <li key={movementIndex} className="contents">
-                            <span
-                              className={`col-head ${outbound ? 'text-deny' : 'text-permit'}`}
-                              title={
-                                outbound
-                                  ? 'leaves the source account'
-                                  : 'arrives at the source account'
-                              }
-                            >
-                              {outbound ? 'OUT' : 'IN'}
+                    <ul className="flex flex-col gap-1.5">
+                      {invocation.args.map((arg, argIndex) => (
+                        <li key={argIndex} className="value text-muted">
+                          {arg === UNREADABLE_ARG ? (
+                            // Marked, not silently rendered as a value. Arguments
+                            // are presentational — no policy reads them — so an
+                            // unreadable one is labelled rather than fatal.
+                            <span className="text-muted-dim italic">
+                              unreadable argument
                             </span>
-                            <span className="value text-right text-foreground">
-                              {movement.amount}
-                            </span>
-                            <span className="value text-right text-muted-dim">
-                              ({decimalise(movement.amount)})
-                            </span>
-                            <span className="flex flex-wrap items-baseline gap-x-1.5">
-                              <Address value={movement.asset} />
-                              <span aria-hidden="true" className="text-faint">
-                                →
-                              </span>
-                              <Address value={movement.to} tone="dim" />
-                            </span>
-                          </li>
-                        );
-                      })}
+                          ) : (
+                            <span className="break-all">{arg}</span>
+                          )}
+                        </li>
+                      ))}
                     </ul>
                   )}
                 </td>
@@ -108,10 +118,69 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
         </table>
       </div>
 
+      <Movements observed={observed} />
+    </div>
+  );
+}
+
+/**
+ * Movements are transaction-level. When there is exactly one invocation they
+ * provably belong to it; when there is more than one, Soroban's contract events
+ * do not say which call emitted which transfer, and this block says so instead
+ * of drawing them under a call that may not have caused them.
+ */
+function Movements({ observed }: { observed: ObservedTransaction }) {
+  const exact = observed.attribution === 'exact';
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h4 className="col-head text-muted">Token movements</h4>
+        <span className="text-[12.5px] text-muted-dim">
+          {exact
+            ? 'caused by the single invocation above'
+            : 'observed in this transaction; the metadata does not say which call caused them'}
+        </span>
+      </div>
+
+      {observed.movements.length === 0 ? (
+        <p className="text-[12.5px] text-muted-dim">No token movements in this transaction.</p>
+      ) : (
+        <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
+          <ul className="grid min-w-[36rem] grid-cols-[3.5rem_auto_auto_1fr] items-baseline gap-x-4 gap-y-2.5 px-4 py-3.5">
+            {observed.movements.map((movement, index) => {
+              const outbound = movement.from === observed.source;
+              return (
+                <li key={index} className="contents">
+                  <span
+                    className={`col-head ${outbound ? 'text-deny' : 'text-permit'}`}
+                    title={outbound ? 'leaves the source account' : 'arrives at the source account'}
+                  >
+                    {outbound ? 'OUT' : 'IN'}
+                  </span>
+                  <span className="value text-right text-foreground">{movement.amount}</span>
+                  <span className="value text-right text-muted-dim">
+                    ({decimalise(movement.amount)})
+                  </span>
+                  <span className="flex flex-wrap items-baseline gap-x-1.5">
+                    <Address value={movement.asset} />
+                    <span aria-hidden="true" className="text-faint">
+                      →
+                    </span>
+                    <Address value={movement.to} tone="dim" />
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
         Amounts are integers in the asset&apos;s smallest unit; the parenthesised value is a display
         rendering only. Only <span className="font-mono text-deny">OUT</span> movements — those
-        leaving the source account — contribute to a derived cap.
+        leaving the source account — contribute to a derived cap, and they are summed gross: an
+        inflow of the same asset is never subtracted.
       </p>
     </div>
   );
