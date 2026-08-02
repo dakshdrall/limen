@@ -96,7 +96,8 @@ test('completes end to end against live testnet, then resumes from session state
 
   // No click here. A successful observation sets `observed` and advances the
   // beat to 3 in the same handler, so beat 3 derives itself as soon as beat 2
-  // lands — beat 2's "Derive the boundary" continue button is unreachable.
+  // lands. The gate that used to sit here could never render and is gone; this
+  // assertion keeps it from coming back as dead code.
   const three = beat(page, 3);
   await expect(two.getByRole('button', { name: 'Derive the boundary' })).toHaveCount(0);
 

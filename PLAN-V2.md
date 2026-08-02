@@ -85,13 +85,18 @@ Not proved, and worth stating plainly:
 Unchanged and still verified: every step of that path degrades correctly when
 the account is absent — beat 1 reports `no_secret` and offers the preset route.
 
-**One thing the browser found.** Beat 2's *"Derive the boundary"* continue
-button is unreachable. `applyOutcome` sets `beat: 3` in the same handler that
-sets `observed`, so `shown={state.beat === 2}` is never true once there is
-anything to show, and beat 3 derives itself the moment beat 2 lands. Harmless —
-the walkthrough is four clicks rather than five — but it is dead code, and
-§2.1's "five beats, each a button" is not quite what ships. Left as found: a
-verification pass is the wrong place to quietly change the interaction model.
+**One thing the browser found, since fixed.** Beat 2's *"Derive the boundary"*
+continue button was unreachable: `applyOutcome` sets `beat: 3` in the same
+handler that sets `observed`, so `shown={state.beat === 2}` was never true once
+there was anything to show, and beat 3 derives itself the moment beat 2 lands.
+The dead branch is deleted and §2 now says four clicks rather than five, which
+is what ships. Behaviour is unchanged — the button never rendered, so nothing a
+reviewer could see moved.
+
+Because that deletion landed after the two runs in the table, the suite was run
+once more against the edited stepper: `df0dd8c8…70ae077e`, ledger 3929961, green
+end to end and confirmed on Horizon. The e2e assertion that beat 2 carries no
+continue button stays, so the dead gate cannot return unnoticed.
 
 - **[V2-D1]** → **(b)**, represent the uncertainty. Implied by "accurate-or-absent,
   never silently narrow": attaching movements to `invocations[0]` asserts
@@ -284,9 +289,11 @@ handling in `PolicyReview` updates with it.
 
 ## 2. `/demo` — the guided stepper
 
-A separate route, `apps/web/src/app/demo/page.tsx`. Five beats, each a button,
-each producing a visible result. A reviewer with no wallet and no funded account
-completes the thesis in under ninety seconds.
+A separate route, `apps/web/src/app/demo/page.tsx`. Five beats, each producing a
+visible result, advanced by **four** clicks rather than five: observing a
+transaction both produces beat 2's result and derives beat 3, so there is no
+gate between them. A reviewer with no wallet and no funded account completes the
+thesis in under ninety seconds.
 
 ### 2.1 The beats
 
