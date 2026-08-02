@@ -38,7 +38,7 @@ describe('boundaries', () => {
 describe('deny-by-default', () => {
   it('refuses rather than throws on an unparseable amount', () => {
     const candidate = singleTransfer();
-    candidate.invocations[0]!.movements[0]!.amount = 'not-a-number';
+    candidate.movements[0]!.amount = 'not-a-number';
     const decision = evaluate(proposal, candidate);
     expect(decision.permitted).toBe(false);
     expect(decision.reasons.join(' ')).toContain('unparseable amount');
@@ -61,7 +61,7 @@ describe('deny-by-default', () => {
 
   it('ignores movements that do not leave the source account', () => {
     const candidate = singleTransfer();
-    candidate.invocations[0]!.movements.push({
+    candidate.movements.push({
       asset: USDC,
       from: RECIPIENT,
       to: SOURCE,
@@ -75,7 +75,7 @@ describe('deny-by-default', () => {
 describe('reasons', () => {
   it('names the asset, the amount, and the cap when a limit is exceeded', () => {
     const candidate = singleTransfer();
-    candidate.invocations[0]!.movements[0]!.amount = '500000001';
+    candidate.movements[0]!.amount = '500000001';
     const [reason] = evaluate(proposal, candidate).reasons;
     expect(reason).toContain(USDC);
     expect(reason).toContain('500000001');
@@ -86,7 +86,7 @@ describe('reasons', () => {
     const candidate = singleTransfer();
     candidate.ledger = proposal.contextRule.validUntilLedger + 1;
     candidate.invocations[0]!.functionName = 'set_admin';
-    candidate.invocations[0]!.movements[0]!.amount = '900000000';
+    candidate.movements[0]!.amount = '900000000';
 
     const decision = evaluate(proposal, candidate);
     expect(decision.permitted).toBe(false);
