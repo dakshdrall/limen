@@ -9,18 +9,46 @@ is no longer wholly unproven, and the reason it was originally blocked has since
 gone away.
 
 Updated 2026-08-02: this environment now does have a funded testnet demo account
-configured, and an on-chain submission has landed — an `invoke_host_function` on
-the demo account at `2026-08-02T06:00:21Z`, with 0.1 XLM moved to the configured
-destination. So "the on-chain submission is unexercised" is no longer true, and
-the claim that the credentials do not exist here is stale.
+configured, so the original reason for the block — no credentials here — is
+stale. Two full perform→ingest cycles have since been run against live testnet:
 
-What remains unproven is the specific shape §6.3 asks for: **two** consecutive
-runs, **from a clean browser profile**, driven through the stepper UI. The
-Horizon record shows a submission reached the network; it does not show which
-caller produced it, and it cannot show that nothing depended on warm state —
-which is the entire point of asking for the second run. Treat item 3 as
-partially verified: the network path works, the no-warm-state property does not
-yet have evidence.
+| | run 1 | run 2 |
+|---|---|---|
+| tx hash | `33504c53…190f917d` | `0fd54ac8…30d155dc` |
+| ledger | 3929005 | 3929091 |
+| ingest result | 1 movement, `attribution: "exact"` | 1 movement, `attribution: "exact"` |
+| meta arm | 4 | 4 |
+| balance delta | −0.1013826 XLM | −0.1013826 XLM |
+
+Run 2 was taken after waiting out the full per-address rate-limit window (the
+limiter was confirmed live first: an immediate retry returned 429 and spent
+nothing) and after restarting the dev server, so it ran against a cold process
+rather than a warm one.
+
+**Two findings worth keeping.** First, live testnet metadata is arm **4**: the
+transfer arrives in the per-operation list, alongside two transaction-level
+CAP-67 `fee` events staged `beforeAllTxes`/`afterAllTxes`. So the V4 reader is
+not defensive futureproofing — before it, the extractor would have returned zero
+movements for the demo's *own* transaction, and the derived cap would have
+bounded nothing. Second, ingest returned exactly one movement both times: the
+fee events are correctly classified as non-transfers against real data, not just
+against constructed fixtures.
+
+**Item 3 is still NOT met, and should not be marked met.** §6.3 asks for the
+run to be driven *through the stepper UI, from a clean browser profile*. These
+two runs called `/api/demo/perform` and `/api/ingest` directly with curl,
+because no browser automation was available in the environment that produced
+them. That leaves the server path, the on-chain submission, and repeatability
+across a cold process evidenced — and the client half untouched. Specifically
+unexercised: the `sessionStorage` rehydration at `DemoStepper.tsx:111`, which is
+the actual warm-state surface item 3 is aimed at. Closing it needs a human with
+a browser, or a connected automation extension.
+
+A note on how big that residual gap is, in fairness to whoever picks it up: the
+stepper persists to `sessionStorage`, not `localStorage`, so it dies with the
+tab, and `demo-state.ts:37` already allowlists the persisted fields with a test
+behind it. The clean-profile property is therefore narrower than the §6.3
+wording suggests. Narrower is not verified, which is why this stays open.
 
 Unchanged and still verified: every step of that path degrades correctly when
 the account is absent — beat 1 reports `no_secret` and offers the preset route.
