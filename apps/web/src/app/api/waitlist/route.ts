@@ -14,6 +14,7 @@
 
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
+import { clientIp, createRateLimit } from '@/lib/rate-limit';
 
 // Required: this route touches the filesystem, which the Edge runtime has no
 // access to.
@@ -57,45 +58,9 @@ interface WaitlistEntry {
 
 /* --- rate limit ---------------------------------------------------------- */
 
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_PER_WINDOW = 5;
-
-/**
- * Fixed window, per IP, in memory.
- *
- * TODO(roadmap): shared state. Process-local counters reset on redeploy and do
- * not compose across instances, so this raises the cost of a flood rather than
- * bounding it. It moves to the same backing store as the entries themselves.
- */
-const hits = new Map<string, { count: number; resetAt: number }>();
-
-function rateLimited(ip: string, now: number): boolean {
-  // Opportunistic sweep, so the map cannot grow without bound across a long
-  // process lifetime.
-  if (hits.size > 4096) {
-    for (const [key, window] of hits) if (window.resetAt <= now) hits.delete(key);
-  }
-
-  const window = hits.get(ip);
-  if (window === undefined || window.resetAt <= now) {
-    hits.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-    return false;
-  }
-  window.count += 1;
-  return window.count > MAX_PER_WINDOW;
-}
-
-/**
- * The first hop in `x-forwarded-for` is the client as far as the proxy in
- * front of this app is concerned. Spoofable when the app is reachable without
- * that proxy; sufficient for throttling a form.
- */
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const first = forwarded?.split(',')[0]?.trim();
-  if (first !== undefined && first.length > 0) return first;
-  return request.headers.get('x-real-ip') ?? 'unknown';
-}
+// Shared with /api/ingest. See `lib/rate-limit.ts` for the honest accounting of
+// what a process-local counter does and does not bound.
+const limit = createRateLimit({ max: 5, windowMs: 10 * 60 * 1000 });
 
 /* --- store --------------------------------------------------------------- */
 
@@ -129,7 +94,7 @@ function bad(message: string, status: number) {
 
 export async function POST(request: Request): Promise<Response> {
   const now = Date.now();
-  if (rateLimited(clientIp(request), now)) {
+  if (limit.check(clientIp(request), now)) {
     return bad('Too many submissions from this address. Try again later.', 429);
   }
 
