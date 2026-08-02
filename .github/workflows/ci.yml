@@ -28,7 +28,7 @@ jobs:
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
-      - name: Test @limen/web (XDR extraction)
+      - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web
 
       - name: Lint
@@ -36,6 +36,31 @@ jobs:
 
       - name: Build @limen/web
         run: npm run build -w @limen/web
+
+      # The demo signer is the only code in the repo that can move funds. It is
+      # fenced by `import 'server-only'` and by a hard testnet throw, but both
+      # of those are assertions about intent. This step is the proof.
+      #
+      # Two-sided on purpose: a grep that can never match would pass forever
+      # while proving nothing, so the sentinel must first be found in the server
+      # bundle before its absence from the client bundle means anything.
+      - name: Prove the demo signer is absent from the client bundle
+        env:
+          SENTINEL: limen-demo-signer-8f2a41c6-server-only
+        run: |
+          set -euo pipefail
+
+          if ! grep -rIq -- "$SENTINEL" apps/web/.next/server; then
+            echo "::error::sentinel not found in the server bundle — this check is vacuous and proves nothing"
+            exit 1
+          fi
+          echo "sentinel present in the server bundle; the negative check below is meaningful"
+
+          if grep -rIl -e "$SENTINEL" -e 'LIMEN_DEMO_SECRET' apps/web/.next/static; then
+            echo "::error::demo signer code or its secret's name reached the client bundle"
+            exit 1
+          fi
+          echo "demo signer absent from the client bundle"
 
       # Runs last so build and test results are always visible even when this
       # fails. Threshold is `moderate`, not `low`, because 23 low-severity
