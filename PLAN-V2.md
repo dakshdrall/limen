@@ -4,12 +4,26 @@ Status: **implemented 2026-08-02.** All four decisions resolved — see §8.
 
 Verification against §6, honestly: items 1, 2, 4, 5, 6 and 7 all pass and are
 enforced by CI. **Item 3 — the stepper completing end to end against real
-testnet, twice, from a clean browser profile — has NOT been run**, because it
-needs a funded testnet account and credentials this environment does not have.
-Every step of that path degrades correctly when the account is absent (verified:
-beat 1 reports `no_secret` and offers the preset route), but the on-chain
-submission itself is unexercised. It is the one claim in this plan that is
-written but not proven.
+testnet, twice, from a clean browser profile — is still NOT fully met**, but it
+is no longer wholly unproven, and the reason it was originally blocked has since
+gone away.
+
+Updated 2026-08-02: this environment now does have a funded testnet demo account
+configured, and an on-chain submission has landed — an `invoke_host_function` on
+the demo account at `2026-08-02T06:00:21Z`, with 0.1 XLM moved to the configured
+destination. So "the on-chain submission is unexercised" is no longer true, and
+the claim that the credentials do not exist here is stale.
+
+What remains unproven is the specific shape §6.3 asks for: **two** consecutive
+runs, **from a clean browser profile**, driven through the stepper UI. The
+Horizon record shows a submission reached the network; it does not show which
+caller produced it, and it cannot show that nothing depended on warm state —
+which is the entire point of asking for the second run. Treat item 3 as
+partially verified: the network path works, the no-warm-state property does not
+yet have evidence.
+
+Unchanged and still verified: every step of that path degrades correctly when
+the account is absent — beat 1 reports `no_secret` and offers the preset route.
 
 - **[V2-D1]** → **(b)**, represent the uncertainty. Implied by "accurate-or-absent,
   never silently narrow": attaching movements to `invocations[0]` asserts
