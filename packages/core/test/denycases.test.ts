@@ -73,11 +73,9 @@ describe('the amount case sits exactly one unit over the cap', () => {
     if (amountCase === undefined) throw new Error('expected an amount case');
 
     let gross = 0n;
-    for (const invocation of amountCase.candidate.invocations) {
-      for (const movement of invocation.movements) {
-        if (movement.from === amountCase.candidate.source && movement.asset === limit.asset) {
-          gross += BigInt(movement.amount);
-        }
+    for (const movement of amountCase.candidate.movements) {
+      if (movement.from === amountCase.candidate.source && movement.asset === limit.asset) {
+        gross += BigInt(movement.amount);
       }
     }
     // A boundary bug that used `>=` instead of `>` would only be caught by a

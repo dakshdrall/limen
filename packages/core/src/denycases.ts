@@ -14,6 +14,14 @@ import type {
   TokenMovement,
 } from './types.js';
 
+/** Index of the first movement that sends `asset` out of the source account. */
+function findFirstOutflow(tx: ObservedTransaction, asset: string): number | undefined {
+  const index = tx.movements.findIndex(
+    (movement) => movement.from === tx.source && movement.asset === asset,
+  );
+  return index === -1 ? undefined : index;
+}
+
 /**
  * Fixed synthetic addresses. Constants, never generated — a random address
  * would make the deny table differ between runs, and the whole point of this
@@ -29,31 +37,12 @@ function cloneTx(tx: ObservedTransaction): ObservedTransaction {
   return JSON.parse(JSON.stringify(tx)) as ObservedTransaction;
 }
 
-/** Index of the first movement that sends `asset` out of the source account. */
-function findFirstOutflow(
-  tx: ObservedTransaction,
-  asset: string,
-): { invocation: number; movement: number } | undefined {
-  for (let i = 0; i < tx.invocations.length; i++) {
-    const invocation = tx.invocations[i] as Invocation;
-    for (let j = 0; j < invocation.movements.length; j++) {
-      const movement = invocation.movements[j] as TokenMovement;
-      if (movement.from === tx.source && movement.asset === asset) {
-        return { invocation: i, movement: j };
-      }
-    }
-  }
-  return undefined;
-}
-
 function grossOutflow(tx: ObservedTransaction, asset: string): bigint {
   let total = 0n;
-  for (const invocation of tx.invocations) {
-    for (const movement of invocation.movements) {
-      if (movement.from !== tx.source) continue;
-      if (movement.asset !== asset) continue;
-      total += BigInt(movement.amount);
-    }
+  for (const movement of tx.movements) {
+    if (movement.from !== tx.source) continue;
+    if (movement.asset !== asset) continue;
+    total += BigInt(movement.amount);
   }
   return total;
 }
@@ -78,8 +67,7 @@ export function generateDenyCases(
     const site = findFirstOutflow(observed, asset);
     if (site !== undefined) {
       const candidate = cloneTx(observed);
-      const invocation = candidate.invocations[site.invocation] as Invocation;
-      const movement = invocation.movements[site.movement] as TokenMovement;
+      const movement = candidate.movements[site] as TokenMovement;
       // Raise this one movement so the gross outflow lands exactly one unit
       // over the cap — the smallest possible violation, which is the one a
       // sloppy `>=` / `>` boundary would let through.
@@ -99,8 +87,7 @@ export function generateDenyCases(
     const site = findFirstOutflow(observed, firstLimit.asset);
     if (site !== undefined) {
       const candidate = cloneTx(observed);
-      const invocation = candidate.invocations[site.invocation] as Invocation;
-      const movement = invocation.movements[site.movement] as TokenMovement;
+      const movement = candidate.movements[site] as TokenMovement;
       movement.asset = UNOBSERVED_ASSET;
       cases.push({
         axis: 'asset',
@@ -144,7 +131,6 @@ export function generateDenyCases(
       contractId: UNOBSERVED_CONTRACT,
       functionName: 'transfer',
       args: [],
-      movements: [],
     });
     cases.push({
       axis: 'invocation',
