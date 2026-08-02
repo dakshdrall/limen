@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "pretest": "npm --prefix ../../packages/core run build",
     "test": "vitest run"
   },
   "dependencies": {
