@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Playwright (the on-demand e2e suite; see apps/web/playwright.config.ts)
+test-results/
+playwright-report/

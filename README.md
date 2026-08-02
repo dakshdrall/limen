@@ -25,6 +25,19 @@ over-permissive dimension of the derived policy. The rows are produced by
 `generateDenyCases` and adjudicated by `evaluate` — the same functions the test
 suite runs, executing in the browser.
 
+That pipeline runs against live testnet, not only against shipped fixtures. A
+worked example, checkable in an explorer rather than taken on trust:
+[`525d5cf0…fb97a35e`](https://stellar.expert/explorer/testnet/tx/525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e)
+is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of
+`/demo` in ledger 3929381, read back through RPC, and turned into a policy whose
+derived spending cap is that same 1000000 — the boundary is exactly the observed
+flow, which is the claim.
+
+That run was **driven by hand through the `/demo` UI, by a person, not by the
+test suite**: all five steps completed in one pass in a real browser. An
+automated suite covers the same walkthrough on demand (see [the end-to-end
+suite](#the-end-to-end-suite)), but this hash is the human-verified one.
+
 ---
 
 ## Running it
@@ -62,6 +75,28 @@ payload — runs with no RPC access and no API key.
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
 | `NEXT_PUBLIC_SITE_URL` | OG and Twitter card URLs resolve against Vercel's production hostname, or `http://localhost:3000` outside it. |
+
+### The end-to-end suite
+
+```bash
+npm run build
+npm run e2e -w @limen/web
+```
+
+Drives `/demo` in a real Chromium against live testnet: performs a transaction,
+observes it back through RPC, derives the boundary, tries to exceed it, reads
+the payload — then reloads the tab and asserts the walkthrough resumes by
+recomputing from the stored hash rather than restoring a stored answer. It
+starts its own `next start` on every invocation, so a second run is a cold
+process with empty rate-limit windows and an empty transaction cache.
+
+It needs `SOROBAN_RPC_URL`, `LIMEN_DEMO_SECRET`, and `LIMEN_DEMO_DESTINATION`,
+and it is deliberately **not** part of `npm test` or the CI job. Every run
+submits a real transaction, and `/api/demo/perform` allows one per address per
+five minutes — a per-push gate would spend testnet funds on every commit and go
+red on the second push of the hour. A gate that flakes is a gate people learn
+to ignore. CI does still type-check the suite, since it sits inside the web
+app's `tsconfig` include, so it cannot rot silently.
 
 ---
 
