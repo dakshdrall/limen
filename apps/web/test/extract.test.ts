@@ -59,7 +59,12 @@ function contractEvent({
 }): xdr.ContractEvent {
   return new xdr.ContractEvent({
     ext: new xdr.ExtensionPoint(0),
-    contractId,
+    // The same upstream typing bug `encodeContractId` documents, seen from the
+    // writing side: the generated XDR types alias `Hash` to `Opaque[]`, but the
+    // constructor stores — and `contractId()` returns — the 32-byte Buffer.
+    // Constructing the real value and casting the declaration keeps these
+    // fixtures honest; matching the wrong type would build a wrong event.
+    contractId: contractId as unknown as xdr.Hash,
     type,
     body: new xdr.ContractEventBody(0, new xdr.ContractEventV0({ topics, data })),
   });
