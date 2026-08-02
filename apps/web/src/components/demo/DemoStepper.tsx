@@ -299,10 +299,10 @@ export function DemoStepper({
                   {busy === 2 ? 'Reading…' : 'Observe it'}
                 </button>
               ) : (
-                <>
-                  <ObservedSection observed={observed} />
-                  <Continue onClick={() => advance(3)} shown={state.beat === 2} label="Derive the boundary" />
-                </>
+                // No continue button here. `applyOutcome` advances the beat in
+                // the same handler that sets `observed`, so beat 3 derives
+                // itself as soon as this lands and a gate would never render.
+                <ObservedSection observed={observed} />
               )}
             </div>
           )}
