@@ -100,6 +100,40 @@ function classicMeta(): xdr.TransactionMeta {
   return new xdr.TransactionMeta(0, []);
 }
 
+/**
+ * Protocol 23 meta. Contract events live in two places here — per-operation,
+ * and a stage-marked transaction-level list — so both are separately settable.
+ */
+function v4Meta({
+  operationEvents = [],
+  transactionEvents = [],
+}: {
+  operationEvents?: xdr.ContractEvent[][];
+  transactionEvents?: xdr.ContractEvent[];
+}): xdr.TransactionMeta {
+  return new xdr.TransactionMeta(
+    4,
+    new xdr.TransactionMetaV4({
+      ext: new xdr.ExtensionPoint(0),
+      txChangesBefore: [],
+      operations: operationEvents.map(
+        (events) =>
+          new xdr.OperationMetaV2({ ext: new xdr.ExtensionPoint(0), changes: [], events }),
+      ),
+      txChangesAfter: [],
+      sorobanMeta: null,
+      events: transactionEvents.map(
+        (event) =>
+          new xdr.TransactionEvent({
+            stage: xdr.TransactionEventStage.transactionEventStageAfterTx(),
+            event,
+          }),
+      ),
+      diagnosticEvents: [],
+    }),
+  );
+}
+
 function response(
   operations: xdr.Operation[],
   transactionMeta: xdr.TransactionMeta,
@@ -236,6 +270,97 @@ describe('events that are provably not token transfers are ignored, not refused'
   it('reads classic meta as having no contract events rather than as unreadable', () => {
     const observed = extract([invokeOp(TOKEN, 'transfer')], classicMeta());
     expect(observed.movements).toEqual([]);
+  });
+});
+
+/* --- Protocol 23 metadata ------------------------------------------------ */
+
+describe('Protocol 23 (V4) metadata', () => {
+  it('reads a transfer emitted per-operation', () => {
+    // The regression this section exists for: V4 meta was read as an
+    // unrecognised arm and answered with `[]`, so this transfer — a real one,
+    // in the place P23 now puts it — was extracted as "no movements", and the
+    // derived cap bounded nothing.
+    const observed = extract(
+      [invokeOp(TOKEN, 'transfer')],
+      v4Meta({
+        operationEvents: [[transferEvent(SOURCE.publicKey(), RECIPIENT.publicKey(), 750n)]],
+      }),
+    );
+    expect(observed.movements).toEqual([
+      { asset: TOKEN, from: SOURCE.publicKey(), to: RECIPIENT.publicKey(), amount: '750' },
+    ]);
+    const limit = synthesize(observed).policies.find((p) => p.kind === 'spending_limit');
+    expect(limit?.kind === 'spending_limit' && limit.limit).toBe('750');
+  });
+
+  it('reads events from every operation, not only the first', () => {
+    const observed = extract(
+      [invokeOp(TOKEN, 'transfer'), invokeOp(ROUTER, 'swap')],
+      v4Meta({
+        operationEvents: [
+          [transferEvent(SOURCE.publicKey(), RECIPIENT.publicKey(), 100n)],
+          [transferEvent(SOURCE.publicKey(), ROUTER, 25n)],
+        ],
+      }),
+    );
+    expect(observed.movements.map((m) => m.amount)).toEqual(['100', '25']);
+  });
+
+  it('reads the transaction-level list too', () => {
+    // Nothing guarantees a transfer only ever arrives per-operation. Reading
+    // one list and not the other would be the same narrowing in a new place.
+    const observed = extract(
+      [invokeOp(TOKEN, 'transfer')],
+      v4Meta({
+        transactionEvents: [transferEvent(SOURCE.publicKey(), RECIPIENT.publicKey(), 42n)],
+      }),
+    );
+    expect(observed.movements).toEqual([
+      { asset: TOKEN, from: SOURCE.publicKey(), to: RECIPIENT.publicKey(), amount: '42' },
+    ]);
+  });
+
+  it('ignores the CAP-67 fee event that shares that list', () => {
+    // Fee charges and refunds are emitted transaction-level with topics
+    // ["fee", from] — topic 0 is `fee`, not `transfer`, so the classifier
+    // ignores them by the same rule it ignores any other non-transfer event.
+    // If that ever stopped holding, every P23 transaction would acquire a
+    // spurious native-XLM cap sized to its network fee, and this would fail.
+    const feeEvent = contractEvent({
+      contractId: Buffer.alloc(32, 4),
+      topics: [
+        nativeToScVal('fee', { type: 'symbol' }),
+        nativeToScVal(SOURCE.publicKey(), { type: 'address' }),
+      ],
+      data: nativeToScVal(100n, { type: 'i128' }),
+    });
+    const observed = extract(
+      [invokeOp(TOKEN, 'transfer')],
+      v4Meta({
+        transactionEvents: [feeEvent],
+        operationEvents: [[transferEvent(SOURCE.publicKey(), RECIPIENT.publicKey(), 900n)]],
+      }),
+    );
+    expect(observed.movements).toEqual([
+      { asset: TOKEN, from: SOURCE.publicKey(), to: RECIPIENT.publicKey(), amount: '900' },
+    ]);
+  });
+
+  it('refuses a metadata version it does not know how to read', () => {
+    // The SDK will not construct an undefined union arm, so the unreadable
+    // version is stood in for. What is under test is the dispatch: an arm this
+    // extractor has no reader for must refuse, not fall through to "classic,
+    // no events" — that fall-through is what hid V4 transfers to begin with.
+    const futureMeta = { switch: () => 5 } as unknown as xdr.TransactionMeta;
+    expect(() => extract([invokeOp(TOKEN, 'transfer')], futureMeta)).toThrow(ExtractionError);
+    try {
+      extract([invokeOp(TOKEN, 'transfer')], futureMeta);
+    } catch (error) {
+      expect((error as ExtractionError).code).toBe('unreadable_meta');
+      expect((error as ExtractionError).message).toContain('metadata version 5');
+      expect((error as ExtractionError).message).toContain('may contain transfers');
+    }
   });
 });
 

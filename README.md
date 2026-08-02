@@ -230,7 +230,11 @@ pretend otherwise.
   extraction path is implemented, and its refusal behaviour is covered by tests
   built on constructed Soroban metadata — a readable transfer, a transfer with a
   non-integer amount, a missing topic, a malformed emitting contract, a good
-  transfer sitting next to a bad one. What it has *not* seen is the breadth of
+  transfer sitting next to a bad one. Both metadata layouts are read: Soroban
+  `v3`, and Protocol 23 `v4`, which moved contract events to a per-operation
+  list alongside a transaction-level one for fee charges and refunds. A metadata
+  version with no reader here is refused by version number rather than read as
+  "classic, no events." What it has *not* seen is the breadth of
   what testnet actually contains. Every unknown shape it meets will either
   extract correctly or refuse and name the field; neither of those is silent
   corruption, but the refusal rate on real traffic is unmeasured.
