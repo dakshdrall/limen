@@ -19,9 +19,29 @@ export const STATUS_LABELS = {
   'NOT AUDITED': 'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
   'COMPOSITION ONLY': 'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
   'NO CUSTODY': 'No key of yours reaches a Limen server. There is no code path here that can move your funds.',
+  'TESTNET ONLY · LOCAL KEY':
+    'An ed25519 key generated in this browser and kept in this browser. Stellar testnet only, disposable by construction: it is not a wallet, it never reaches a Limen server, and clearing site data destroys it.',
 } as const;
 
 export type StatusLabelName = keyof typeof STATUS_LABELS;
+
+/**
+ * The local key's label, as an importable name.
+ *
+ * It is in the closed set above before anything renders it, on purpose. The
+ * browser-generated ed25519 keypair is a deliberate narrowing of design rule 3
+ * — a user secret in browser storage, where the rule used to forbid one — and
+ * the entire justification for the narrowing is that the person holding the key
+ * is told what it is at the moment it is created and everywhere it is used. A
+ * key that appears quietly in `localStorage` is a different feature.
+ *
+ * Exported as a constant so the point of creation and every use site name the
+ * same string rather than retyping it. `test/local-key-label.test.ts` fails the
+ * build if a key is generated or stored anywhere in `src/` that does not carry
+ * it. This is a `loud` label wherever a key is about to be created: it is one
+ * of the two things on this page a person must read before they act.
+ */
+export const LOCAL_KEY_LABEL = 'TESTNET ONLY · LOCAL KEY' satisfies StatusLabelName;
 
 /**
  * `loud` is for the one label a person must read before they act — `NOT
