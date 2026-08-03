@@ -250,16 +250,31 @@ body::before {
   --col-hash: 18ch;
   --col-amount: 14ch;
   --col-ledger: 9ch;
-  --col-verdict: 11ch;
+  /* Sized to the thing it holds rather than to the word. A `Verdict` badge is
+     `min-w-[6.25rem]`, which is wider than `DENY` reads. This was 11ch until
+     the refusal screen became the first table to put a badge in it. */
+  --col-verdict: 14ch;
   --col-label: 10ch;
+
+  /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
+     how much *content* a column holds — `--col-hash: 18ch` is eighteen
+     characters — so the padding is added by the classes below rather than
+     folded into every token, where it would quietly stop being a statement
+     about content.
+
+     Omitting it is not a cosmetic error. Under `table-layout: fixed` a column
+     narrower than its contents does not shrink them or scroll; it lets them
+     overlap the next column. Both the verdict badge and a 9-character ledger
+     number did exactly that on the first two tables to use these tokens. */
+  --col-pad: 1.5rem;
 }
 
-.col-addr { width: var(--col-addr); }
-.col-hash { width: var(--col-hash); }
-.col-amount { width: var(--col-amount); text-align: right; }
-.col-ledger { width: var(--col-ledger); text-align: right; }
-.col-verdict { width: var(--col-verdict); }
-.col-label { width: var(--col-label); }
+.col-addr { width: calc(var(--col-addr) + var(--col-pad)); }
+.col-hash { width: calc(var(--col-hash) + var(--col-pad)); }
+.col-amount { width: calc(var(--col-amount) + var(--col-pad)); text-align: right; }
+.col-ledger { width: calc(var(--col-ledger) + var(--col-pad)); text-align: right; }
+.col-verdict { width: calc(var(--col-verdict) + var(--col-pad)); }
+.col-label { width: calc(var(--col-label) + var(--col-pad)); }
 
 /* ---------------------------------------------------------------------------
    Tables.

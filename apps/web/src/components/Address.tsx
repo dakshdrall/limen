@@ -39,7 +39,9 @@ export function Address({
         void navigator.clipboard?.writeText(value);
         setCopied(true);
       }}
-      className={`group inline-flex cursor-pointer items-center gap-1.5 rounded-[3px] px-1 py-0.5 -mx-1 font-mono text-[12.5px] tracking-[-0.01em] transition-colors hover:bg-surface-raised hover:text-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent ${
+      // `whitespace-nowrap`: a truncated address broken across two lines reads
+      // as two values. It is already the shortest form of itself.
+      className={`group inline-flex cursor-pointer items-center gap-1.5 rounded-[3px] px-1 py-0.5 -mx-1 font-mono text-[12.5px] tracking-[-0.01em] whitespace-nowrap transition-colors hover:bg-surface-raised hover:text-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent ${
         copied ? 'text-permit' : base
       } ${className}`}
     >

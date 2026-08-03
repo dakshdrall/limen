@@ -563,7 +563,7 @@ gated: if a gate fails, work stops and I report rather than build around it.
 | 6 | `lower.ts` + the lowering harness; wire the synthesizer's output into step 4's path | deny-case harness green against lowered plans; live agreement with step 5 | **done — 26 tests** |
 | 7 | Persistence and the account/policy data model | chain re-read on reload, verified | **done** |
 | 8 | Type and grid tokens | before any new screen | **done** |
-| 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | not started |
+| 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | **done — reads only; install still needs a signer** |
 | 10 | Simulator (demoted demo) and docs | | not started |
 | 11 | Design system pass across everything | | not started |
 | 12 | Landing rebuild: spec strip, mechanism with a worked example, deny table, numbers from `evidence.json`, code snippet | | not started |
@@ -613,6 +613,58 @@ top bar was 95% opaque with no blur, so content bled through the chrome; and the
 deny table's reason column pushed 56-character addresses past the viewport.
 Verified in full greyscale — PERMIT and DENY stay distinguishable with every hue
 removed.
+
+### What step 9 landed
+
+Four screens, in the brief's order, each driven in a browser against the live
+testnet account rather than only against fixtures.
+
+`/app/accounts` lists what this browser has been shown and reads every fact
+*about* those accounts from the chain; `/app/accounts/[id]` shows the installed
+boundary — rules, signers, policies, caps, spend — at a stated ledger.
+`/app/policies/new` observes a transaction, derives a boundary, and then lowers
+it, which is the step `/` does not have: what `synthesize` produces and what an
+OpenZeppelin account can hold are different languages, and the translation
+either succeeds or is refused with the constraint named.
+`/app/policies/[id]` is the refusal screen. `/app/activity` reads contract
+events.
+
+**The install step does not complete, and the screen says so in place of a
+button.** Writing a context rule needs an owner signature, and no browser signer
+exists yet: the passkey path is unbuilt and so is the local ed25519 keypair that
+would stand in for it. A disabled button would claim the feature exists and is
+temporarily broken; neither is true. Deploy and revoke are absent for the same
+reason. Everything else on these screens is live.
+
+`packages/chain/src/events.ts` is new. Three things it found that the plan had
+wrong or did not know:
+
+- The account emits `context_rule_added`, `policy_registered`, and
+  `signer_registered` — not the `*_added` spellings §7 inferred from the
+  sources.
+- **A single `getEvents` call scans roughly 10,000 ledgers and then returns a
+  cursor, not an error.** Asking for the full retention window in one call
+  returns an empty page while real events sit 100,000 ledgers further on.
+  Reading that as "nothing happened" is the exact failure §7 warned about,
+  arrived at from the opposite direction. The scan pages through the cursor and
+  reports `truncated` when its budget runs out first.
+- Retention on this endpoint is ~120,960 ledgers (~7 days), not the ~1 day §7
+  assumed. It is read from `getHealth` rather than assumed at all now, and the
+  screen prints the range it actually scanned.
+
+`policy_registered` and `signer_registered` carry a policy id and a signer id in
+their second topic — separate counters from context rule ids. Filing either
+under the rule that shares its number would be a wrong answer that looks
+entirely plausible, so the decoder reports `contextRuleId: null` for them and a
+test pins it.
+
+Two bugs came from looking at the rendered page. Both were the same class, and
+both were in tokens step 8 shipped but no table had exercised: under
+`table-layout: fixed`, a column narrower than its contents does not shrink or
+scroll them, it overlaps the next column. The verdict badge sat on top of the
+adjacent cell's text and a 9-character ledger number ran into the row beside it.
+The tokens stated content width and ignored the 0.75rem of cell padding either
+side; `--col-pad` is now added by the column classes, and a test pins it.
 
 ### What step 7 landed
 

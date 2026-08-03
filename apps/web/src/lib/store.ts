@@ -92,6 +92,7 @@ function write(next: StoredShape): boolean {
   if (typeof window === 'undefined') return false;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(next));
+    notify();
     return true;
   } catch {
     // Quota exceeded, or storage disabled. The caller decides whether to tell
@@ -100,6 +101,65 @@ function write(next: StoredShape): boolean {
     return false;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Subscription.
+
+   This store is external to React — another tab can change it, and so can the
+   user clearing site data. So screens read it through `useSyncExternalStore`
+   rather than copying it into component state on mount, which is both the
+   idiomatic answer and the one that does not go stale when the same page is
+   open twice.
+
+   `readRaw` returns the stored *string*. Returning a parsed object would hand
+   `useSyncExternalStore` a new reference on every call and spin forever; a
+   string is its own stable identity, and callers parse it with the accessors
+   above.
+--------------------------------------------------------------------------- */
+
+const listeners = new Set<() => void>();
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
+export function subscribeToStore(listener: () => void): () => void {
+  listeners.add(listener);
+  // `storage` fires only for *other* documents, which is why same-tab writes
+  // call `notify` directly. Both paths are needed; neither covers the other.
+  window.addEventListener('storage', listener);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener('storage', listener);
+  };
+}
+
+/**
+ * The stored string, or `''` when there is nothing stored.
+ *
+ * `null` is reserved for "there is no browser storage here at all", which is
+ * only true on the server. An empty store and an unavailable one must not
+ * collapse into the same value: the first is a browser with no accounts yet and
+ * gets the empty state, the second is a render that cannot know and gets the
+ * pending state. Storage throwing — private mode, disabled cookies — counts as
+ * empty rather than unknown, matching what `read()` already does with it.
+ */
+export function readRaw(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The server has no browser storage, so it renders the not-yet-known state.
+ *
+ * Constant rather than computed: `useSyncExternalStore` compares the server
+ * snapshot by identity, and a fresh value each call is a hydration error.
+ */
+export const SERVER_SNAPSHOT = null;
 
 export function listAccounts(): StoredAccount[] {
   return Object.values(read().accounts).sort((a, b) => a.addedAt.localeCompare(b.addedAt));
@@ -188,6 +248,7 @@ export function clearAll(): boolean {
   if (typeof window === 'undefined') return false;
   try {
     window.localStorage.removeItem(KEY);
+    notify();
     return true;
   } catch {
     return false;

@@ -58,14 +58,22 @@ describe('the evaluator caveat survives', () => {
   });
 
   it('is stated in the README too, and scoped to the screens it is true of', () => {
-    // The chain layer now produces genuine network refusals, so the unqualified
+    // The chain layer produces genuine network refusals, so the unqualified
     // form of this caveat became false. The scoped form must survive, because
-    // the two screens that exist still adjudicate locally and a reader who
-    // conflates the two would credit the demo with something it does not do.
+    // `/` and `/demo` still adjudicate locally and a reader who conflates the
+    // two would credit the demo with something it does not do.
+    //
+    // Rescoped once already: it said "the two screens that exist" until the
+    // interface screens landed and there were more than two. The names are in
+    // it now, so the next screen cannot silently widen it.
     expect(README).toContain(
-      "On the two screens that exist, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
+      "On `/` and `/demo`, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
     );
     expect(README).toContain("the ones with transaction hashes above are the network's");
+  });
+
+  it('says the refusal screen keeps locally adjudicated rows off itself', () => {
+    expect(README).toContain('no locally adjudicated row appears on it');
   });
 });
 
@@ -119,6 +127,108 @@ describe('the custody claim stays accurate now that a signer exists', () => {
 
   it('still describes the demo account as disposable', () => {
     expect(README).toContain('disposable and holds trivial funds');
+  });
+});
+
+describe('the activity feed does not imply it is complete', () => {
+  // Contract events are emitted on success only. A feed that quietly contained
+  // nothing but successes while reading as a full history would be the most
+  // flattering possible misrepresentation of a permissions tool: every boundary
+  // looks perfectly obeyed if you only show the transactions that got through.
+  it('says on screen that events are success-only', () => {
+    const screen = source('components/app/ActivityScreen.tsx');
+    expect(screen).toContain('emitted on success only');
+    expect(screen).toContain('Refused attempts publish no events');
+  });
+
+  it('states the ledger range it actually scanned', () => {
+    // Every claim of absence is only as good as the range, and a reader who
+    // cannot see the range cannot judge the absence.
+    expect(source('components/app/ActivityScreen.tsx')).toContain('Scanned ledgers');
+  });
+
+  it('distinguishes the RPC forgetting from nothing having happened', () => {
+    const screen = source('components/app/ActivityScreen.tsx');
+    expect(screen).toContain('retention floor');
+    expect(screen).toContain('it is the endpoint&rsquo;s');
+  });
+
+  it('says so when a scan was truncated rather than showing it as complete', () => {
+    expect(source('components/app/ActivityScreen.tsx')).toContain('This feed is incomplete');
+    expect(
+      flat(readFileSync(fileURLToPath(new URL('../../../packages/chain/src/events.ts', import.meta.url)), 'utf8')),
+    ).toContain('truncated');
+  });
+});
+
+describe('the refusal screen keeps its two sources apart', () => {
+  it('says the refusals came from the network, not from this repository', () => {
+    const table = source('components/app/RefusalTable.tsx');
+    expect(table).toContain('own evaluator also produces DENY rows');
+    expect(table).toContain('None of them appear here');
+  });
+
+  it('does not fill a missing hash', () => {
+    expect(source('components/app/RefusalTable.tsx')).toContain('never reached a ledger');
+  });
+
+  it('does not over-attribute an error it could not decode on-ledger', () => {
+    // The expiry axis reached a ledger, but that run's diagnostic scan did not
+    // recover the contract code, so only the simulation error is attributable.
+    expect(source('components/app/RefusalTable.tsx')).toContain('simulation only');
+  });
+
+  it('does not invent which rule a recorded attempt was made under', () => {
+    const recorded = source('lib/recorded-runs.ts');
+    expect(recorded).toContain('It does not carry a rule id per row');
+    expect(recorded).toContain('never as "this');
+  });
+});
+
+describe('local provenance stays outside the on-chain block', () => {
+  it('says why validFromLedger is not rendered as chain state', () => {
+    // Design decision 5: `validFromLedger` has no on-chain counterpart, so a
+    // field rendered inside the on-chain block would read as something the
+    // network enforces.
+    const detail = source('components/app/PolicyDetail.tsx');
+    expect(detail).toContain('has no counterpart on an OpenZeppelin context rule');
+    expect(detail).toContain('deliberately absent from the on-chain block');
+  });
+
+  it('keeps the install plan to exactly the fields that go to the chain', () => {
+    expect(source('components/app/InstallPlanTable.tsx')).toContain(
+      'The install summary shows the fields that go to',
+    );
+  });
+});
+
+describe('a boundary that could not be read is not shown as an absent one', () => {
+  it('is stated where the wire contract is defined', () => {
+    expect(source('lib/account-contract.ts')).toContain(
+      'an account we could not read are different screens',
+    );
+  });
+
+  it('reports an unreadable policy as unreadable rather than as no limit', () => {
+    // "no cap" and "we could not read the cap" are opposite claims.
+    expect(source('lib/account-contract.ts')).toContain('and "we could not read the cap" are opposite claims');
+  });
+
+  it('calls a rule with no policy unbounded rather than leaving it blank', () => {
+    expect(source('components/app/RulesTable.tsx')).toContain('unbounded — no policy attached');
+  });
+});
+
+describe('the install step does not pretend it can sign', () => {
+  it('says the signer paths do not exist yet, in place of a button', () => {
+    const screen = source('components/app/NewPolicyScreen.tsx');
+    expect(screen).toContain('Neither signer path exists in the browser yet');
+  });
+
+  it('rules out ever taking a secret key from a form', () => {
+    expect(source('components/app/NewPolicyScreen.tsx')).toContain(
+      'There is no form here that accepts a secret key, and there will not be one',
+    );
   });
 });
 

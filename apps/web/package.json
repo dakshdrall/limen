@@ -4,17 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm --prefix ../../packages/core run build",
+    "prebuild": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "pretest": "npm --prefix ../../packages/core run build",
+    "pretest": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build",
     "test": "vitest run",
     "e2e": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@creit.tech/stellar-wallets-kit": "^2.5.0",
+    "@limen/chain": "*",
     "@limen/core": "*",
     "@stellar/stellar-sdk": "^16.2.0",
     "next": "16.2.12",

@@ -355,17 +355,23 @@ rejected transaction above demonstrates.
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
 
-- **None of the above is in the UI yet.** The chain layer is real and proven by
-  script; the app still shows the demo. Accounts, install, activity, and the
-  refusal screen are not built. See [`PLAN-V3.md`](./PLAN-V3.md) for what is
-  built and what is not.
-- **On the two screens that exist, the deny table proves refusal as adjudicated
-  by this repository's evaluator, not as enforced on-chain.** The network
-  enforcement above is real, but nothing renders it yet; `/` and `/demo` still
-  run `evaluate` in the browser. `evaluate` is an independent implementation of
-  the same rules, which is a real check against a wrong synthesizer — it is not
-  the OpenZeppelin contract. Do not read the demo's DENY rows as network
-  refusals; the ones with transaction hashes above are the network's.
+- **Nothing in the app can sign, so nothing in the app can install.** The
+  accounts, new-policy, refusal, and activity screens are built and read live
+  from testnet. Writing — deploy, install, revoke — needs an owner signature,
+  and no browser signer exists yet: the passkey path is unbuilt, and so is the
+  local ed25519 keypair that would stand in for it. The new-policy screen
+  derives a boundary, lowers it, and then says this in place of a button. Every
+  install recorded above was signed by
+  `packages/chain/scripts/testnet.mjs`, which is not part of the application.
+  See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
+- **On `/` and `/demo`, the deny table proves refusal as adjudicated by this
+  repository's evaluator, not as enforced on-chain.** Those two screens run
+  `evaluate` in the browser. `evaluate` is an independent implementation of the
+  same rules, which is a real check against a wrong synthesizer — it is not the
+  OpenZeppelin contract. Do not read their DENY rows as network refusals; the
+  ones with transaction hashes above are the network's. The refusal screen at
+  `/app/policies/[id]` renders those hashes and nothing else: no locally
+  adjudicated row appears on it, precisely so the two cannot be confused.
 - **Only single-token transfer flows can be installed.** OpenZeppelin ships
   three policies — `simple_threshold`, `weighted_threshold`, `spending_limit` —
   and none of them is a function allowlist. A `['transfer']` allowlist needs no

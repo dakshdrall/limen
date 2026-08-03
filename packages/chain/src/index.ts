@@ -44,3 +44,13 @@ export {
   structMap,
   type SignerSignature,
 } from './authpayload.js';
+
+export {
+  readActivity,
+  type ActivityEvent,
+  type ActivityKind,
+  type ActivityOptions,
+  type ActivityRead,
+  type ActivityWindow,
+  type EnforcedSpend,
+} from './events.js';

@@ -19,6 +19,10 @@ export const STATUS_LABELS = {
   'NOT AUDITED': 'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
   'COMPOSITION ONLY': 'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
   'NO CUSTODY': 'No key of yours reaches a Limen server. There is no code path here that can move your funds.',
+  'ON-CHAIN':
+    'Read from the ledger at the stated sequence number. Not restored from browser storage, and not this application’s opinion.',
+  'COMPUTED LOCALLY':
+    'Derived in your browser by this repository’s own code. Nothing on chain asserts it, and no network enforced it.',
   'TESTNET ONLY · LOCAL KEY':
     'An ed25519 key generated in this browser and kept in this browser. Stellar testnet only, disposable by construction: it is not a wallet, it never reaches a Limen server, and clearing site data destroys it.',
 } as const;

@@ -29,8 +29,8 @@ import { NETWORK } from '@/lib/network';
  */
 const SECTIONS = [
   { label: 'MECHANISM', href: '/', built: true },
-  { label: 'INTERFACE', href: '/app/accounts', built: false },
-  { label: 'ACTIVITY', href: '/app/activity', built: false },
+  { label: 'INTERFACE', href: '/app/accounts', built: true },
+  { label: 'ACTIVITY', href: '/app/activity', built: true },
   { label: 'SIMULATOR', href: '/app/simulator', built: false },
   { label: 'DOCS', href: '/docs', built: false },
 ] as const;

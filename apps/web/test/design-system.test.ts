@@ -78,6 +78,26 @@ describe('the grid is a token set, not a judgement call', () => {
     expect(css).toMatch(/--col-addr:\s*\d+ch/);
     expect(css).toMatch(/--col-hash:\s*\d+ch/);
   });
+
+  it('adds the cell padding to every column rather than folding it into the tokens', () => {
+    // This shipped wrong twice on the first two tables to use these tokens. The
+    // tokens state content width; `.tbl` cells add 0.75rem of padding on each
+    // side; and under `table-layout: fixed` the shortfall does not shrink the
+    // content or scroll it — it overlaps the next column. A verdict badge sat
+    // on top of the adjacent cell's text, and a 9-character ledger number ran
+    // straight into the row description beside it.
+    expect(css).toContain('--col-pad:');
+    for (const token of tokens) {
+      const cls = token.replace('--', '.');
+      expect(css).toMatch(new RegExp(`\\${cls} \\{ width: calc\\(var\\(${token}\\) \\+ var\\(--col-pad\\)\\)`));
+    }
+  });
+
+  it('sizes the verdict column to the badge it holds, not to the word', () => {
+    // `DENY` is four characters; the badge is `min-w-[6.25rem]`.
+    const verdict = /--col-verdict:\s*(\d+)ch/.exec(css)?.[1];
+    expect(Number(verdict)).toBeGreaterThanOrEqual(13);
+  });
 });
 
 describe('verdicts survive greyscale', () => {
