@@ -201,9 +201,14 @@ describe('a fact is stated in one place', () => {
     // resized itself.
     for (const [path, source] of tsx) {
       if (!path.endsWith('/page.tsx')) continue;
-      // The landing runs at its own scale, one screen at a time, and is
-      // rebuilt in step 12.
-      if (path === 'app/page.tsx') continue;
+      // No exemption for the landing any more. It had one — it ran at its own
+      // scale, one sentence per viewport, with its own type ramp and its own
+      // maximum width — and step 12 ended that: it is now made of the same
+      // shell, the same `Section`, the same column tokens and the same tables
+      // as every screen it links to. Someone arriving on the landing and
+      // clicking into the application should not feel the application resize
+      // itself, and that is the same argument that produced `.screen` in the
+      // first place, applied to the one page that was excused from it.
       expect(source, `${path} does not use the screen shell`).toContain('className="screen"');
     }
   });

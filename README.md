@@ -14,16 +14,21 @@ and never holds a key.
 
 ## The thing this proves
 
-One screen shows a transaction that was performed, the policy Limen derived from
-it, and **a table of adjacent transactions the policy now refuses** — a larger
-amount, a different asset, an extra function call, a different contract, an
-appended invocation, an expired window.
+`/app/simulator` shows a transaction that was performed, the policy Limen
+derived from it, and **a table of adjacent transactions the policy now
+refuses** — a larger amount, a different asset, an extra function call, a
+different contract, an appended invocation, an expired window.
 
 That deny table is the product. Each row changes exactly one dimension of the
 observed transaction, so a `PERMIT` anywhere in the table names the single
 over-permissive dimension of the derived policy. The rows are produced by
 `generateDenyCases` and adjudicated by `evaluate` — the same functions the test
 suite runs, executing in the browser.
+
+The same six axes, adjudicated by the network instead, are the landing page and
+`/app/policies/[id]`. Those rows carry transaction hashes; the ones above do
+not, and the difference between the two is the subject of half the caveats in
+this file.
 
 ### The boundary is now enforced by the network, not only by our evaluator
 
@@ -101,9 +106,12 @@ payload — runs with no RPC access and no API key.
 
 ### The screens
 
-- **`/`** — the argument, then the review: a transaction, the policy derived
-  from it, the deny table, and the install payload. Paste any Soroban testnet
-  transaction hash to run it on your own flow, or pick a shipped preset.
+- **`/`** — the argument, with the hashes that back it: the mechanism worked
+  through one live-ingested transaction and the rule installed from it, the six
+  refusals the network produced against that boundary, and counts generated
+  from the test run rather than typed. Static, and it holds no interactive demo
+  — that moved to `/app/simulator` in step 10, and step 12 stopped the landing
+  keeping a second copy of it.
 - **`/app/accounts`** — smart accounts this browser has been shown, and for each
   one the boundary currently installed on it, read from the chain at a stated
   ledger. Not restored from browser storage.
@@ -136,6 +144,31 @@ payload — runs with no RPC access and no API key.
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
 | `NEXT_PUBLIC_SITE_URL` | OG and Twitter card URLs resolve against Vercel's production hostname, or `http://localhost:3000` outside it. |
+
+### The numbers on the landing page
+
+```bash
+npm run evidence         # regenerate apps/web/src/generated/evidence.json
+npm run evidence:check   # fail if the committed copy has drifted
+```
+
+The landing page states counts — tests passing, testnet transactions recorded,
+deny axes refused on-ledger, context rules installed, Rust files in this
+repository. None of them is typed. `scripts/evidence.mjs` runs the three suites
+and reads `packages/chain/deployments/testnet.json`, and `evidence:check` is a
+CI step that regenerates and compares, so adding a test without regenerating is
+a red build rather than a page that quietly understates itself.
+
+That check proves freshness and nothing else — a generator with a wrong
+definition of "transactions recorded" would agree with itself forever. So
+`apps/web/test/evidence.test.ts` re-derives each chain figure independently,
+deliberately by a different route than the generator uses, and asserts the two
+agree. The same argument that keeps `evaluate` separate from `synthesize`.
+
+The file carries no timestamp, on purpose: one would change on every run, so
+`evidence:check` would fail on a clean tree and the only way to stay green
+would be committing a regenerated file on every push — which trains everyone to
+regenerate without reading, which is exactly how a wrong number gets through.
 
 ### The end-to-end suite
 
@@ -309,9 +342,10 @@ apps/web/           Next.js 16, App Router, TypeScript, Tailwind
   src/app/api/explain/         Claude: structured rationale -> plain English
   src/app/api/install-preview/ proposal -> Soroban ScVal XDR
   src/app/api/demo/perform/    submits the guided demo's testnet transaction
-  src/app/page.tsx             the review screen
+  src/app/page.tsx             the landing: mechanism, refusals, numbers
   src/app/app/simulator/       the six-step guided walkthrough
   src/app/docs/page.tsx        pointing an agent at an installed policy
+  src/generated/evidence.json  the landing's counts; written by scripts/evidence.mjs
   src/lib/extract.ts           XDR -> domain model; accurate or absent
   src/lib/demo-signer.ts       the only signer in the repo; testnet-fenced
   src/fixtures/                shipped JSON transactions
@@ -381,14 +415,22 @@ pretend otherwise.
   install recorded above was signed by
   `packages/chain/scripts/testnet.mjs`, which is not part of the application.
   See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
-- **On `/` and `/app/simulator`, the deny table proves refusal as adjudicated by this
-  repository's evaluator, not as enforced on-chain.** Those two screens run
+- **On `/app/simulator`, the deny table proves refusal as adjudicated by this
+  repository's evaluator, not as enforced on-chain.** That screen runs
   `evaluate` in the browser. `evaluate` is an independent implementation of the
   same rules, which is a real check against a wrong synthesizer — it is not the
-  OpenZeppelin contract. Do not read their DENY rows as network refusals; the
+  OpenZeppelin contract. Do not read its DENY rows as network refusals; the
   ones with transaction hashes above are the network's. The refusal screen at
   `/app/policies/[id]` renders those hashes and nothing else: no locally
   adjudicated row appears on it, precisely so the two cannot be confused.
+
+  Rescoped in v3 step 12. This named `/` as well, and correctly: the landing
+  ran the same local deny table. The rebuilt landing shows the recorded testnet
+  survey instead — six network refusals with six hashes — so the screen that
+  used to need this caveat now carries the opposite claim, and leaving its name
+  in the list would understate it. Both directions of this sentence are pinned
+  by `apps/web/test/caveats.test.ts`, so neither a new screen nor a moved one
+  can widen or narrow it quietly.
 - **Only single-token transfer flows can be installed.** OpenZeppelin ships
   three policies — `simple_threshold`, `weighted_threshold`, `spending_limit` —
   and none of them is a function allowlist. A `['transfer']` allowlist needs no

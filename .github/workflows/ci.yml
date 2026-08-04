@@ -46,6 +46,20 @@ jobs:
       - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web
 
+      # The landing page states counts — tests passing, transactions recorded,
+      # deny axes refused on-ledger — and states them because a project that
+      # quantifies its own evidence is checkable in a way that adjectives are
+      # not. A hand-typed count rots, and a rotted number on a page about
+      # honesty is worse than no number, so `evidence.json` is generated and
+      # this step proves the committed copy still matches.
+      #
+      # It re-runs the three suites to do that, which is the one duplicated
+      # cost in this workflow. The alternative — trusting the steps above to
+      # have left a report behind — makes the guarantee depend on run order,
+      # and a freshness check that can silently pass is not one.
+      - name: Prove the landing's numbers are not stale
+        run: npm run evidence:check
+
       - name: Lint
         run: npm run lint
 

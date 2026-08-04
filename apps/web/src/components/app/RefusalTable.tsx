@@ -16,10 +16,10 @@ import type { RecordedAxis, RecordedWalkthrough } from '@/lib/recorded-runs';
  *
  * Three things this table refuses to do:
  *
- * 1. **Blend provenance.** Limen's own evaluator also produces DENY rows, on
- *    `/` and in the simulator. None of them appear here. A table that mixed
- *    them would make the local ones look like network refusals, which is the
- *    single most valuable thing this project has to be careful about.
+ * 1. **Blend provenance.** Limen's own evaluator also produces DENY rows, in
+ *    the simulator. None of them appear here. A table that mixed them would
+ *    make the local ones look like network refusals, which is the single most
+ *    valuable thing this project has to be careful about.
  * 2. **Fill a missing hash.** An attempt with no hash never reached a ledger,
  *    and the row says so where the hash would be.
  * 3. **Over-attribute an error.** The expiry row reached a ledger, but its

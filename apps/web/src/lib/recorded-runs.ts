@@ -64,6 +64,31 @@ export interface RecordedWalkthrough {
   rejectedError: string;
 }
 
+/**
+ * The one derivation that started from a transaction observed on a live
+ * network rather than from a shipped fixture.
+ *
+ * It is a separate run from the walkthrough and is deliberately typed as one.
+ * `installedSeparately` is the seam: this transaction was observed and derived
+ * from, and the recorded install was built by the script from the same
+ * parameters — the two halves were not run in one pass, because ingest-to-
+ * install needs a browser signer that does not exist. Any component rendering
+ * this must render that field too, which is why it is required rather than
+ * optional.
+ */
+export interface RecordedDerivation {
+  producedBy: string;
+  hash: string;
+  ledger: number;
+  token: string;
+  function: string;
+  /** The outflow the transaction actually moved, in smallest units. */
+  observedAmount: string;
+  /** What `synthesize` derived from it. Equal to the above; that is the claim. */
+  derivedCap: string;
+  installedSeparately: string;
+}
+
 /** The verifier and policy contracts every account in this repository shares. */
 export interface SharedContracts {
   ed25519Verifier: { contract: string; deployTx: string };
@@ -89,6 +114,15 @@ export const RECORDED_ACCOUNT = walkthrough.smartAccount;
  * to protect.
  */
 export const RECORDED_RUN: RecordedWalkthrough = walkthrough;
+
+/**
+ * The live-ingest half, for the landing page's worked example.
+ *
+ * Kept apart from `RECORDED_RUN` because they are two runs and merging them
+ * into one object is the first step towards a page that describes them as one
+ * pass. See `RecordedDerivation`.
+ */
+export const RECORDED_DERIVATION = recorded.liveDerivation as RecordedDerivation;
 
 /**
  * The deployed verifier and policy contracts.

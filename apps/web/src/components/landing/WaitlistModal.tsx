@@ -154,9 +154,14 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
 
         {status === 'done' ? (
           <div ref={confirmationRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+            {/* Named releases rather than "soon", and re-aimed once already:
+                this promised live ingest and smart-account install, both of
+                which have since landed on testnet. A waitlist that keeps
+                promising what has already shipped is a waitlist nobody on it
+                can use to judge progress. */}
             <p className="text-[13.5px] leading-relaxed text-muted">
-              Recorded. You will hear from us when live ingest and smart-account install land — not
-              before.
+              Recorded. You will hear from us when a boundary can be installed from the browser, and
+              when this leaves testnet — not before.
             </p>
             <button
               type="button"
@@ -226,7 +231,7 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             </button>
 
             <p className="text-[12px] leading-relaxed text-muted-dim">
-              Stored to announce the two releases below. Not sold, not shared, no other mail.
+              Stored to announce those two releases. Not sold, not shared, no other mail.
             </p>
           </form>
         )}

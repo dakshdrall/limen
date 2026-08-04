@@ -463,6 +463,52 @@ body::before {
     user-select: none;
   }
 
+  /* The wider-tracked eyebrow that opens a screen — `ScreenHeader`'s location
+     line, and the landing's. Distinct from `.eyebrow` above, which numbers a
+     section *within* a screen: one is a word, the other is an index, and they
+     are set apart so a reader can tell at a glance which they are looking at.
+
+     It lived in the landing block below until step 12, where it was fluid
+     between a phone and a wide desktop. `ScreenHeader` has used it on every app
+     screen since step 11, and app chrome does not scale with the viewport — the
+     status labels and column heads beside it never did — so it is fixed at the
+     size the clamp resolved to on any desktop. */
+  .eyebrow-lead {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    user-select: none;
+  }
+
+  /* ---------------------------------------------------------------------------
+     The landing, at the app's scale.
+
+     What was here was a separate type scale — `.entry-h` at up to 52px,
+     `.entry-p`, `.pin-stack`, a fixed sequence counter — for a page that held
+     one sentence per viewport. That page is gone, and its scale went with it:
+     the landing now uses `.screen`, `Section`, `.measure` and the column tokens,
+     the same as every other screen, because a reader moving from the landing
+     into the application should not feel the application resize itself.
+
+     Two classes survive, and only two, because the landing does open louder than
+     an app screen does: the wordmark, and one heading a step above the app's
+     26px `h1`. Everything else it needs already exists.
+  --------------------------------------------------------------------------- */
+  .wordmark {
+    font-size: 25px;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+  }
+
+  .hero-h {
+    font-size: clamp(28px, 3.4vw, 40px);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
   /* Column headers across every table in the app. */
   .col-head {
     font-family: var(--font-mono);
@@ -715,147 +761,4 @@ body::before {
     color: var(--foreground);
   }
 
-  /* ---------------------------------------------------------------------------
-     Landing type scale.
-
-     The landing runs at a different scale from the app — few words, held one
-     screen at a time — so it gets its own sizes rather than overloading the
-     app's. Everything is fluid between a phone and a wide desktop.
-
-     TODO(v3 step 12): the scroll-pinned landing is replaced by a dense,
-     substantive page. These rules stay until then so the current landing keeps
-     working; they are not part of the app's design system.
-  --------------------------------------------------------------------------- */
-
-  .eyebrow-lead {
-    font-family: var(--font-mono);
-    font-size: clamp(9.5px, 1.1vw, 11px);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    user-select: none;
-  }
-
-  .wordmark {
-    font-size: clamp(19px, 2.6vw, 25px);
-    font-weight: 600;
-    letter-spacing: 0.24em;
-  }
-
-  .entry-h {
-    font-size: clamp(27px, 4.6vw, 52px);
-    font-weight: 600;
-    line-height: 1.08;
-    letter-spacing: -0.025em;
-    text-wrap: balance;
-  }
-
-  .entry-h-lead {
-    font-size: clamp(31px, 5.6vw, 64px);
-  }
-
-  .entry-p {
-    font-size: clamp(14.5px, 1.5vw, 19px);
-    line-height: 1.55;
-  }
-
-  .entry-mono {
-    font-family: var(--font-mono);
-    font-size: clamp(11px, 1.15vw, 13.5px);
-    letter-spacing: -0.01em;
-  }
-
-  .pin-stack {
-    position: relative;
-  }
-
-  .landing-header {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 100svh;
-    padding-block: clamp(4rem, 9vh, 7rem);
-  }
-
-  .pin-entry {
-    display: flex;
-    align-items: center;
-    padding-block: clamp(4rem, 9vh, 7rem);
-    /* Opaque colour first, grid painted over it. The opacity is what makes the
-       pinned occlusion read as a replacement rather than a blend. */
-    background-color: var(--background);
-    background-image: var(--grid-image);
-  }
-
-  .entry-inner {
-    width: 100%;
-    max-width: 1100px;
-    margin-inline: auto;
-    padding-inline: clamp(1.5rem, 4vw, 2.5rem);
-  }
-
-  @media (prefers-reduced-motion: no-preference) and (min-height: 620px) {
-    .pin-entry {
-      position: sticky;
-      top: 0;
-      height: 100svh;
-    }
-  }
-
-  /* Stacked-block fallback: without occlusion the entries need a rule between
-     them to stay distinguishable. */
-  @media (prefers-reduced-motion: reduce), (max-height: 619px) {
-    .pin-entry + .pin-entry {
-      border-top: 1px solid var(--border-subtle);
-    }
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .pin-stack[data-motion='on'] .entry-inner {
-      opacity: 0;
-      transform: translateY(16px);
-      transition:
-        opacity 400ms ease-out,
-        transform 400ms ease-out;
-    }
-
-    .pin-stack[data-motion='on'] .pin-entry[data-entered='true'] .entry-inner {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  .entry-progress {
-    position: fixed;
-    right: clamp(1rem, 2.5vw, 1.75rem);
-    bottom: clamp(1rem, 2.5vw, 1.75rem);
-    z-index: 40;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 2px;
-    background: var(--surface);
-    color: var(--muted-dim);
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.16em;
-    user-select: none;
-    pointer-events: none;
-  }
-
-  .entry-progress[data-visible='false'] {
-    opacity: 0;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .entry-progress {
-      transition: opacity 300ms ease-out;
-    }
-  }
-
-  /* Nothing is being pinned, so a sequence position would describe motion that
-     is not happening. */
-  @media (prefers-reduced-motion: reduce), (max-height: 619px) {
-    .entry-progress {
-      display: none;
-    }
-  }
 }

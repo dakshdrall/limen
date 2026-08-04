@@ -12,6 +12,8 @@
     "build:chain": "npm run build -w @limen/core && npm run build -w @limen/chain",
     "test": "npm run build -w @limen/core && npm run test -w @limen/core && npm run test -w @limen/chain && npm run test -w @limen/web",
     "lint": "npm run lint -w @limen/web",
+    "evidence": "node scripts/evidence.mjs",
+    "evidence:check": "node scripts/evidence.mjs --check",
     "dev": "npm run build -w @limen/core && npm run dev -w @limen/web"
   },
   "overrides": {

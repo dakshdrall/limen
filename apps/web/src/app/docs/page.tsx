@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Address } from '@/components/Address';
+import { Code } from '@/components/Code';
 import { TxHash } from '@/components/ExplorerLink';
 import { Section } from '@/components/Section';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
@@ -389,14 +390,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 
-
-function Code({ children }: { children: string }) {
-  return (
-    <pre className="scroll-x value rounded-[5px] border border-border-default bg-surface p-4 text-[11.5px] leading-relaxed text-muted">
-      {children}
-    </pre>
-  );
-}
 
 function Limit({ title, children }: { title: string; children: React.ReactNode }) {
   return (

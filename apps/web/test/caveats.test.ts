@@ -60,17 +60,28 @@ describe('the evaluator caveat survives', () => {
   it('is stated in the README too, and scoped to the screens it is true of', () => {
     // The chain layer produces genuine network refusals, so the unqualified
     // form of this caveat became false. The scoped form must survive, because
-    // `/` and the simulator still adjudicate locally and a reader who conflates
-    // the two would credit them with something they do not do.
+    // the simulator still adjudicates locally and a reader who conflates the two
+    // would credit it with something it does not do.
     //
-    // Rescoped twice: it said "the two screens that exist" until the interface
-    // screens landed and there were more than two, and it named `/demo` until
-    // that page moved to `/app/simulator`. The names are in it, so neither a
-    // new screen nor a moved one can silently widen it.
+    // Rescoped three times: it said "the two screens that exist" until the
+    // interface screens landed and there were more than two; it named `/demo`
+    // until that page moved to `/app/simulator`; and it named `/` until step 12
+    // replaced the landing's local deny table with the recorded testnet survey.
+    // The names are in it, so neither a new screen nor a moved one can silently
+    // widen it.
     expect(README).toContain(
-      "On `/` and `/app/simulator`, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
+      "On `/app/simulator`, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
     );
     expect(README).toContain("the ones with transaction hashes above are the network's");
+  });
+
+  it('does not still claim the landing adjudicates locally', () => {
+    // The other direction, and the one a rescope forgets. A caveat that names a
+    // screen which has since stopped needing it is not harmless: it tells a
+    // reader the strongest page in the project is weaker than it is, and it is
+    // the kind of wrong that survives review because it errs modestly.
+    expect(README).not.toContain('On `/` and `/app/simulator`, the deny table');
+    expect(source('app/page.tsx')).not.toContain('DenyTable');
   });
 
   it('says the refusal screen keeps locally adjudicated rows off itself', () => {
@@ -276,6 +287,53 @@ describe('the simulator says what it is, now that it is not the front door', () 
 
   it('badges a shipped step as shipped rather than as on-chain', () => {
     expect(source('components/simulator/Beat.tsx')).toContain('never observed on a live network');
+  });
+});
+
+describe('the landing does not let its two testnet runs read as one pass', () => {
+  const page = source('app/page.tsx');
+
+  it('says outright that the worked example is two runs', () => {
+    // The most tempting overstatement this project has available. A live
+    // ingest that derived a cap of exactly the observed outflow, and an install
+    // of a rule with exactly that cap, laid out as steps 01–03 on one page,
+    // read as a single pipeline unless the page says they were not. They were
+    // not: ingest-to-install in one pass needs a browser signer, which does not
+    // exist.
+    expect(page).toContain('These are two runs, not one pass');
+    expect(page).toContain('RECORDED_DERIVATION.installedSeparately');
+  });
+
+  it('keeps the seam in the recording, not only in the page', () => {
+    // If the sentence lived in the JSX, deleting it would be a one-line edit
+    // with nothing else to notice. In the deployments file it sits beside the
+    // hash it qualifies, where anyone reading the evidence meets it.
+    const recorded = flat(
+      readFileSync(fileURLToPath(new URL('../../../packages/chain/deployments/testnet.json', import.meta.url)), 'utf8'),
+    );
+    expect(recorded).toContain('was not piped into the install below');
+    expect(recorded).toContain('driven by hand in a browser');
+  });
+
+  it('attributes the refusals to the network rather than to this repository', () => {
+    // A plain apostrophe, not `&rsquo;`: this one is a string prop rather than
+    // JSX text, so the source contains the character itself.
+    expect(page).toContain("Not this repository's evaluator, and not a simulation");
+    expect(page).toContain('none of them are on this page');
+  });
+
+  it('carries the full spec strip, which is where a reader meets the limits', () => {
+    // Design system §9 makes two placements mandatory. This is the first: seven
+    // labels, before the argument rather than after it.
+    for (const label of ['OPEN SOURCE', 'MIT', 'TESTNET ONLY', 'IN DEVELOPMENT', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']) {
+      expect(page, `the spec strip is missing ${label}`).toContain(`'${label}'`);
+    }
+  });
+
+  it('states what is not built, on the page most likely to be read first', () => {
+    expect(page).toContain('Nothing installs from the browser');
+    expect(page).toContain('One contract per boundary');
+    expect(page).toContain('Testnet, and not audited');
   });
 });
 

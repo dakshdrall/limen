@@ -1,7 +1,6 @@
 # PLAN-V3 — from demo to instrument
 
-Status: **steps 1–11 built and verified on testnet.** Step 12, the landing
-rebuild, is not started.
+Status: **steps 1–12 built and verified on testnet.** The sequence is complete.
 
 ---
 
@@ -570,7 +569,7 @@ gated: if a gate fails, work stops and I report rather than build around it.
 | 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | **done — reads only; install still needs a signer** |
 | 10 | Simulator (demoted demo) and docs | | **done** |
 | 11 | Design system pass across everything | | **done** |
-| 12 | Landing rebuild: spec strip, mechanism with a worked example, deny table, numbers from `evidence.json`, code snippet | | not started |
+| 12 | Landing rebuild: spec strip, mechanism with a worked example, deny table, numbers from `evidence.json`, code snippet | all five present, and the page reads every one of them from a file | **done** |
 
 Steps 1–5 produce no UI at all. That is deliberate.
 
@@ -847,6 +846,96 @@ a decision rather than the drift that already happened. All eight were confirmed
 to fail against the code they replaced before being kept. 276 tests pass; lint,
 build, and the greyscale check are clean, and no screen scrolls the body
 sideways at 1280, 1024, 768, or 390px.
+
+### What step 12 landed
+
+The old landing was six sentences, one per viewport, pinned so that scrolling
+replaced one with the next. §9 named it as one of the three things that read as
+generated, and the diagnosis there — substance, not spacing — was right but
+incomplete. By the time this replaced it, **two of those six sentences had also
+gone stale**: the roadmap entry still said "No smart account is deployed yet:
+refusal is proven by this repository's evaluator, not by an on-chain policy
+contract", months after the hashes at the top of this file reached a ledger. A
+page with six sentences on it has nowhere for a fact to be checked against, and
+so nothing catches one going out of date.
+
+That is the actual argument for the rebuild, and it is why every claim on the
+new page is *read from a file* rather than written into the page:
+
+- **The mechanism, worked.** Three steps, then the same three steps with
+  hashes: the live-ingested transaction, the cap derived from it, and the rule
+  installed on chain. The first of those was recorded only in this README's
+  prose, so it moved into `deployments/testnet.json` as `liveDerivation` and
+  the page reads it. **The seam is stated on the page**: those are two runs,
+  not one pass — ingest-to-install in a single pass needs a browser signer,
+  which does not exist. Laid out as steps 01–03 they read as a pipeline unless
+  the page says otherwise, and "derived from a live transaction and installed
+  on chain" is exactly the sentence a reviewer would be right to check. The
+  disclaimer lives in the deployments file beside the hash it qualifies, not in
+  the JSX, so deleting it is not a one-line edit with nothing else to notice.
+- **The deny table is now the network's.** Six axes, six hashes, the expiry row
+  still saying that only its simulation error is attributable. This is the
+  change with a consequence elsewhere: the README caveat naming `/` and
+  `/app/simulator` as locally adjudicated was **true when written and is now
+  false about half of what it names**, so it was rescoped — and a second
+  assertion was added for the other direction, because a caveat that keeps
+  naming a screen which no longer needs it errs modestly, which is how it
+  survives review.
+- **Numbers, generated.** `scripts/evidence.mjs` runs the three suites and
+  derives every chain figure from the deployments file; `npm run evidence:check`
+  is a CI step that regenerates and fails on drift. `onLedger` and
+  `errorDecodedOnLedger` are separate fields rather than one headline, because
+  "the network refused it" and "the network refused it with this code" are
+  different claims and the expiry axis is the difference. The file carries no
+  timestamp: one would change every run, `--check` would fail on a clean tree,
+  and the fix would be committing a regenerated file on every push — which
+  trains everyone to regenerate without reading.
+
+**The freshness check is not the same thing as a correctness check**, and
+conflating them was a real trap here. `--check` compares the generator against
+itself, so a wrong definition of "transactions recorded" would pass forever.
+`evidence.test.ts` re-derives every chain figure by a deliberately different
+route — a text match a reviewer can reproduce with `grep`, a hand-listed set of
+install keys — and asserts the two agree. It caught the first one immediately:
+`/installTx$/` is case-sensitive, it missed `liveRuleInstallTx` and
+`shortRuleInstallTx`, and it reported two installs instead of four **with no
+sign it had missed any**. A derived number that is confidently wrong is worse
+than a typed one, because nobody re-checks a number that has a generator.
+
+The landing also stopped being exempt from the design system. It had its own
+type scale (`.entry-h` at up to 52px, `.entry-p`, `.pin-stack`, a fixed
+sequence counter), its own width, and an explicit exemption in
+`design-system.test.ts`. All of it is gone: the page is `.screen`, `Section`,
+`.measure`, the column tokens and `RefusedTable` — the same components the
+screens it links to use — and the exemption was deleted rather than narrowed.
+Two classes survive, `.wordmark` and one heading a step above the app's 26px
+`h1`, because the landing does legitimately open louder. `.eyebrow-lead` moved
+the other way, out of the landing block into the app's type scale, since
+`ScreenHeader` has used it on every screen since step 11; it lost its viewport
+clamp on the way, because app chrome does not scale with the viewport and the
+status labels beside it never did.
+
+Deleting the landing left `PolicyReview`, `DerivedSection` and `InstallSection`
+with no callers — the landing had kept a second copy of the demo that step 10
+moved to `/app/simulator` — so they went too. The page is a server component
+now with one client island for the waitlist button; the previous one shipped
+every word of itself to the browser as JavaScript because one button in its
+header owned some state.
+
+Two defects found by looking at the rendered page rather than the source, both
+invisible in review. An `Address` is a button carrying its own hover padding,
+so a comma set directly after one lands a space away from the value and reads
+as a floating comma — em dashes, which want the space anyway, do not. And
+`.col-head` sets `white-space: nowrap`, which is correct for a column head and
+wrong for a stat tile's label: nothing there is in a column, and `DENY AXES
+REFUSED ON-LEDGER` has to be allowed two lines in a narrow tile.
+
+292 tests pass (up from 276; the suites the landing needed account for the
+difference). Lint, build, and the audit gate are clean, the deny table still
+reads correctly in full greyscale, and no page scrolls the body sideways at
+1280, 1024, 768, or 390px — measured across `/`, `/docs` and `/app/simulator`,
+with elements inside a scroll container excluded so the check does not pass by
+counting a table that is supposed to scroll.
 
 ### What step 7 landed
 

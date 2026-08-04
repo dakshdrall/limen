@@ -2,7 +2,7 @@
   "network": "testnet",
   "networkPassphrase": "Test SDF Network ; September 2015",
   "recordedAt": "2026-08-02",
-  "note": "Produced by scripts/ against live testnet. Every hash here is checkable in an explorer. No secret key appears in this file or anywhere in the repository; the accounts below are disposable testnet accounts.",
+  "note": "Produced against live testnet by scripts/, except where a block names a different producer. Every hash here is checkable in an explorer. No secret key appears in this file or anywhere in the repository; the accounts below are disposable testnet accounts.",
 
   "uploads": {
     "account": "765c2f5d9ea414f18fbbfab77629d9609a9875dc31ee400b84e3031ff6446cf6",
@@ -47,6 +47,19 @@
       "permittedTx": "59bf4c2449e7139b0c127812f473c7aebcebb9daed01b5e3e31c7f06b6be65ca",
       "rejectedTx": "e763a8c499dc67bfedb7d135924822577972d61b01830f4622f987827e0a0737"
     }
+  },
+
+  "liveDerivation": {
+    "note": "The other half of the claim, and the half the scripts do not cover: a boundary derived from a transaction that was observed on a live network rather than from a shipped fixture. Recorded here so the page that cites it reads the hash instead of restating it.",
+    "producedBy": "step 1 of /app/simulator, driven by hand in a browser — not by scripts/ and not by the test suite",
+    "hash": "525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e",
+    "ledger": 3929381,
+    "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "function": "transfer",
+    "observedAmount": "1000000",
+    "derivedCap": "1000000",
+    "derivedCapNote": "The derived cap equals the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
+    "installedSeparately": "This transaction was not piped into the install below. The recorded install was built by scripts/testnet.mjs from the same parameters the lowering produces; ingest-to-install in one pass needs a browser signer, which does not exist yet. Both halves are real and they are recorded as two runs, because that is what they are."
   },
 
   "denyAxisSurvey": {
