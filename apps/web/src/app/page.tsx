@@ -33,7 +33,7 @@ export default async function Home() {
           <h2 className="text-[22px] leading-tight font-semibold tracking-[-0.01em] text-foreground">
             Derivation, end to end
           </h2>
-          <p className="max-w-[76ch] text-[14px] leading-relaxed text-muted">
+          <p className="measure text-[14px] leading-relaxed text-muted">
             A transaction is performed once. Limen derives the minimum smart-account context rule and
             policy set that permits exactly that flow, and refuses everything adjacent to it. An agent
             then operates inside that boundary and never holds a key.
@@ -48,7 +48,7 @@ export default async function Home() {
           liveIngestEnabled={liveIngestEnabled}
         />
 
-        <footer className="max-w-[86ch] border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
+        <footer className="measure border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
           Policy is synthesized deterministically; the same transaction always produces the same
           proposal. Claude explains the result and phrases the intent question — it never authors
           authorization logic. Every policy is a configuration of an existing audited OpenZeppelin

@@ -11,6 +11,25 @@ export function truncateAddress(address: string, lead = 6, tail = 4): string {
 }
 
 /**
+ * The same, for a 64-character transaction hash.
+ *
+ * Separate from `truncateAddress` because it is a different value with a
+ * different length, not because it wants a different rule — a hash keeps more
+ * of its head, since the leading characters are what an explorer search and a
+ * `deployments/testnet.json` grep are matched on.
+ *
+ * There were four spellings of this: `0,8`+`-4`, `0,8`, `0,10`, and the
+ * address truncation applied to a hash. All four rendered into `--col-hash`,
+ * which is one token precisely so a hash is the same width on every screen —
+ * and then each table decided for itself how much of the hash to put in it.
+ * The tokens fixed the column and left the contents to drift.
+ */
+export function truncateHash(hash: string, lead = 8, tail = 4): string {
+  if (hash.length <= lead + tail + 1) return hash;
+  return `${hash.slice(0, lead)}…${hash.slice(-tail)}`;
+}
+
+/**
  * Renders an integer smallest-unit amount with a decimal point inserted, for
  * reading only. The integer string remains the source of truth everywhere else;
  * this value is never fed back into any computation.

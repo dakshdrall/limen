@@ -45,13 +45,13 @@ export function Landing() {
           <button
             type="button"
             onClick={openWaitlist}
-            className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15"
+            className="btn" data-variant="primary"
           >
             Join the waitlist
           </button>
           <a
             href="#demo"
-            className="rounded-[3px] text-[13px] text-muted underline decoration-border-bright underline-offset-4 transition-colors hover:text-foreground hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            className="rounded-[3px] text-[13px] text-muted link"
           >
             Skip to the demo
           </a>
@@ -137,7 +137,7 @@ function buildEntries(openWaitlist: () => void): Entry[] {
             {/* Wide enough that each clause and its field name sit on one
                 line at desktop sizes; narrower viewports wrap the field
                 underneath, which stays legible. */}
-            <ul className="flex max-w-[78ch] flex-col gap-3">
+            <ul className="flex measure flex-col gap-3">
               <Condition field="allowedContracts">
                 only the contracts that were observed
               </Condition>
@@ -170,7 +170,7 @@ function buildEntries(openWaitlist: () => void): Entry[] {
         <>
           <h2 className="entry-h text-foreground">Where it stands.</h2>
 
-          <dl className="flex max-w-[68ch] flex-col gap-5">
+          <dl className="flex measure flex-col gap-5">
             <Stage version="V1" state="shipped" tone="permit">
               Deterministic synthesis composed from audited OpenZeppelin primitives, fixture-based
               ingest, a deny-case harness that gates CI, testnet install payloads. No smart account
@@ -188,7 +188,7 @@ function buildEntries(openWaitlist: () => void): Entry[] {
           <button
             type="button"
             onClick={openWaitlist}
-            className="self-start cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15"
+            className="btn" data-variant="primary"
           >
             Join the waitlist
           </button>

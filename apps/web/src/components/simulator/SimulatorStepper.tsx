@@ -16,6 +16,7 @@ import { explorerTxUrl } from '@/lib/explorer';
 import { INITIAL_STATE, LAST_BEAT, loadState, saveState, type DemoState } from '@/lib/demo-state';
 import { useLowering } from '@/lib/use-lowering';
 import { DenyTable, type AdjudicatedCase } from '../DenyTable';
+import { ExplorerLink } from '../ExplorerLink';
 import { InstallPlanTable } from '../app/InstallPlanTable';
 import { Pending, ReadFailure } from '../app/ScreenState';
 import { NotEnforceable } from '../NotEnforceable';
@@ -385,7 +386,8 @@ export function SimulatorStepper({
                   type="button"
                   disabled={busy !== null}
                   onClick={() => void observe(state.hash!, source)}
-                  className={ACTION}
+                  className="btn"
+                  data-variant="primary"
                 >
                   {busy === 2 ? 'Reading…' : source === 'testnet' ? 'Read it back from testnet' : 'Read the shipped flow'}
                 </button>
@@ -427,7 +429,7 @@ export function SimulatorStepper({
                 observedDecision={evaluate(proposal, observed)}
                 cases={adjudicated}
               />
-              <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+              <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
                 Refusal here is adjudicated by this repository&rsquo;s evaluator — an independent
                 implementation of the same rules — not by a deployed policy contract. Nothing above
                 has been enforced on-chain.
@@ -453,7 +455,7 @@ export function SimulatorStepper({
                     the hashes — so the true reason this payload goes nowhere
                     changed, and the caveat had to change with it rather than
                     staying comfortably pessimistic. */}
-                <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+                <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
                   This is the argument payload, fully derived from the proposal above. Submitting it
                   would need a smart account to write to and an owner signature to authorize the
                   write; this screen has neither, and nothing here is submitted.
@@ -482,11 +484,11 @@ export function SimulatorStepper({
               {lowered.status === 'lowered' && (
                 <>
                   <InstallPlanTable plan={lowered.plan} />
-                  <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+                  <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
                     This plan is installable: every line of it configures a primitive already
                     deployed on testnet. Nothing installs it here, and this screen has no account to
                     install it on.{' '}
-                    <Link href="/app/policies/new" className={INLINE_LINK}>
+                    <Link href="/app/policies/new" className="link">
                       New policy
                     </Link>{' '}
                     runs the same derivation against a real smart account.
@@ -503,9 +505,9 @@ export function SimulatorStepper({
                       and a reviewer needs to be told that here, at the moment
                       the flow visibly stops, rather than inferring it from a
                       screen that simply never mentions installing. */}
-                  <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+                  <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
                     This is why the flow is on this screen and not on{' '}
-                    <Link href="/app/policies/new" className={INLINE_LINK}>
+                    <Link href="/app/policies/new" className="link">
                       New policy
                     </Link>
                     . The deny table above is real reasoning about a real boundary, and it is
@@ -522,16 +524,11 @@ export function SimulatorStepper({
   );
 }
 
-const ACTION =
-  'self-start cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50';
-
-const INLINE_LINK =
-  'rounded-[2px] text-muted underline decoration-border-bright underline-offset-4 transition-colors hover:text-foreground hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent';
 
 function Continue({ onClick, shown, label }: { onClick: () => void; shown: boolean; label: string }) {
   if (!shown) return null;
   return (
-    <button type="button" onClick={onClick} className={ACTION}>
+    <button type="button" onClick={onClick} className="btn" data-variant="primary">
       {label}
     </button>
   );
@@ -580,18 +577,13 @@ function BeatOne({
             <dd className="value break-all text-foreground">{hash}</dd>
           </dl>
           {explorer !== undefined ? (
-            <a
-              href={explorer}
-              target="_blank"
-              rel="noreferrer"
-              className="self-start rounded-[3px] text-[13px] text-permit underline decoration-permit-line underline-offset-4 transition-colors hover:decoration-permit"
-            >
-              View on stellar.expert
-            </a>
+            <span className="text-[13px]">
+              <ExplorerLink href={explorer}>View on stellar.expert</ExplorerLink>
+            </span>
           ) : (
             // No explorer link, and the reason said rather than left as an
             // absence: this hash is well-formed and belongs to no transaction.
-            <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+            <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
               {chosen === null ? 'This flow' : `${chosen.key}`} ships with the repository. Its hash
               is well-formed and no explorer will find it, because no such transaction was ever
               submitted anywhere.
@@ -603,11 +595,11 @@ function BeatOne({
       {source !== 'testnet' && (
         <div className="flex flex-col gap-2.5">
           {available ? (
-            <button type="button" disabled={busy} onClick={onPerform} className={ACTION}>
+            <button type="button" disabled={busy} onClick={onPerform} className="btn" data-variant="primary">
               {busy ? 'Submitting to testnet…' : 'Perform a transaction on testnet'}
             </button>
           ) : (
-            <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+            <p className="measure text-[13px] leading-relaxed text-muted">
               {reason ?? 'The demo account is not configured for this deployment.'} This step is the
               only one that needs it; everything below runs from a shipped flow instead.
             </p>
@@ -626,7 +618,7 @@ function BeatOne({
               type="button"
               aria-pressed={preset.hash === hash}
               onClick={() => onChoosePreset(preset)}
-              className={`cursor-pointer rounded-[3px] border px-3 py-1.5 font-mono text-[11.5px] tracking-[0.04em] transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent ${
+              className={`cursor-pointer rounded-[3px] border px-3 py-1.5 font-mono text-[11.5px] tracking-[0.04em] transition-colors ${
                 preset.hash === hash
                   ? 'border-accent bg-accent-dim text-accent'
                   : 'border-border-default text-muted hover:border-border-bright hover:text-foreground'
@@ -637,7 +629,7 @@ function BeatOne({
             </button>
           ))}
         </div>
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           Shipped flows were never observed on a live network. The ones marked{' '}
           <span className="text-faint">refused</span> are declined somewhere in the pipeline on
           purpose — a simulator that can only succeed is not evidence about anything.

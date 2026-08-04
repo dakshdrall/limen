@@ -165,13 +165,13 @@ export function NewPolicyScreen({
 
 function RefusedToDerive({ message }: { message: string }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-[4px] border border-unproven-line bg-surface px-5 py-4">
+    <div className="panel" data-tone="unproven">
       <div className="flex items-center gap-3">
         <span className="eyebrow text-unproven">refused to derive</span>
         <StatusLabel name="COMPUTED LOCALLY" />
       </div>
-      <p className="max-w-[76ch] text-[13px] leading-relaxed text-foreground/90">{message}</p>
-      <p className="max-w-[76ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[13px] leading-relaxed text-foreground/90">{message}</p>
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         Refusing is the designed outcome, not a failure of the demo. A synthesizer that guessed here
         would produce a boundary nobody reviewed.
       </p>
@@ -196,20 +196,20 @@ function RefusedToDerive({ message }: { message: string }) {
  */
 function InstallStep({ installable }: { installable: boolean }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[4px] border border-dashed border-border-default bg-surface px-5 py-4">
+    <div className="panel" data-tone="pending">
       <span className="eyebrow text-muted-dim">not built yet</span>
-      <p className="max-w-[78ch] text-[13px] leading-relaxed text-foreground/90">
+      <p className="measure text-[13px] leading-relaxed text-foreground/90">
         {installable
           ? 'The plan above is installable — it is a valid configuration of primitives already deployed on testnet. What this build cannot do is sign for it.'
           : 'There is no plan to install yet.'}
       </p>
-      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-muted">
+      <p className="measure text-[12.5px] leading-relaxed text-muted">
         Installing writes a context rule to a smart account, and that write must be signed by an
         owner signer. Neither signer path exists in the browser yet: the passkey path is unbuilt, and
         so is the local keypair that would stand in for it. There is no form here that accepts a
         secret key, and there will not be one.
       </p>
-      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         The installs recorded in the README were signed by{' '}
         <span className="value">packages/chain/scripts/testnet.mjs</span>, which reads its keys from
         the environment and is not part of this application.

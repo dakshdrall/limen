@@ -62,7 +62,9 @@ export function RulesTable({
               contract
             </th>
             <th scope="col">expiry</th>
-            <th scope="col">signers</th>
+            <th scope="col" className="col-signer">
+              signers
+            </th>
             <th scope="col">policies</th>
           </tr>
         </thead>
@@ -72,7 +74,7 @@ export function RulesTable({
               <td className="col-ledger num">
                 <Link
                   href={`/app/policies/${formatPolicyId({ contractId, ruleId: rule.id })}`}
-                  className="rounded-[2px] underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                  className="rounded-[2px] link"
                 >
                   {rule.id}
                 </Link>
@@ -105,7 +107,7 @@ export function RulesTable({
 
               <td className="text-[12.5px] text-muted">{expiryText(rule, atLedger)}</td>
 
-              <td>
+              <td className="col-signer">
                 {rule.signers.length === 0 ? (
                   <span className="text-muted-dim">none</span>
                 ) : (

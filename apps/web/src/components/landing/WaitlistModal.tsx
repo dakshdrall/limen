@@ -146,7 +146,7 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 cursor-pointer rounded-[3px] px-2 py-1 text-[13px] text-muted-dim transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            className="-mr-1 -mt-1 cursor-pointer rounded-[3px] px-2 py-1 text-[13px] text-muted-dim transition-colors hover:text-foreground"
           >
             <span aria-hidden="true">✕</span>
           </button>
@@ -161,7 +161,7 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             <button
               type="button"
               onClick={onClose}
-              className="self-start cursor-pointer rounded-[4px] border border-border-bright px-3.5 py-2 text-[13px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
+              className="btn" data-variant="secondary"
             >
               Close
             </button>
@@ -220,7 +220,7 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             <button
               type="submit"
               disabled={status === 'submitting'}
-              className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:border-border-default disabled:bg-transparent disabled:text-faint"
+              className="btn" data-variant="primary"
             >
               {status === 'submitting' ? 'Submitting…' : 'Join'}
             </button>

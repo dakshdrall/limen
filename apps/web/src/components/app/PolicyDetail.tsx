@@ -50,7 +50,7 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
         </div>
         <Link
           href={`/app/accounts/${contractId}`}
-          className="rounded-[3px] text-[12.5px] text-muted underline decoration-border-bright underline-offset-4 transition-colors hover:text-foreground hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          className="rounded-[3px] text-[12.5px] text-muted link"
         >
           Whole account
         </Link>
@@ -101,7 +101,7 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
                 the deny table on the{' '}
                 <Link
                   href="/"
-                  className="rounded-[2px] underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                  className="rounded-[2px] link"
                 >
                   mechanism page
                 </Link>{' '}
@@ -118,7 +118,7 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
               </div>
               <RefusedTable rows={survey.axes} caption={survey.note} />
               {run === undefined && (
-                <p className="max-w-[86ch] text-[12px] leading-relaxed text-unproven">
+                <p className="measure text-[12px] leading-relaxed text-unproven">
                   These attempts were recorded against this account, not against rule {ruleId}. The
                   note above says which rules produced them. They are shown here as the account&rsquo;s
                   history and are not a claim about this rule.
@@ -217,7 +217,7 @@ function RuleFacts({ rule, atLedger }: { rule: SnapshotRule; atLedger: number })
       </dl>
 
       {rule.policies.length === 0 && (
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-unproven">
+        <p className="measure text-[13px] leading-relaxed text-unproven">
           No policy is attached to this rule. Its signers may make any call matching its context, in
           any amount, until it expires.
         </p>
@@ -254,7 +254,7 @@ function Provenance({ provenance }: { provenance: StoredProvenance }) {
         />
         <Fact label="installed by" value={<Address value={provenance.installTxHash} />} />
       </dl>
-      <p className="max-w-[84ch] text-[12px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12px] leading-relaxed text-muted-dim">
         <span className="value">validFromLedger</span> — the ledger the boundary was derived from —
         has no counterpart on an OpenZeppelin context rule. It is kept here as provenance and is
         deliberately absent from the on-chain block above, because a field rendered inside that block

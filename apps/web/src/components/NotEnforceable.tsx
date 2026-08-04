@@ -15,16 +15,16 @@ import { StatusLabel } from '@/components/StatusLabel';
  */
 export function NotEnforceable({ constraint, message }: { constraint: string; message: string }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[4px] border border-unproven-line bg-surface px-5 py-4">
+    <div className="panel" data-tone="unproven">
       <div className="flex flex-wrap items-center gap-3">
         <span className="eyebrow text-unproven">not enforceable on-chain</span>
         <StatusLabel name="COMPOSITION ONLY" weight="loud" />
       </div>
-      <p className="max-w-[78ch] text-[13px] leading-relaxed text-foreground/90">{message}</p>
+      <p className="measure text-[13px] leading-relaxed text-foreground/90">{message}</p>
       <p className="text-[12.5px] text-muted-dim">
         constraint: <span className="value">{constraint}</span>
       </p>
-      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         Closing this gap would take a Limen-authored Rust policy in the authorization path. That is
         the one place this project has said it will not put unaudited code, so the boundary is
         refused instead.

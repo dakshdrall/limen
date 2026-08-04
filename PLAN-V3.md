@@ -1,7 +1,7 @@
 # PLAN-V3 — from demo to instrument
 
-Status: **steps 1–10 built and verified on testnet.** Steps 11 and 12 (the
-design system pass across everything, and the landing rebuild) are not started.
+Status: **steps 1–11 built and verified on testnet.** Step 12, the landing
+rebuild, is not started.
 
 ---
 
@@ -569,7 +569,7 @@ gated: if a gate fails, work stops and I report rather than build around it.
 | 8 | Type and grid tokens | before any new screen | **done** |
 | 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | **done — reads only; install still needs a signer** |
 | 10 | Simulator (demoted demo) and docs | | **done** |
-| 11 | Design system pass across everything | | not started |
+| 11 | Design system pass across everything | | **done** |
 | 12 | Landing rebuild: spec strip, mechanism with a worked example, deny table, numbers from `evidence.json`, code snippet | | not started |
 
 Steps 1–5 produce no UI at all. That is deliberate.
@@ -759,6 +759,94 @@ test agreeing with itself; the check that matters is the one made from outside
 the process, with no credentials, against an endpoint this repository does not
 configure. This closes the §11 item asking for two completions from a clean
 browser with the second cold.
+
+### What step 11 landed
+
+Step 8 tokenised the *boxes* — column widths, type, verdicts — and left what
+goes in them to each screen. Ten steps later seven screens had each decided,
+separately, how much of a transaction hash to show, how to draw a link out to an
+explorer, and what a control looks like. None of those decisions is wrong on its
+own. What is wrong is that they disagree, and disagreement at that scale is
+precisely what makes an interface read as assembled rather than designed: the
+eye registers that two screens differ about a measurement long before anyone can
+say which one.
+
+So this step is not a restyle. Nothing about the blueprint direction changed.
+What changed is where each decision lives.
+
+Five things were stated once instead of five to seven times:
+
+- **`ScreenHeader`** — the block every screen opens with. The lede was capped at
+  76ch on two screens and 78ch on three, for no reason either of them recorded.
+  `labels` is required rather than optional, because a screen that *can* omit
+  its `TESTNET ONLY` is a screen that will omit it on the day someone is
+  in a hurry.
+- **`.screen`** — one shell. Seven pages had chosen three maximum widths and
+  four section gaps. Navigating between two screens must not feel like the
+  application resized itself.
+- **`ExplorerLink` and `TxHash`** — the link out to a block explorer had three
+  treatments and the hash inside it had four truncations, all rendering into
+  `--col-hash`, which is one token precisely so a hash is the same width
+  everywhere. The token fixed the box and left the contents to drift.
+- **`.btn` gains a register, not a fourth variant.** The app screens' controls
+  speak in the mono label voice — `SCAN AGAIN`, `FORGET` — beside `.col-head`
+  and `.status-label`. Five existed inline; two were byte-identical, a third
+  differed only in hover hue, and they disagreed about size, radius and what
+  disabled looks like. Variants say how much weight a control carries; the
+  register says which voice it speaks in. Folding the voice into the variants
+  would have produced `label-secondary` and `label-quiet`, and a closed set
+  stops being closed the moment it has to multiply.
+- **`chainTxUrl`** — three screens had `https://stellar.expert/explorer/testnet`
+  typed into them, which is the second place for the network to be wrong that
+  `lib/network.ts` warns about in as many words. `NETWORK` is a union with one
+  member today; when mainnet is added the segment map fails to typecheck until
+  it is supplied, and the screens follow instead of continuing to link testnet
+  with total confidence.
+
+**The same layout bug appeared for the third and fourth time**, and only the
+first two were the kind step 9 fixed. Under `table-layout: fixed` a cell that
+cannot fit its contents does not shrink them and does not scroll them — it
+paints them across the next column, which looks like a spacing problem and is
+not one. Step 9 hit it with a verdict badge and a ledger number, both solved by
+adding the cell padding to the column tokens. These two could not be:
+
+- `ContextRuleIdsLengthMismatch#3014` is a single unbreakable 33-character
+  token, and at the refusal table's minimum width it overlapped the transaction
+  hash beside it by 67 pixels. It now has `--col-error`, sized to the longest
+  code the pinned OpenZeppelin sources define, so it stays on one line at every
+  width.
+- The rules table's signers column holds a status label beside an address, and
+  *both halves correctly refuse to wrap* — a truncated address broken over two
+  lines reads as two values. No wrapping rule could have saved it; it needed
+  `--col-signer`. That table had given three of its seven columns a token and
+  left four to fend for themselves, and the one holding the widest unbreakable
+  content is the one that lost.
+
+`overflow-wrap: anywhere` on `.tbl` cells is the general backstop for the class,
+and `anywhere` rather than `break-word` because only `anywhere` also reduces the
+min-content width a fixed layout actually distributes.
+
+Both were found by measuring the rendered page rather than by reading it —
+column gaps computed in the browser across four viewport widths and every
+screen. The first was visible in a screenshot once pointed at; the second was
+not obvious at all until the numbers came back negative.
+
+One regression came from this step's own refactor and is worth recording,
+because it is the kind that survives review. `ScreenHeader` wrapped the lede in
+a flex column, and a flex column makes a block out of every child it is given —
+so the activity screen's one sentence about what a boundary *permitted* rendered
+as three stacked fragments with the emphasised word alone on the middle line.
+Every word was present and in the right order. It is `space-y` now, which spaces
+sibling elements and leaves text and inline markup alone, so both shapes the
+prop accepts render the way they read in the source.
+
+`design-system.test.ts` gained eight assertions, all of the same form: a fact is
+stated in one place, and here is the place. Each scans every `.tsx` under `src/`
+and names the offending file, so what they catch is the *next* screen restating
+a decision rather than the drift that already happened. All eight were confirmed
+to fail against the code they replaced before being kept. 276 tests pass; lint,
+build, and the greyscale check are clean, and no screen scrolls the body
+sideways at 1280, 1024, 768, or 390px.
 
 ### What step 7 landed
 

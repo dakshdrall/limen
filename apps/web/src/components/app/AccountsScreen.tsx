@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { Address } from '@/components/Address';
+import { AccountLink } from '@/components/app/AccountLink';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
 import { looksLikeContractAddress } from '@/lib/account-contract';
 import { useAccountSnapshot } from '@/lib/use-account-snapshot';
@@ -114,7 +114,9 @@ function AddAccount({ known }: { known: StoredAccount[] }) {
         <button
           type="submit"
           disabled={trimmed.length === 0 || alreadyKnown}
-          className="rounded-[3px] border border-border-bright px-3.5 py-2 font-mono text-[11px] tracking-[0.12em] text-foreground uppercase transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:border-border-subtle disabled:text-faint focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          className="btn"
+          data-variant="secondary"
+          data-register="label"
         >
           {alreadyKnown ? 'Already listed' : 'Read'}
         </button>
@@ -142,17 +144,15 @@ function AccountRow({ account, onForget }: { account: StoredAccount; onForget: (
   return (
     <div className="flex flex-col gap-3.5 rounded-[5px] border border-border-default bg-surface px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <Link
-          href={`/app/accounts/${account.contractId}`}
-          className="rounded-[3px] font-mono text-[13px] tracking-[-0.01em] text-foreground underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-        >
-          {account.contractId.slice(0, 10)}…{account.contractId.slice(-6)}
-        </Link>
+        <AccountLink contractId={account.contractId} />
         <button
           type="button"
           onClick={onForget}
           title="Removes this address from this browser. Nothing on chain changes; the account and everything installed on it are untouched."
-          className="rounded-[2px] font-mono text-[10.5px] tracking-[0.12em] text-muted-dim uppercase transition-colors hover:text-deny focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          className="btn"
+          data-variant="quiet"
+          data-register="label"
+          data-tone="destructive"
         >
           Forget
         </button>

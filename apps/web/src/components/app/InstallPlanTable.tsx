@@ -90,7 +90,7 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
           <span className="col-head text-muted-dim">how it lowered</span>
           <ul className="flex flex-col gap-1.5">
             {plan.notes.map((note) => (
-              <li key={note} className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted">
+              <li key={note} className="measure text-[12.5px] leading-relaxed text-muted">
                 {note}
               </li>
             ))}

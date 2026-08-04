@@ -41,7 +41,16 @@ export function Address({
       }}
       // `whitespace-nowrap`: a truncated address broken across two lines reads
       // as two values. It is already the shortest form of itself.
-      className={`group inline-flex cursor-pointer items-center gap-1.5 rounded-[3px] px-1 py-0.5 -mx-1 font-mono text-[12.5px] tracking-[-0.01em] whitespace-nowrap transition-colors hover:bg-surface-raised hover:text-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent ${
+      //
+      // `relative` is load-bearing and not a layout choice. The `sr-only` span
+      // below is `position: absolute`, so without a positioned ancestor its
+      // containing block is the initial one — the document — and it is
+      // therefore NOT clipped by the `.scroll-x` wrapper the table sits in.
+      // Every address in a wide table then contributed its own escaped span to
+      // the document's scroll width, and two screens scrolled sideways by
+      // several hundred pixels because of a label nobody can see. The table
+      // itself was clipping perfectly, which is why this took a while to find.
+      className={`group relative inline-flex cursor-pointer items-center gap-1.5 rounded-[3px] px-1 py-0.5 -mx-1 font-mono text-[12.5px] tracking-[-0.01em] whitespace-nowrap transition-colors hover:bg-surface-raised hover:text-accent ${
         copied ? 'text-permit' : base
       } ${className}`}
     >

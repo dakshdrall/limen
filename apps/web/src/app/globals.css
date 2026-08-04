@@ -184,382 +184,678 @@ body::before {
   background-image: var(--grid-image);
 }
 
-/* A surface that sits on the ground rather than being cut out of it. Depth is
-   a border plus one value step — no shadow. */
-.on-ground {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-}
+/* ===========================================================================
+   Everything below is in the `components` layer.
 
-/* Wide content scrolls inside its own container; the page body never scrolls
-   horizontally. */
-.scroll-x {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-}
+   Not a formality. Custom CSS written outside a layer beats every Tailwind
+   utility, so an unlayered `.col-head` silently defeated the `text-muted` a
+   dozen call sites passed alongside it, and `.panel`'s `flex-direction:
+   column` defeated a `flex-row` that a component was relying on. Both looked
+   like the utility simply having no effect, which is the hardest kind of bug to
+   see: nothing is broken, the page just quietly ignores you.
 
-/* ---------------------------------------------------------------------------
-   Type scale.
+   In this layer a component class states the default and a utility can still
+   adjust it, which is what everyone writing `className="panel ..."` already
+   assumes.
+=========================================================================== */
+@layer components {
 
-   Small, tight, and mono-forward. Headings are set in sans at moderate weight
-   and near-zero tracking; nothing on an app screen runs larger than 22px,
-   because size is not how this interface builds hierarchy.
---------------------------------------------------------------------------- */
+  /* A surface that sits on the ground rather than being cut out of it. Depth is
+     a border plus one value step — no shadow. */
+  .on-ground {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+  }
 
-/* Section eyebrow numerals: small, faint, non-selectable so copying a section
-   never picks up its index. */
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  user-select: none;
-}
+  /* Wide content scrolls inside its own container; the page body never scrolls
+     horizontally. */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
 
-/* Column headers across every table in the app. */
-.col-head {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted-dim);
-  white-space: nowrap;
-}
+  /* ---------------------------------------------------------------------------
+     The screen shell.
 
-/* Monospaced value cells: aligned digits, tight tracking. */
-.value {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  letter-spacing: -0.01em;
-}
+     Step 8 tokenised the things inside a screen — column widths, type, verdicts —
+     and left the screen itself to each page. Seven pages then chose three
+     different maximum widths and four different section gaps, none of them for a
+     reason anyone wrote down. That is the same failure the column tokens exist to
+     prevent, one level up: an address is the same width everywhere because it is
+     the same class everywhere, and a page should be the same width everywhere for
+     exactly the same reason. Navigating between two screens must not feel like
+     the application resized itself.
 
-/* ---------------------------------------------------------------------------
-   The grid, in the sense that matters: column widths.
+     `--screen-max` is set by the widest thing the app renders — the refusal
+     table, which asks for 54rem before it scrolls — plus room for it to breathe.
+     Prose does not fill it; `.measure` handles that.
+  --------------------------------------------------------------------------- */
+  :root {
+    --screen-max: 74rem;
+    --screen-gap: 3rem;
 
-   These are the reason a contract address is the same width on every screen.
-   Applied to the `col` element or the cell, never re-derived per table. A new
-   column type gets a token here rather than an inline width somewhere.
+    /* One measure for running prose. There were five — 74, 76, 78, 80 and 86ch —
+       across pages that all just wanted "a paragraph". Nothing distinguished
+       them; they were matched by eye at different times. Genuine layout
+       constraints (a 20ch label column, a 52ch pull quote) stay inline, because
+       those are decisions about a specific thing rather than a default. */
+    --measure: 78ch;
+  }
 
-   Widths are in `ch`, which under a monospaced face is exactly the number of
-   characters the column holds — so `--col-hash: 18ch` is a statement about
-   content, not a guess about pixels.
---------------------------------------------------------------------------- */
-:root {
-  --col-addr: 22ch;
-  --col-hash: 18ch;
-  --col-amount: 14ch;
-  --col-ledger: 9ch;
-  /* Sized to the thing it holds rather than to the word. A `Verdict` badge is
-     `min-w-[6.25rem]`, which is wider than `DENY` reads. This was 11ch until
-     the refusal screen became the first table to put a badge in it. */
-  --col-verdict: 14ch;
-  --col-label: 10ch;
+  .screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--screen-gap);
+    width: 100%;
+    max-width: var(--screen-max);
+    margin-inline: auto;
+    padding: 3.5rem 1.5rem;
+  }
 
-  /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
-     how much *content* a column holds — `--col-hash: 18ch` is eighteen
-     characters — so the padding is added by the classes below rather than
-     folded into every token, where it would quietly stop being a statement
-     about content.
+  @media (min-width: 640px) {
+    .screen {
+      padding-inline: 2.5rem;
+    }
+  }
 
-     Omitting it is not a cosmetic error. Under `table-layout: fixed` a column
-     narrower than its contents does not shrink them or scroll; it lets them
-     overlap the next column. Both the verdict badge and a 9-character ledger
-     number did exactly that on the first two tables to use these tokens. */
-  --col-pad: 1.5rem;
-}
+  .measure {
+    max-width: var(--measure);
+  }
 
-.col-addr { width: calc(var(--col-addr) + var(--col-pad)); }
-.col-hash { width: calc(var(--col-hash) + var(--col-pad)); }
-.col-amount { width: calc(var(--col-amount) + var(--col-pad)); text-align: right; }
-.col-ledger { width: calc(var(--col-ledger) + var(--col-pad)); text-align: right; }
-.col-verdict { width: calc(var(--col-verdict) + var(--col-pad)); }
-.col-label { width: calc(var(--col-label) + var(--col-pad)); }
+  /* ---------------------------------------------------------------------------
+     Panels.
 
-/* ---------------------------------------------------------------------------
-   Tables.
+     A bordered block holding a result: a refusal, an empty state, a caveat, a
+     step that cannot complete. Five copies of this existed, differing only in
+     which border colour they passed, and each restated the padding and radius —
+     so a change to the panel shape meant finding all five.
 
-   Compact and scannable. Rows are separated by the subtlest rule in the
-   system; the header by the next one up. Nothing is striped — striping is a
-   substitute for alignment, and the columns above are already aligned.
---------------------------------------------------------------------------- */
-.tbl {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-  table-layout: fixed;
-}
+     The tone is the whole point of the component, so it is a data attribute
+     rather than a class the caller assembles. `refused` is the network's red;
+     `unproven` is the neutral ramp the third verdict uses, for a boundary that
+     was declined without a chain being involved; `pending` is dashed, for
+     something absent rather than wrong. None of them is a hue the palette did not
+     already have.
+  --------------------------------------------------------------------------- */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--surface);
+  }
 
-.tbl thead th {
-  padding: 0.4rem 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
+  .panel[data-tone='refused'] { border-color: var(--deny-line); }
+  .panel[data-tone='unproven'] { border-color: var(--unproven-line); }
+  .panel[data-tone='pending'] {
+    border-color: var(--border);
+    border-style: dashed;
+  }
 
-.tbl tbody td {
-  padding: 0.45rem 0.75rem;
-  border-bottom: 1px solid var(--border-subtle);
-  vertical-align: top;
-}
+  /* ---------------------------------------------------------------------------
+     Controls.
 
-.tbl tbody tr:last-child td {
-  border-bottom: none;
-}
+     One primary, one secondary, one quiet. The variants are a closed set for the
+     same reason the status labels are: six near-identical button strings existed,
+     and two of them disagreed about what disabled looks like.
 
-.tbl tbody tr:hover td {
-  background: var(--surface-hover);
-}
+     That disagreement was not cosmetic. `opacity: 0.5` on an accent button leaves
+     something that still reads as an available control, just dimmer — and this
+     application's whole argument is that it does not present controls for things
+     it cannot do. Disabled drops the fill and the accent border entirely, so it
+     reads as absent rather than as broken. (Better still is not rendering a
+     button at all, which is what the install step does; this is for controls that
+     are genuinely momentarily unavailable, like a submit mid-flight.)
+  --------------------------------------------------------------------------- */
+  .btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    cursor: pointer;
+    white-space: nowrap;
+  }
 
-/* Numeric cells inherit the mono face so column alignment is real rather than
-   approximate. */
-.tbl .num {
-  font-family: var(--font-mono);
-  text-align: right;
-  letter-spacing: -0.01em;
-}
+  @media (prefers-reduced-motion: no-preference) {
+    .btn { transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out; }
+  }
 
-/* ---------------------------------------------------------------------------
-   Status labels.
+  .btn[data-variant='primary'] {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--foreground);
+  }
 
-   `TESTNET ONLY`, `NOT AUDITED`, and the rest. Deliberately plain: a small
-   mono label in the neutral ramp, distinguished from prose by a border rather
-   than by colour. A project that states its own limits precisely reads as more
-   trustworthy than one that stays vague, and colouring those statements would
-   make them look like badges rather than facts.
---------------------------------------------------------------------------- */
-.status-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  background: var(--surface);
-  color: var(--muted-dim);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  user-select: none;
-}
+  .btn[data-variant='primary']:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+  }
 
-/* The one label that gets weight, because it is the one a person must read
-   before they sign something. Still not a hue of its own — brighter rule and
-   brighter text within the existing ramp. */
-.status-label[data-weight='loud'] {
-  border-color: var(--border-bright);
-  color: var(--foreground);
-}
+  .btn[data-variant='secondary'] {
+    border-color: var(--border-bright);
+    color: var(--muted);
+  }
 
-/* ---------------------------------------------------------------------------
-   Modal.
+  .btn[data-variant='secondary']:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--foreground);
+  }
 
-   A native <dialog>: focus containment, Escape-to-close, inert background and
-   focus restoration on close are browser behaviour rather than hand-rolled key
-   handling.
---------------------------------------------------------------------------- */
-/* Centring is stated outright rather than inherited from the UA stylesheet.
-   A modal dialog is centred by `position: fixed; inset: 0` plus `margin:
-   auto` — the first two from the UA's `dialog:modal` rule, the third from the
-   `dialog` rule, which the CSS reset zeroes along with every other margin.
-   Restoring only the margin leaves the result dependent on a UA rule this
-   file never states, and it opens against the top-left corner in any engine
-   that does not supply it. All three are set here. */
-.modal {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(30rem, calc(100vw - 2rem));
-  height: fit-content;
-  /* Long viewport-relative units, so a short window scrolls the modal's own
-     content instead of pushing it off-screen. */
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-  padding: 0;
-  border: 1px solid var(--border-bright);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--foreground);
-}
+  .btn[data-variant='quiet'] {
+    padding: 0.35rem 0.5rem;
+    border-color: transparent;
+    color: var(--muted-dim);
+  }
 
-.modal::backdrop {
-  background: rgb(2 4 8 / 0.86);
-}
+  .btn[data-variant='quiet']:hover:not(:disabled) {
+    color: var(--foreground);
+  }
 
-.modal:focus-visible {
-  outline: none;
-}
+  /* One treatment, every variant. See above for why this is not `opacity`. */
+  .btn:disabled {
+    cursor: not-allowed;
+    border-color: var(--border);
+    background: transparent;
+    color: var(--faint);
+  }
 
-/* Native form controls default to the UA's light palette; these have to be
-   restated or the modal renders white-on-white. */
-.field {
-  width: 100%;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
+  /* The app screens' controls are set in the mono label register rather than in
+     sans — `REMEMBER`, `SCAN AGAIN`, `FORGET` — because they sit beside
+     `.col-head` and `.status-label` and belong to the same voice: chrome around
+     chain data, not prose.
 
-.field:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 0;
-  border-color: var(--accent);
-}
+     This is a register, not a fourth variant. The variants say how much weight a
+     control carries; this says which voice it speaks in. Making it a variant
+     would have meant `label-secondary` and `label-quiet`, and the closed set
+     stops being closed the moment it has to multiply.
 
-.field::placeholder {
-  color: var(--faint);
-}
+     Five of these existed inline, and the drift was already visible: two were
+     byte-identical (both reload buttons), a third differed only in hover hue,
+     and they disagreed about size (10.5 vs 11px), radius (2 vs 3px) and — the
+     one that matters — what disabled looks like. The submit button dimmed but
+     kept its border, which is exactly the "still reads as available, just
+     dimmer" failure the base rule above was written to prevent. */
+  .btn[data-register='label'] {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 
-select.field option {
-  background: var(--surface);
-  color: var(--foreground);
-}
+    /* `.btn` pins `align-self: flex-start` so a standalone action in a column
+       does not stretch to the column's width. Every label button is instead
+       inline in a row of chrome that has already said how it aligns — beside an
+       address, beside an `ON-CHAIN` label, beside a text field — and `flex-start`
+       overrides the row's `items-center` and lifts it off the baseline of the
+       thing it belongs to. So the register defers to the row.
 
-/* ---------------------------------------------------------------------------
-   Landing type scale.
+       `fit-content` is what makes deferring safe in both directions: a flex
+       column would otherwise stretch it edge to edge, because `auto` resolves to
+       `stretch` there. A definite cross-size opts out of that. */
+    align-self: auto;
+    width: fit-content;
+  }
 
-   The landing runs at a different scale from the app — few words, held one
-   screen at a time — so it gets its own sizes rather than overloading the
-   app's. Everything is fluid between a phone and a wide desktop.
+  /* For a control whose result is destructive, even when what it destroys is
+     only local. `Forget` removes an address from this browser and changes
+     nothing on chain — but it is still the one control on the accounts screen
+     that takes something away, and the deny hue on hover is how the rest of the
+     system says so. Hover only: at rest it is as quiet as its neighbours,
+     because it is not a warning until you reach for it. */
+  .btn[data-tone='destructive']:hover:not(:disabled) {
+    color: var(--deny);
+  }
 
-   TODO(v3 step 12): the scroll-pinned landing is replaced by a dense,
-   substantive page. These rules stay until then so the current landing keeps
-   working; they are not part of the app's design system.
---------------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------------
+     Inline links.
 
-.eyebrow-lead {
-  font-family: var(--font-mono);
-  font-size: clamp(9.5px, 1.1vw, 11px);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  user-select: none;
-}
+     Underlined in the rule colour, brightening to the accent. Four spellings of
+     this existed, differing in whether the text also brightened and whether focus
+     was declared — and focus is declared globally, so half of them were restating
+     the base rule at every call site.
+  --------------------------------------------------------------------------- */
+  .link {
+    border-radius: 2px;
+    color: var(--muted);
+    text-decoration: underline;
+    text-decoration-color: var(--border-bright);
+    text-underline-offset: 4px;
+  }
 
-.wordmark {
-  font-size: clamp(19px, 2.6vw, 25px);
-  font-weight: 600;
-  letter-spacing: 0.24em;
-}
+  .link:hover {
+    color: var(--foreground);
+    text-decoration-color: var(--accent);
+  }
 
-.entry-h {
-  font-size: clamp(27px, 4.6vw, 52px);
-  font-weight: 600;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
+  /* For a link inside a paragraph that is already `--foreground`, where dropping
+     to `--muted` would read as the link being less important than its sentence. */
+  .link[data-tone='strong'] {
+    color: var(--foreground);
+  }
 
-.entry-h-lead {
-  font-size: clamp(31px, 5.6vw, 64px);
-}
+  @media (prefers-reduced-motion: no-preference) {
+    .link { transition: color 120ms ease-out, text-decoration-color 120ms ease-out; }
+  }
 
-.entry-p {
-  font-size: clamp(14.5px, 1.5vw, 19px);
-  line-height: 1.55;
-}
+  /* ---------------------------------------------------------------------------
+     Type scale.
 
-.entry-mono {
-  font-family: var(--font-mono);
-  font-size: clamp(11px, 1.15vw, 13.5px);
-  letter-spacing: -0.01em;
-}
+     Small, tight, and mono-forward. Headings are set in sans at moderate weight
+     and near-zero tracking; nothing on an app screen runs larger than 22px,
+     because size is not how this interface builds hierarchy.
+  --------------------------------------------------------------------------- */
 
-.pin-stack {
-  position: relative;
-}
+  /* Section eyebrow numerals: small, faint, non-selectable so copying a section
+     never picks up its index. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    user-select: none;
+  }
 
-.landing-header {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 100svh;
-  padding-block: clamp(4rem, 9vh, 7rem);
-}
+  /* Column headers across every table in the app. */
+  .col-head {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    white-space: nowrap;
+  }
 
-.pin-entry {
-  display: flex;
-  align-items: center;
-  padding-block: clamp(4rem, 9vh, 7rem);
-  /* Opaque colour first, grid painted over it. The opacity is what makes the
-     pinned occlusion read as a replacement rather than a blend. */
-  background-color: var(--background);
-  background-image: var(--grid-image);
-}
+  /* Monospaced value cells: aligned digits, tight tracking. */
+  .value {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: -0.01em;
+  }
 
-.entry-inner {
-  width: 100%;
-  max-width: 1100px;
-  margin-inline: auto;
-  padding-inline: clamp(1.5rem, 4vw, 2.5rem);
-}
+  /* ---------------------------------------------------------------------------
+     The grid, in the sense that matters: column widths.
 
-@media (prefers-reduced-motion: no-preference) and (min-height: 620px) {
+     These are the reason a contract address is the same width on every screen.
+     Applied to the `col` element or the cell, never re-derived per table. A new
+     column type gets a token here rather than an inline width somewhere.
+
+     Widths are in `ch`, which under a monospaced face is exactly the number of
+     characters the column holds — so `--col-hash: 18ch` is a statement about
+     content, not a guess about pixels.
+  --------------------------------------------------------------------------- */
+  :root {
+    --col-addr: 22ch;
+    --col-hash: 18ch;
+    --col-amount: 14ch;
+    --col-ledger: 9ch;
+    /* Sized to the thing it holds rather than to the word. A `Verdict` badge is
+       `min-w-[6.25rem]`, which is wider than `DENY` reads. This was 11ch until
+       the refusal screen became the first table to put a badge in it. */
+    --col-verdict: 14ch;
+    --col-label: 10ch;
+
+    /* A signer is a kind and a key — an `EXTERNAL` status label beside a
+       truncated address — and both of those refuse to wrap, correctly: a
+       truncated address broken over two lines reads as two values. So the
+       column has to be wide enough for the pair, because neither half will
+       yield.
+
+       This was the fourth instance of the fixed-layout overlap, and the first
+       one no amount of wrapping could have fixed. It is why the rule is a token
+       per column type rather than a token per column that happened to look
+       tight: the rules table gave three of its seven columns a token and left
+       the other four to fend for themselves, and the one holding the widest
+       unbreakable content is the one that lost. */
+    --col-signer: 26ch;
+
+    /* A contract error code — `ContextRuleIdsLengthMismatch#3014` is the
+       longest the pinned OpenZeppelin sources define, at 33 characters. The
+       wrap rule below keeps a code this long from painting over the hash beside
+       it, but wrapping is the backstop, not the intent: it breaks the token
+       wherever it runs out of room, and `#3` / `014` on two lines is a poor way
+       to render the one datum on the refusal screen a reviewer is most likely
+       to copy into a search. So the column is sized to hold the longest code
+       this application can decode, on one line, at every width. */
+    --col-error: 35ch;
+
+    /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
+       how much *content* a column holds — `--col-hash: 18ch` is eighteen
+       characters — so the padding is added by the classes below rather than
+       folded into every token, where it would quietly stop being a statement
+       about content.
+
+       Omitting it is not a cosmetic error. Under `table-layout: fixed` a column
+       narrower than its contents does not shrink them or scroll; it lets them
+       overlap the next column. Both the verdict badge and a 9-character ledger
+       number did exactly that on the first two tables to use these tokens. */
+    --col-pad: 1.5rem;
+  }
+
+  .col-addr { width: calc(var(--col-addr) + var(--col-pad)); }
+  .col-hash { width: calc(var(--col-hash) + var(--col-pad)); }
+  .col-amount { width: calc(var(--col-amount) + var(--col-pad)); text-align: right; }
+  .col-ledger { width: calc(var(--col-ledger) + var(--col-pad)); text-align: right; }
+  .col-verdict { width: calc(var(--col-verdict) + var(--col-pad)); }
+  .col-label { width: calc(var(--col-label) + var(--col-pad)); }
+  .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
+  .col-error { width: calc(var(--col-error) + var(--col-pad)); }
+
+  /* ---------------------------------------------------------------------------
+     Tables.
+
+     Compact and scannable. Rows are separated by the subtlest rule in the
+     system; the header by the next one up. Nothing is striped — striping is a
+     substitute for alignment, and the columns above are already aligned.
+  --------------------------------------------------------------------------- */
+  .tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    table-layout: fixed;
+  }
+
+  .tbl thead th {
+    padding: 0.4rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tbl tbody td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+
+    /* The third instance of the same bug, fixed here rather than in a third
+       table. Under `table-layout: fixed` a cell whose contents cannot fit does
+       not shrink them and does not scroll them — it paints them straight over
+       the next column. The first two instances were a verdict badge and a
+       ledger number, both fixed by adding the cell padding to the column
+       tokens; this one is different in kind and could not have been fixed that
+       way. `ContextRuleIdsLengthMismatch#3014` is a single unbreakable token 33
+       characters long, so no column width short of 33ch contains it, and at the
+       refusal table's minimum width it overlapped the transaction hash beside
+       it by 67 pixels.
+
+       `anywhere` rather than `break-word` because only `anywhere` also reduces
+       the cell's min-content width, which is the number a fixed layout actually
+       distributes. `break-word` would have left the columns exactly where they
+       were.
+
+       Values that must not break — an address, a truncated hash — already say
+       so with `whitespace-nowrap`, and `white-space` wins over this. So the
+       rule reaches long error codes without touching anything that was already
+       deliberate. */
+    overflow-wrap: anywhere;
+  }
+
+  .tbl tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .tbl tbody tr:hover td {
+    background: var(--surface-hover);
+  }
+
+  /* Numeric cells inherit the mono face so column alignment is real rather than
+     approximate. */
+  .tbl .num {
+    font-family: var(--font-mono);
+    text-align: right;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Status labels.
+
+     `TESTNET ONLY`, `NOT AUDITED`, and the rest. Deliberately plain: a small
+     mono label in the neutral ramp, distinguished from prose by a border rather
+     than by colour. A project that states its own limits precisely reads as more
+     trustworthy than one that stays vague, and colouring those statements would
+     make them look like badges rather than facts.
+  --------------------------------------------------------------------------- */
+  .status-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--surface);
+    color: var(--muted-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  /* The one label that gets weight, because it is the one a person must read
+     before they sign something. Still not a hue of its own — brighter rule and
+     brighter text within the existing ramp. */
+  .status-label[data-weight='loud'] {
+    border-color: var(--border-bright);
+    color: var(--foreground);
+  }
+
+  /* ---------------------------------------------------------------------------
+     Modal.
+
+     A native <dialog>: focus containment, Escape-to-close, inert background and
+     focus restoration on close are browser behaviour rather than hand-rolled key
+     handling.
+  --------------------------------------------------------------------------- */
+  /* Centring is stated outright rather than inherited from the UA stylesheet.
+     A modal dialog is centred by `position: fixed; inset: 0` plus `margin:
+     auto` — the first two from the UA's `dialog:modal` rule, the third from the
+     `dialog` rule, which the CSS reset zeroes along with every other margin.
+     Restoring only the margin leaves the result dependent on a UA rule this
+     file never states, and it opens against the top-left corner in any engine
+     that does not supply it. All three are set here. */
+  .modal {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(30rem, calc(100vw - 2rem));
+    height: fit-content;
+    /* Long viewport-relative units, so a short window scrolls the modal's own
+       content instead of pushing it off-screen. */
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    padding: 0;
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--foreground);
+  }
+
+  .modal::backdrop {
+    background: rgb(2 4 8 / 0.86);
+  }
+
+  .modal:focus-visible {
+    outline: none;
+  }
+
+  /* Native form controls default to the UA's light palette; these have to be
+     restated or the modal renders white-on-white. */
+  .field {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  .field:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+
+  .field::placeholder {
+    color: var(--faint);
+  }
+
+  select.field option {
+    background: var(--surface);
+    color: var(--foreground);
+  }
+
+  /* ---------------------------------------------------------------------------
+     Landing type scale.
+
+     The landing runs at a different scale from the app — few words, held one
+     screen at a time — so it gets its own sizes rather than overloading the
+     app's. Everything is fluid between a phone and a wide desktop.
+
+     TODO(v3 step 12): the scroll-pinned landing is replaced by a dense,
+     substantive page. These rules stay until then so the current landing keeps
+     working; they are not part of the app's design system.
+  --------------------------------------------------------------------------- */
+
+  .eyebrow-lead {
+    font-family: var(--font-mono);
+    font-size: clamp(9.5px, 1.1vw, 11px);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    user-select: none;
+  }
+
+  .wordmark {
+    font-size: clamp(19px, 2.6vw, 25px);
+    font-weight: 600;
+    letter-spacing: 0.24em;
+  }
+
+  .entry-h {
+    font-size: clamp(27px, 4.6vw, 52px);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  .entry-h-lead {
+    font-size: clamp(31px, 5.6vw, 64px);
+  }
+
+  .entry-p {
+    font-size: clamp(14.5px, 1.5vw, 19px);
+    line-height: 1.55;
+  }
+
+  .entry-mono {
+    font-family: var(--font-mono);
+    font-size: clamp(11px, 1.15vw, 13.5px);
+    letter-spacing: -0.01em;
+  }
+
+  .pin-stack {
+    position: relative;
+  }
+
+  .landing-header {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100svh;
+    padding-block: clamp(4rem, 9vh, 7rem);
+  }
+
   .pin-entry {
-    position: sticky;
-    top: 0;
-    height: 100svh;
+    display: flex;
+    align-items: center;
+    padding-block: clamp(4rem, 9vh, 7rem);
+    /* Opaque colour first, grid painted over it. The opacity is what makes the
+       pinned occlusion read as a replacement rather than a blend. */
+    background-color: var(--background);
+    background-image: var(--grid-image);
   }
-}
 
-/* Stacked-block fallback: without occlusion the entries need a rule between
-   them to stay distinguishable. */
-@media (prefers-reduced-motion: reduce), (max-height: 619px) {
-  .pin-entry + .pin-entry {
-    border-top: 1px solid var(--border-subtle);
+  .entry-inner {
+    width: 100%;
+    max-width: 1100px;
+    margin-inline: auto;
+    padding-inline: clamp(1.5rem, 4vw, 2.5rem);
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  .pin-stack[data-motion='on'] .entry-inner {
+  @media (prefers-reduced-motion: no-preference) and (min-height: 620px) {
+    .pin-entry {
+      position: sticky;
+      top: 0;
+      height: 100svh;
+    }
+  }
+
+  /* Stacked-block fallback: without occlusion the entries need a rule between
+     them to stay distinguishable. */
+  @media (prefers-reduced-motion: reduce), (max-height: 619px) {
+    .pin-entry + .pin-entry {
+      border-top: 1px solid var(--border-subtle);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .pin-stack[data-motion='on'] .entry-inner {
+      opacity: 0;
+      transform: translateY(16px);
+      transition:
+        opacity 400ms ease-out,
+        transform 400ms ease-out;
+    }
+
+    .pin-stack[data-motion='on'] .pin-entry[data-entered='true'] .entry-inner {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .entry-progress {
+    position: fixed;
+    right: clamp(1rem, 2.5vw, 1.75rem);
+    bottom: clamp(1rem, 2.5vw, 1.75rem);
+    z-index: 40;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 2px;
+    background: var(--surface);
+    color: var(--muted-dim);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .entry-progress[data-visible='false'] {
     opacity: 0;
-    transform: translateY(16px);
-    transition:
-      opacity 400ms ease-out,
-      transform 400ms ease-out;
   }
 
-  .pin-stack[data-motion='on'] .pin-entry[data-entered='true'] .entry-inner {
-    opacity: 1;
-    transform: none;
+  @media (prefers-reduced-motion: no-preference) {
+    .entry-progress {
+      transition: opacity 300ms ease-out;
+    }
   }
-}
 
-.entry-progress {
-  position: fixed;
-  right: clamp(1rem, 2.5vw, 1.75rem);
-  bottom: clamp(1rem, 2.5vw, 1.75rem);
-  z-index: 40;
-  padding: 0.35rem 0.6rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 2px;
-  background: var(--surface);
-  color: var(--muted-dim);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  user-select: none;
-  pointer-events: none;
-}
-
-.entry-progress[data-visible='false'] {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .entry-progress {
-    transition: opacity 300ms ease-out;
-  }
-}
-
-/* Nothing is being pinned, so a sequence position would describe motion that
-   is not happening. */
-@media (prefers-reduced-motion: reduce), (max-height: 619px) {
-  .entry-progress {
-    display: none;
+  /* Nothing is being pinned, so a sequence position would describe motion that
+     is not happening. */
+  @media (prefers-reduced-motion: reduce), (max-height: 619px) {
+    .entry-progress {
+      display: none;
+    }
   }
 }

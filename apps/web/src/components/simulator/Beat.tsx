@@ -62,7 +62,7 @@ export function Beat({
           </h3>
           <KindBadge kind={kind} />
         </div>
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">{blurb}</p>
+        <p className="measure text-[13px] leading-relaxed text-muted">{blurb}</p>
       </header>
 
       {reached && (
@@ -80,11 +80,11 @@ export function Beat({
                 </span>
                 <span className="value text-muted-dim">{error.code}</span>
               </div>
-              <p className="max-w-[80ch] text-[13px] leading-relaxed text-foreground">
+              <p className="measure text-[13px] leading-relaxed text-foreground">
                 {error.message}
               </p>
               {error.detail !== undefined && error.detail.length > 0 && (
-                <p className="value max-w-[80ch] break-words text-[12px] text-faint">{error.detail}</p>
+                <p className="value measure break-words text-[12px] text-faint">{error.detail}</p>
               )}
             </div>
           )}

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { connection } from 'next/server';
+import { ScreenHeader } from '@/components/app/ScreenHeader';
 import { SimulatorStepper, type Preset } from '@/components/simulator/SimulatorStepper';
-import { StatusLabels } from '@/components/StatusLabel';
 import { FIXTURES, REFUSING_FIXTURES } from '@/fixtures';
 import { demoSignerStatus, type DemoUnavailableReason } from '@/lib/demo-signer';
 
@@ -48,20 +48,20 @@ export default async function SimulatorPage() {
   const status = demoSignerStatus();
 
   return (
-    <main className="mx-auto flex w-full max-w-[68rem] flex-col gap-12 px-6 py-14 sm:px-10">
-      <header className="flex flex-col gap-4">
-        <span className="eyebrow-lead text-faint">simulator</span>
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] text-foreground">
-          Derivation, without a chain to write to
-        </h1>
-        <p className="max-w-[76ch] text-[14px] leading-relaxed text-muted">
-          Take a transaction, derive the boundary that permits exactly it, and watch that boundary
-          refuse everything adjacent. Every refusal here is adjudicated by this repository&rsquo;s
-          own evaluator. Nothing on this screen installs anything, and no boundary drawn here has
-          been enforced by a network.
-        </p>
-        <StatusLabels names={['COMPUTED LOCALLY', 'TESTNET ONLY']} />
-      </header>
+    <main className="screen">
+      <ScreenHeader
+        eyebrow="simulator"
+        title="Derivation, without a chain to write to"
+        lede={
+          <>
+            Take a transaction, derive the boundary that permits exactly it, and watch that boundary
+            refuse everything adjacent. Every refusal here is adjudicated by this
+            repository&rsquo;s own evaluator. Nothing on this screen installs anything, and no
+            boundary drawn here has been enforced by a network.
+          </>
+        }
+        labels={['COMPUTED LOCALLY', 'TESTNET ONLY']}
+      />
 
       {/*
         The demotion, said rather than implied.
@@ -73,16 +73,13 @@ export default async function SimulatorPage() {
         asks a deployed OpenZeppelin account to hold it, which is a question
         this screen can ask (step 6) but never answer with a ledger.
       */}
-      <aside className="flex flex-col gap-2 rounded-[4px] border border-border-subtle bg-surface px-5 py-4">
+      <aside className="panel">
         <h2 className="col-head text-muted">what this screen is for</h2>
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+        <p className="measure text-[13px] leading-relaxed text-muted">
           This is the reasoning engine with the chain taken away — useful for seeing what Limen
           derives, and the only place flows live that no audited primitive can constrain. Those
           flows are marked as such at step 6 rather than quietly omitted.{' '}
-          <Link
-            href="/app/policies/new"
-            className="rounded-[2px] text-foreground underline decoration-border-bright underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-          >
+          <Link href="/app/policies/new" className="link" data-tone="strong">
             New policy
           </Link>{' '}
           is the same derivation against a real smart account, where refusal is the network&rsquo;s
@@ -96,7 +93,7 @@ export default async function SimulatorPage() {
         presets={presets()}
       />
 
-      <footer className="max-w-[80ch] border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
+      <footer className="measure border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
         The demo account is disposable and holds trivial funds; it is rate-limited and its
         compromise is uninteresting by design. Steps 3 through 6 run entirely in your browser using
         the same <span className="value">@limen/core</span> and{' '}

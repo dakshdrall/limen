@@ -30,7 +30,7 @@ export function DerivedSection({
         {explaining ? (
           <p className="text-[13px] text-muted-dim">Asking Claude to explain this proposal…</p>
         ) : explanation.length > 0 ? (
-          <p className="max-w-[80ch] text-[13.5px] leading-relaxed text-foreground">
+          <p className="measure text-[13.5px] leading-relaxed text-foreground">
             {explanation}
           </p>
         ) : (
@@ -55,7 +55,7 @@ export function DerivedSection({
       {options.length > 0 && (
         <div className="flex flex-col gap-3 rounded-[5px] border border-border-subtle bg-surface px-4 py-4">
           <h3 className="col-head text-muted">Intent</h3>
-          <p className="max-w-[80ch] text-[13.5px] leading-relaxed text-foreground">
+          <p className="measure text-[13.5px] leading-relaxed text-foreground">
             {question ?? 'How much spending headroom should this policy allow?'}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -75,7 +75,7 @@ export function DerivedSection({
               />
             ))}
           </div>
-          <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
+          <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
             No option is applied until you pick one. Claude may phrase this question and choose
             which options to surface; the headroom and window values themselves are defined
             server-side and are the only values that can reach the synthesizer.

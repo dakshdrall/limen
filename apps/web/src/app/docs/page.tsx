@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { Address } from '@/components/Address';
+import { TxHash } from '@/components/ExplorerLink';
 import { Section } from '@/components/Section';
-import { StatusLabel, StatusLabels } from '@/components/StatusLabel';
+import { ScreenHeader } from '@/components/app/ScreenHeader';
+import { StatusLabel } from '@/components/StatusLabel';
 import { Verdict } from '@/components/Verdict';
 import { SPENDING_LIMIT_ERRORS } from '@limen/chain';
 import { decimalise, ledgersToDuration } from '@/lib/format';
@@ -28,8 +30,6 @@ export const metadata = {
  * A server component: nothing here is interactive except `Address`, and no
  * secret, key, or endpoint is involved at any point.
  */
-
-const EXPLORER = 'https://stellar.expert/explorer/testnet';
 
 const SIGNER_ROWS = [
   {
@@ -108,25 +108,30 @@ const tx = rpc.assembleTransaction(withAuth(signed), enforcing).build();`;
 
 export default function DocsPage() {
   return (
-    <main className="mx-auto flex w-full max-w-[68rem] flex-col gap-14 px-6 py-14 sm:px-10">
-      <header className="flex flex-col gap-4">
-        <span className="eyebrow-lead text-faint">docs</span>
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.015em] text-foreground">
-          Pointing an agent at an installed policy
-        </h1>
-        <p className="max-w-[78ch] text-[14px] leading-relaxed text-muted">
-          The claim Limen makes is not that an agent holds no key. An agent that holds no key cannot
-          act. The claim is that the key it holds <em className="text-foreground not-italic">cannot
-          exceed the boundary installed for it</em>, that the boundary was derived from a
-          transaction someone already approved, and that it can be revoked without moving any funds
-          or rotating anything else.
-        </p>
-        <p className="max-w-[78ch] text-[14px] leading-relaxed text-muted">
-          Everything below is the recorded testnet run, by its real addresses and hashes. It is
-          checkable in an explorer, which is the only thing that makes any of it more than a claim.
-        </p>
-        <StatusLabels names={['TESTNET ONLY', 'COMPOSITION ONLY', 'NOT AUDITED', 'NO CUSTODY']} />
-      </header>
+    <main className="screen">
+      <ScreenHeader
+        eyebrow="docs"
+        title="Pointing an agent at an installed policy"
+        lede={
+          <>
+            <p>
+              The claim Limen makes is not that an agent holds no key. An agent that holds no key
+              cannot act. The claim is that the key it holds{' '}
+              <em className="text-foreground not-italic">
+                cannot exceed the boundary installed for it
+              </em>
+              , that the boundary was derived from a transaction someone already approved, and that
+              it can be revoked without moving any funds or rotating anything else.
+            </p>
+            <p>
+              Everything below is the recorded testnet run, by its real addresses and hashes. It is
+              checkable in an explorer, which is the only thing that makes any of it more than a
+              claim.
+            </p>
+          </>
+        }
+        labels={['TESTNET ONLY', 'COMPOSITION ONLY', 'NOT AUDITED', 'NO CUSTODY']}
+      />
 
       <Section
         index={1}
@@ -164,7 +169,7 @@ export default function DocsPage() {
           </table>
         </div>
 
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           No key of any of these three reaches a Limen server. The owner signs the install; the
           agent signs its own calls. There is no code path in this repository that holds one on
           behalf of a user, and no form anywhere in this application that accepts a secret key.
@@ -207,20 +212,20 @@ export default function DocsPage() {
             </span>
           </Field>
           <Field label="install transaction">
-            <ExplorerHash hash={RECORDED_RUN.installTx} />
+            <TxHash hash={RECORDED_RUN.installTx} />
           </Field>
         </dl>
 
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+        <p className="measure text-[13px] leading-relaxed text-muted">
           The agent&rsquo;s key is registered as{' '}
           <span className="value">External(ed25519_verifier, pubkey)</span> — the account does not
           verify the signature itself, it delegates to the audited verifier contract above. The
           spending limit is a separate audited contract, attached to the same rule. Limen wrote
           neither of them.
         </p>
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           Deriving this rule from a transaction rather than writing it by hand is what{' '}
-          <Link href="/app/policies/new" className={INLINE_LINK}>
+          <Link href="/app/policies/new" className="link" data-tone="strong">
             New policy
           </Link>{' '}
           does. What it will not do is install: that write needs an owner signature, and no signer
@@ -236,7 +241,7 @@ export default function DocsPage() {
       >
         <Code>{SIGN_SNIPPET}</Code>
 
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+        <p className="measure text-[13px] leading-relaxed text-muted">
           <span className="value">VERIFIER</span> is the ed25519 verifier address in step 2, and{' '}
           <span className="value">rules</span> is the context rule the owner installed for this key.
           Both are the agent&rsquo;s configuration; neither is a secret. The agent&rsquo;s secret
@@ -279,7 +284,7 @@ export default function DocsPage() {
                 </td>
                 <td className="text-muted">a transfer of exactly the cap, inside the rule</td>
                 <td className="col-hash">
-                  <ExplorerHash hash={RECORDED_RUN.permittedTx} />
+                  <TxHash hash={RECORDED_RUN.permittedTx} />
                 </td>
               </tr>
               <tr>
@@ -291,14 +296,14 @@ export default function DocsPage() {
                   <span className="value">{RECORDED_RUN.rejectedError}</span>
                 </td>
                 <td className="col-hash">
-                  <ExplorerHash hash={RECORDED_RUN.rejectedTx} />
+                  <TxHash hash={RECORDED_RUN.rejectedTx} />
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+        <p className="measure text-[13px] leading-relaxed text-muted">
           An agent should treat these as results, not as transport errors. The spending limit policy
           raises exactly these codes, and they are the difference between &ldquo;your call was
           declined by the boundary&rdquo; and &ldquo;something broke&rdquo;:
@@ -312,7 +317,7 @@ export default function DocsPage() {
           ))}
         </ul>
 
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           <span className="text-foreground">A failure is not a refusal until its error code says
           so.</span>{' '}
           <span className="value">invokeHostFunctionTrapped</span> is also what a transaction that
@@ -347,7 +352,7 @@ export default function DocsPage() {
             A flow that touches a second contract cannot be installed, because no audited primitive
             constrains that contract and a rule without one would permit every function on it.
             Limen refuses rather than widening. Those flows live in the{' '}
-            <Link href="/app/simulator" className={INLINE_LINK}>
+            <Link href="/app/simulator" className="link" data-tone="strong">
               simulator
             </Link>
             , labelled and evaluated locally, and they are the roadmap trigger for a Limen-authored
@@ -364,7 +369,7 @@ export default function DocsPage() {
         </ul>
       </Section>
 
-      <footer className="max-w-[80ch] border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
+      <footer className="measure border-t border-border-subtle pt-6 text-[12.5px] leading-relaxed text-muted-dim">
         Every address and hash on this page is read at build time from{' '}
         <span className="value">packages/chain/deployments/testnet.json</span>, and every error code
         from <span className="value">@limen/chain</span>&rsquo;s own tables. Nothing here is typed
@@ -373,9 +378,6 @@ export default function DocsPage() {
     </main>
   );
 }
-
-const INLINE_LINK =
-  'rounded-[2px] text-foreground underline decoration-border-bright underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -386,19 +388,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ExplorerHash({ hash }: { hash: string }) {
-  return (
-    <a
-      href={`${EXPLORER}/tx/${hash}`}
-      target="_blank"
-      rel="noreferrer noopener"
-      title={hash}
-      className="rounded-[3px] font-mono text-[12.5px] whitespace-nowrap text-muted underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-    >
-      {hash.slice(0, 10)}…
-    </a>
-  );
-}
+
 
 function Code({ children }: { children: string }) {
   return (
@@ -412,7 +402,7 @@ function Limit({ title, children }: { title: string; children: React.ReactNode }
   return (
     <li className="flex flex-col gap-1.5 border-l border-border-default pl-4">
       <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-foreground">{title}</h3>
-      <div className="max-w-[78ch] text-[13px] leading-relaxed text-muted">{children}</div>
+      <div className="measure text-[13px] leading-relaxed text-muted">{children}</div>
     </li>
   );
 }

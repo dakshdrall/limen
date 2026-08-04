@@ -197,7 +197,7 @@ export function PolicyReview({
             message={problem.message}
             detail={problem.detail}
             attempted={
-              <p className="max-w-[80ch] text-[13px] leading-relaxed text-muted">
+              <p className="measure text-[13px] leading-relaxed text-muted">
                 Reading{' '}
                 <span className="value break-all text-foreground">{activeKey}</span> into an
                 observable flow.
@@ -283,11 +283,11 @@ function TransportError({ problem }: { problem: Problem }) {
         <span className="col-head text-muted">COULD NOT LOOK</span>
         <span className="value text-muted-dim">{problem.code}</span>
       </div>
-      <p className="max-w-[80ch] text-[13px] leading-relaxed text-foreground">{problem.message}</p>
+      <p className="measure text-[13px] leading-relaxed text-foreground">{problem.message}</p>
       {problem.detail !== undefined && problem.detail.length > 0 && (
-        <p className="value max-w-[80ch] break-words text-[12px] text-faint">{problem.detail}</p>
+        <p className="value measure break-words text-[12px] text-faint">{problem.detail}</p>
       )}
-      <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         This is a failure to reach or read the transaction, not a judgement about it. No policy was
         derived and none was withheld.
       </p>

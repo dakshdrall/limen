@@ -68,13 +68,13 @@ export function TransactionPicker({
           <button
             type="submit"
             disabled={!liveIngestEnabled || loading}
-            className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn" data-variant="primary"
           >
             Observe
           </button>
         </div>
 
-        <p id="tx-hash-note" className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p id="tx-hash-note" className="measure text-[12.5px] leading-relaxed text-muted-dim">
           {liveIngestEnabled ? (
             <>
               Resolved live through Soroban RPC on testnet. The transaction must have succeeded and

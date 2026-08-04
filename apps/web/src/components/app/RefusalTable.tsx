@@ -1,6 +1,7 @@
 'use client';
 
 import { Address } from '@/components/Address';
+import { TxHash } from '@/components/ExplorerLink';
 import { Verdict } from '@/components/Verdict';
 import type { RecordedAxis, RecordedWalkthrough } from '@/lib/recorded-runs';
 
@@ -27,22 +28,6 @@ import type { RecordedAxis, RecordedWalkthrough } from '@/lib/recorded-runs';
  *    on-ledger code it does not have.
  */
 
-const EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
-
-function TxLink({ hash }: { hash: string }) {
-  return (
-    <a
-      href={`${EXPLORER}/${hash}`}
-      target="_blank"
-      rel="noreferrer noopener"
-      title={hash}
-      className="rounded-[2px] font-mono text-[12.5px] tracking-[-0.01em] text-foreground/90 underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-    >
-      {hash.slice(0, 8)}…{hash.slice(-4)}
-    </a>
-  );
-}
-
 export function PermittedRow({ run }: { run: RecordedWalkthrough }) {
   return (
     <div className="flex flex-col gap-4 rounded-[5px] border border-permit-line bg-surface px-5 py-4">
@@ -56,7 +41,7 @@ export function PermittedRow({ run }: { run: RecordedWalkthrough }) {
         <div className="flex flex-col gap-0.5">
           <dt className="col-head text-muted-dim">transaction</dt>
           <dd>
-            <TxLink hash={run.permittedTx} />
+            <TxHash hash={run.permittedTx} />
           </dd>
         </div>
         <div className="flex flex-col gap-0.5">
@@ -68,7 +53,7 @@ export function PermittedRow({ run }: { run: RecordedWalkthrough }) {
         <div className="flex flex-col gap-0.5">
           <dt className="col-head text-muted-dim">installed by</dt>
           <dd>
-            <TxLink hash={run.installTx} />
+            <TxHash hash={run.installTx} />
           </dd>
         </div>
       </dl>
@@ -95,7 +80,9 @@ export function RefusedTable({
               </th>
               <th scope="col">axis</th>
               <th scope="col">attempt</th>
-              <th scope="col">refused by</th>
+              <th scope="col" className="col-error">
+                refused by
+              </th>
               <th scope="col" className="col-hash">
                 on ledger
               </th>
@@ -114,7 +101,7 @@ export function RefusedTable({
                   </td>
                   <td className="value">{row.axis}</td>
                   <td className="text-[12.5px] text-muted">{row.attempt}</td>
-                  <td className="text-[12.5px]">
+                  <td className="col-error text-[12.5px]">
                     <span className="value text-deny">{decoded ? row.ledger : row.sim}</span>
                     {!decoded && (
                       <span className="mt-0.5 block text-[11.5px] leading-relaxed text-unproven">
@@ -126,7 +113,7 @@ export function RefusedTable({
                     {row.hash === undefined ? (
                       <span className="text-[12px] text-unproven">never reached a ledger</span>
                     ) : (
-                      <TxLink hash={row.hash} />
+                      <TxHash hash={row.hash} />
                     )}
                   </td>
                 </tr>
@@ -135,7 +122,7 @@ export function RefusedTable({
           </tbody>
         </table>
       </div>
-      <p className="max-w-[86ch] text-[12px] leading-relaxed text-muted-dim">{caption}</p>
+      <p className="measure text-[12px] leading-relaxed text-muted-dim">{caption}</p>
     </div>
   );
 }

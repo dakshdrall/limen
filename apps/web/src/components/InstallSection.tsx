@@ -100,7 +100,7 @@ export function InstallSection({ proposal }: { proposal: PolicyProposal }) {
             <strong className="font-semibold">Preview only.</strong> No OpenZeppelin smart account
             is configured, so there is nothing to install onto.
           </p>
-          <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
+          <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
             Set <code className="value text-muted">NEXT_PUBLIC_SMART_ACCOUNT_ID</code> to a deployed
             testnet account contract to enable signing. The payload below is real and is exactly
             what would be submitted.
@@ -131,7 +131,7 @@ export function InstallSection({ proposal }: { proposal: PolicyProposal }) {
           type="button"
           disabled={!installable || xdr === null}
           onClick={() => void onInstall()}
-          className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:border-border-default disabled:bg-transparent disabled:text-faint"
+          className="btn" data-variant="primary"
         >
           Sign &amp; install on testnet
         </button>
@@ -143,7 +143,7 @@ export function InstallSection({ proposal }: { proposal: PolicyProposal }) {
         {status !== null && <span className="text-[12.5px] text-muted">{status}</span>}
       </div>
 
-      <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         Limen custodies nothing. Signing is client-side only, via
         stellar-wallets-kit; no secret key reaches the server, an environment variable, or browser
         storage. There is no code path in this repository that can move funds.

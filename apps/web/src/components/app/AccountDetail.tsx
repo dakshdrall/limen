@@ -32,7 +32,9 @@ export function AccountDetail({ contractId }: { contractId: string }) {
             <button
               type="button"
               onClick={() => rememberAccount(contractId)}
-              className="rounded-[3px] border border-border-default px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] text-muted uppercase transition-colors hover:border-border-bright hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+              className="btn"
+              data-variant="secondary"
+              data-register="label"
             >
               Remember in this browser
             </button>
@@ -40,7 +42,7 @@ export function AccountDetail({ contractId }: { contractId: string }) {
         </div>
         <Link
           href="/app/accounts"
-          className="rounded-[3px] text-[12.5px] text-muted underline decoration-border-bright underline-offset-4 transition-colors hover:text-foreground hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          className="rounded-[3px] text-[12.5px] text-muted link"
         >
           All accounts
         </Link>
@@ -71,7 +73,9 @@ export function AccountDetail({ contractId }: { contractId: string }) {
             <button
               type="button"
               onClick={reload}
-              className="rounded-[2px] font-mono text-[10.5px] tracking-[0.12em] text-muted-dim uppercase transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+              className="btn"
+              data-variant="quiet"
+              data-register="label"
             >
               Read again
             </button>

@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Address } from '@/components/Address';
+import { AccountLink } from '@/components/app/AccountLink';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
+import { TxHash } from '@/components/ExplorerLink';
 import { StatusLabel } from '@/components/StatusLabel';
 import { Verdict } from '@/components/Verdict';
 import type { AccountReadError } from '@/lib/account-contract';
@@ -51,7 +53,7 @@ export function ActivityScreen() {
           Activity is scanned per account. Add one on the{' '}
           <Link
             href="/app/accounts"
-            className="rounded-[2px] underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            className="rounded-[2px] link"
           >
             accounts screen
           </Link>{' '}
@@ -127,16 +129,13 @@ function AccountActivity({ contractId }: { contractId: string }) {
   return (
     <section className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href={`/app/accounts/${contractId}`}
-          className="rounded-[3px] font-mono text-[13px] text-foreground underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-        >
-          {contractId.slice(0, 10)}…{contractId.slice(-6)}
-        </Link>
+        <AccountLink contractId={contractId} />
         <button
           type="button"
           onClick={reload}
-          className="rounded-[2px] font-mono text-[10.5px] tracking-[0.12em] text-muted-dim uppercase transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+          className="btn"
+          data-variant="quiet"
+          data-register="label"
         >
           Scan again
         </button>
@@ -199,7 +198,7 @@ function ScanWindow({ response }: { response: ActivityResponse }) {
       </div>
 
       {window.reachedRetentionFloor && (
-        <p className="max-w-[86ch] text-[12px] leading-relaxed text-unproven">
+        <p className="measure text-[12px] leading-relaxed text-unproven">
           The scan started at this endpoint&rsquo;s retention floor, ledger{' '}
           <span className="value">{window.oldestRetainedLedger.toLocaleString('en-US')}</span>.
           Anything before it is gone from the RPC&rsquo;s memory — that is not the account&rsquo;s
@@ -208,13 +207,13 @@ function ScanWindow({ response }: { response: ActivityResponse }) {
       )}
 
       {window.truncated && (
-        <p className="max-w-[86ch] text-[12px] leading-relaxed text-deny">
+        <p className="measure text-[12px] leading-relaxed text-deny">
           The scan ran out of its request budget before reaching the head of the chain. This feed is
           incomplete, and the gap is at the recent end.
         </p>
       )}
 
-      <p className="max-w-[86ch] text-[12px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12px] leading-relaxed text-muted-dim">
         Contract events are emitted on success only, so every row below is something the boundary{' '}
         <em>permitted</em>. Refused attempts publish no events and are not in this feed.
       </p>
@@ -279,7 +278,7 @@ function EventTable({ response }: { response: ActivityResponse }) {
                       contractId: response.contractId,
                       ruleId: event.contextRuleId,
                     })}`}
-                    className="rounded-[2px] underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+                    className="rounded-[2px] link"
                   >
                     {event.contextRuleId}
                   </Link>
@@ -295,15 +294,7 @@ function EventTable({ response }: { response: ActivityResponse }) {
               </td>
 
               <td className="col-hash">
-                <a
-                  href={`https://stellar.expert/explorer/testnet/tx/${event.txHash}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  title={event.txHash}
-                  className="rounded-[2px] font-mono text-[12.5px] text-foreground/90 underline decoration-border-bright underline-offset-4 transition-colors hover:text-accent hover:decoration-accent focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-                >
-                  {event.txHash.slice(0, 8)}…
-                </a>
+                <TxHash hash={event.txHash} />
               </td>
             </tr>
           ))}

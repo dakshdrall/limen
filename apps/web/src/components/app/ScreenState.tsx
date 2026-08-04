@@ -29,25 +29,27 @@ import type { ReactNode } from 'react';
  */
 export function Pending({ what }: { what: string }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-3 rounded-[4px] border border-border-subtle bg-surface px-4 py-3.5"
-    >
-      <span
-        aria-hidden="true"
-        className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
-      />
-      <span className="text-[13px] leading-relaxed text-muted">{what}</span>
+    <div role="status" aria-live="polite" className="panel">
+      {/* The row is its own element rather than `flex-row` on the panel. A
+          panel is a column of blocks; a caller that needs a row builds one
+          inside it, which keeps the panel from having to know about the shapes
+          of everything it holds. */}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+        />
+        <span className="text-[13px] leading-relaxed text-muted">{what}</span>
+      </div>
     </div>
   );
 }
 
 export function EmptyState({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-[4px] border border-dashed border-border-default bg-surface px-5 py-6">
+    <div className="panel" data-tone="pending">
       <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-foreground">{title}</h3>
-      <div className="max-w-[70ch] text-[13px] leading-relaxed text-muted">{children}</div>
+      <div className="measure text-[13px] leading-relaxed text-muted">{children}</div>
     </div>
   );
 }
@@ -79,20 +81,19 @@ export function ReadFailure({
   return (
     <div
       role="alert"
-      className={`flex flex-col gap-3 rounded-[4px] border bg-surface px-5 py-4 ${
-        unconfigured ? 'border-border-default' : 'border-deny-line'
-      }`}
+      className="panel"
+      data-tone={unconfigured ? 'pending' : 'refused'}
     >
       <div className="flex flex-col gap-1.5">
         <span className={`eyebrow ${unconfigured ? 'text-muted-dim' : 'text-deny'}`}>
           {unconfigured ? 'not configured' : 'read failed'}
         </span>
-        <p className="max-w-[74ch] text-[13px] leading-relaxed text-foreground/90">{message}</p>
+        <p className="measure text-[13px] leading-relaxed text-foreground/90">{message}</p>
       </div>
 
       {detail !== undefined && detail.length > 0 && (
         <details className="text-[12px] text-muted-dim">
-          <summary className="cursor-pointer rounded-[2px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent">
+          <summary className="cursor-pointer rounded-[2px]">
             What the endpoint said
           </summary>
           <p className="scroll-x mt-2 font-mono text-[11.5px] leading-relaxed break-words">{detail}</p>
@@ -100,11 +101,7 @@ export function ReadFailure({
       )}
 
       {onRetry !== undefined && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="self-start rounded-[3px] border border-border-default px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] text-muted uppercase transition-colors hover:border-border-bright hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
-        >
+        <button type="button" onClick={onRetry} className="btn" data-variant="secondary">
           Read again
         </button>
       )}
