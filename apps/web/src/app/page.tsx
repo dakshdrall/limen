@@ -101,17 +101,16 @@ export default function Home() {
 
         {/* The spec strip. Mandatory placement, and first rather than last: a
             reader deciding whether to trust a permissions tool should meet its
-            limits before its argument, not after it. */}
+            limits before its argument, not after it.
+
+            Four labels, not the seven the closed set defines. `OPEN SOURCE` and
+            `MIT` are said better by the GitHub link in the top bar and by the
+            repository itself, and `IN DEVELOPMENT` is the vague version of what
+            `TESTNET ONLY` and `NOT AUDITED` say precisely. Seven labels in a row
+            is a badge shelf, and a badge shelf is read as decoration — which
+            costs the three that are load-bearing the attention they need. */}
         <StatusLabels
-          names={[
-            'OPEN SOURCE',
-            'MIT',
-            'TESTNET ONLY',
-            'IN DEVELOPMENT',
-            'NOT AUDITED',
-            'COMPOSITION ONLY',
-            'NO CUSTODY',
-          ]}
+          names={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']}
         />
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3">

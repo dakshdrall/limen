@@ -322,10 +322,17 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
     expect(page).toContain('none of them are on this page');
   });
 
-  it('carries the full spec strip, which is where a reader meets the limits', () => {
-    // Design system §9 makes two placements mandatory. This is the first: seven
-    // labels, before the argument rather than after it.
-    for (const label of ['OPEN SOURCE', 'MIT', 'TESTNET ONLY', 'IN DEVELOPMENT', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']) {
+  it('carries the four load-bearing labels, which is where a reader meets the limits', () => {
+    // Design system §9 makes two placements mandatory. This is the first: the
+    // spec strip, before the argument rather than after it.
+    //
+    // Four rather than the seven the closed set defines. `OPEN SOURCE` and
+    // `MIT` are stated better by the GitHub link and the repository itself, and
+    // `IN DEVELOPMENT` is the vague version of what `TESTNET ONLY` and `NOT
+    // AUDITED` say precisely. What this test guards is unchanged by that: these
+    // four are the ones a reader has to meet, and the failure it exists to
+    // catch is one of them quietly going missing.
+    for (const label of ['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']) {
       expect(page, `the spec strip is missing ${label}`).toContain(`'${label}'`);
     }
   });
