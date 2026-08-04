@@ -743,6 +743,23 @@ instead, and gained the other half it was missing: every `built: true` href must
 resolve to a page file, which is the typo that produces the exact 404 the flag
 exists to prevent.
 
+**The end-to-end suite was re-run against live testnet on the moved route**,
+twice, each invocation its own `next start` and its own clean browser profile —
+so the second run is cold: empty rate-limit window, empty transaction cache.
+It now drives all six beats, including the new one.
+
+| Run | Transaction | Ledger |
+|---|---|---|
+| 1 | [`63cd81c8…`](https://stellar.expert/explorer/testnet/tx/63cd81c8287c312741f122b5be0583ddc472a04ce1acdc4d4a3e3556ccf32eb9) | 3,958,594 |
+| 2 (cold) | [`6d76fb40…`](https://stellar.expert/explorer/testnet/tx/6d76fb4019ffc1659e42e817c6c1f3cc30bb66fc0c9ea04eda491c07a12b377b) | 3,958,602 |
+
+Both were confirmed against public Horizon afterwards rather than only by the
+suite that produced them. A test asserting its own transaction succeeded is a
+test agreeing with itself; the check that matters is the one made from outside
+the process, with no credentials, against an endpoint this repository does not
+configure. This closes the §11 item asking for two completions from a clean
+browser with the second cold.
+
 ### What step 7 landed
 
 The rule the whole layer is built on: **the chain is the source of truth for
