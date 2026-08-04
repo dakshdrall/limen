@@ -21,14 +21,25 @@ jobs:
 
       - run: npm ci
 
-      # No explicit @limen/core build step: apps/web has both a `prebuild` and
-      # a `pretest` that build the core workspace first, so whichever apps/web
-      # step runs earliest compiles core as its first action.
+      # No explicit @limen/core build step: every workspace that imports
+      # `@limen/core` by name has its own `prebuild` and `pretest` that build
+      # it first, so whichever step runs earliest compiles core as its first
+      # action.
       #
       # The core suite genuinely needs no build — it imports from `src`. The
-      # web suite does: `@limen/core`'s `exports` point at `dist/`, which a
-      # fresh checkout has never produced. That distinction cost a red build
-      # once, because a warm `dist/` on a developer machine hides it entirely.
+      # web and chain suites do: `@limen/core`'s `exports` point at `dist/`,
+      # which a fresh checkout has never produced. That distinction cost a red
+      # build twice, because a warm `dist/` on a developer machine hides it
+      # entirely.
+      #
+      # The second time is the instructive one. The comment here used to say
+      # "apps/web has both a prebuild and a pretest", which was true and was
+      # not the guarantee it sounded like: it made the build order a property
+      # of which workspace happened to run first, and `packages/chain` — which
+      # did not import core when this was written, and does now — sat ahead of
+      # apps/web with a bare `vitest run`. `lower.test.ts` could not resolve
+      # `@limen/core` and the job died three steps in. The rule is now per
+      # workspace rather than per running order.
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 

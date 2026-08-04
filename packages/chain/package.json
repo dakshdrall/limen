@@ -16,7 +16,9 @@
     "dist"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../core run build",
     "build": "tsc -p tsconfig.json",
+    "pretest": "npm --prefix ../core run build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
