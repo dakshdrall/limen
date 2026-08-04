@@ -54,10 +54,21 @@ export interface RecordedWalkthrough {
   cap: string;
   windowLedgers: number;
   token: string;
+  /** The key the boundary was installed *for*. Not held by this application. */
+  agentSigner: string;
+  /** The key that signed the install. Also not held by this application. */
+  ownerSigner: string;
   installTx: string;
   permittedTx: string;
   rejectedTx: string;
   rejectedError: string;
+}
+
+/** The verifier and policy contracts every account in this repository shares. */
+export interface SharedContracts {
+  ed25519Verifier: { contract: string; deployTx: string };
+  webauthnVerifier: { contract: string; deployTx: string };
+  spendingLimitPolicy: { contract: string; deployTx: string };
 }
 
 const walkthrough = recorded.walkthrough as RecordedWalkthrough;
@@ -65,6 +76,30 @@ const survey = recorded.denyAxisSurvey as RecordedSurvey;
 
 /** The account every recorded run in this repository was made against. */
 export const RECORDED_ACCOUNT = walkthrough.smartAccount;
+
+/**
+ * The recorded run itself, for prose that describes it.
+ *
+ * Deliberately separate from `walkthroughFor`, which gates on account *and*
+ * rule id so that one rule's transactions never appear on another rule's
+ * screen. That gate is about attribution: a screen showing a specific rule must
+ * not borrow another rule's evidence. `/docs` is not showing a rule — it is
+ * describing the one run this repository recorded, by name, as the worked
+ * example. Naming it is the whole point there, so the gate would have nothing
+ * to protect.
+ */
+export const RECORDED_RUN: RecordedWalkthrough = walkthrough;
+
+/**
+ * The deployed verifier and policy contracts.
+ *
+ * An agent's key is registered as `External(ed25519Verifier, pubkey)`, so the
+ * verifier's address is something a person wiring one up actually has to type.
+ * Read from the deployments file rather than repeated in prose, because a
+ * contract address transcribed by hand into documentation is a contract address
+ * that will eventually be wrong.
+ */
+export const SHARED_CONTRACTS = recorded.shared as SharedContracts;
 
 /**
  * The permitted/rejected pair, for the one rule it was recorded against.

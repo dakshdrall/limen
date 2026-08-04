@@ -73,15 +73,16 @@ from: [`packages/chain/deployments/testnet.json`](./packages/chain/deployments/t
 The derivation pipeline runs against live testnet too, not only against shipped
 fixtures. A worked example, checkable in an explorer rather than taken on trust:
 [`525d5cf0…fb97a35e`](https://stellar.expert/explorer/testnet/tx/525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e)
-is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of
-`/demo` in ledger 3929381, read back through RPC, and turned into a policy whose
-derived spending cap is that same 1000000 — the boundary is exactly the observed
-flow, which is the claim.
+is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of the
+simulator in ledger 3929381, read back through RPC, and turned into a policy
+whose derived spending cap is that same 1000000 — the boundary is exactly the
+observed flow, which is the claim.
 
-That run was **driven by hand through the `/demo` UI, by a person, not by the
-test suite**: all five steps completed in one pass in a real browser. An
-automated suite covers the same walkthrough on demand (see [the end-to-end
-suite](#the-end-to-end-suite)), but this hash is the human-verified one.
+That run was **driven by hand through the UI, by a person, not by the test
+suite**: every step completed in one pass in a real browser. An automated suite
+covers the same walkthrough on demand (see [the end-to-end
+suite](#the-end-to-end-suite)), but this hash is the human-verified one. It was
+performed at `/demo`, which is now `/app/simulator`; the path redirects.
 
 ---
 
@@ -98,23 +99,38 @@ No credentials are required. The app ships JSON fixtures and loads one by
 default, so the whole pipeline — ingest → synthesize → deny table → install
 payload — runs with no RPC access and no API key.
 
-### The two screens
+### The screens
 
 - **`/`** — the argument, then the review: a transaction, the policy derived
   from it, the deny table, and the install payload. Paste any Soroban testnet
   transaction hash to run it on your own flow, or pick a shipped preset.
-- **`/demo`** — a five-step guided walkthrough that performs a real testnet
-  transaction for you, observes it live, derives the boundary, and tries to
-  exceed it. No wallet and no funded account needed. Each step states whether
-  what happened was **on-chain** or **computed locally**; the two are never
-  blurred.
+- **`/app/accounts`** — smart accounts this browser has been shown, and for each
+  one the boundary currently installed on it, read from the chain at a stated
+  ledger. Not restored from browser storage.
+- **`/app/policies/new`** — observe a transaction, review the boundary derived
+  from it, and see it lowered onto OpenZeppelin primitives or refused with the
+  constraint named. It stops short of installing, and says why in place of a
+  button.
+- **`/app/policies/[id]`** — the refusal screen: a permitted transaction beside
+  the attempts the network refused, each with its hash. This is the product.
+- **`/app/activity`** — contract events across accounts, with the ledger range
+  actually scanned printed beside them.
+- **`/app/simulator`** — the guided walkthrough, six steps, formerly `/demo`
+  (the old path redirects). Performs a real testnet transaction for you or
+  starts from a shipped flow, derives the boundary, tries to exceed it, and then
+  asks whether an OpenZeppelin account could hold it at all. Each step states
+  whether what happened was **on-chain**, a **shipped fixture**, or **computed
+  locally**; the three are never blurred.
+- **`/docs`** — how to point an agent at an installed policy: who holds which
+  key, what the owner installs, what the agent signs, and what the network does
+  when it tries to exceed the boundary.
 
 ### Optional configuration
 
 | Variable | Effect when unset |
 |---|---|
 | `SOROBAN_RPC_URL` | Live testnet ingest is unavailable and the hash input is disabled with the reason on screen; fixtures still work. It never silently substitutes a fixture for the transaction you asked for. Server-side only — never exposed to the browser. |
-| `LIMEN_DEMO_SECRET` | Step 1 of `/demo` is unavailable and the walkthrough starts from a shipped transaction instead. Testnet seed for the disposable demo account. Server-side only. |
+| `LIMEN_DEMO_SECRET` | Step 1 of the simulator cannot submit, and the walkthrough starts from a shipped flow instead — which it can also do at any time with the account configured. Testnet seed for the disposable demo account. Server-side only. |
 | `LIMEN_DEMO_DESTINATION` | As above. The fixed account the demo transfer is sent to. |
 | `ANTHROPIC_API_KEY` | The plain-English explanation is skipped and the raw structured rationale is shown instead. The deny table is unaffected. |
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
@@ -128,7 +144,7 @@ npm run build
 npm run e2e -w @limen/web
 ```
 
-Drives `/demo` in a real Chromium against live testnet: performs a transaction,
+Drives `/app/simulator` in a real Chromium against live testnet: performs a transaction,
 observes it back through RPC, derives the boundary, tries to exceed it, reads
 the payload — then reloads the tab and asserts the walkthrough resumes by
 recomputing from the stored hash rather than restoring a stored answer. It
@@ -241,7 +257,7 @@ be seen succeeding gives you no evidence about when it declines.
 
 ## The demo account
 
-Step 1 of `/demo` submits a real transaction to Stellar testnet so a reviewer
+Step 1 of the simulator submits a real transaction to Stellar testnet so a reviewer
 with no wallet can still complete the walkthrough. That account is **disposable
 and holds trivial funds; its compromise is uninteresting by design.**
 
@@ -294,7 +310,8 @@ apps/web/           Next.js 16, App Router, TypeScript, Tailwind
   src/app/api/install-preview/ proposal -> Soroban ScVal XDR
   src/app/api/demo/perform/    submits the guided demo's testnet transaction
   src/app/page.tsx             the review screen
-  src/app/demo/page.tsx        the five-step guided walkthrough
+  src/app/app/simulator/       the six-step guided walkthrough
+  src/app/docs/page.tsx        pointing an agent at an installed policy
   src/lib/extract.ts           XDR -> domain model; accurate or absent
   src/lib/demo-signer.ts       the only signer in the repo; testnet-fenced
   src/fixtures/                shipped JSON transactions
@@ -364,7 +381,7 @@ pretend otherwise.
   install recorded above was signed by
   `packages/chain/scripts/testnet.mjs`, which is not part of the application.
   See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
-- **On `/` and `/demo`, the deny table proves refusal as adjudicated by this
+- **On `/` and `/app/simulator`, the deny table proves refusal as adjudicated by this
   repository's evaluator, not as enforced on-chain.** Those two screens run
   `evaluate` in the browser. `evaluate` is an independent implementation of the
   same rules, which is a real check against a wrong synthesizer — it is not the
@@ -382,9 +399,11 @@ pretend otherwise.
   install** and names the constraint. A router call beside a token transfer is
   the common case that refuses: a context rule with no policy would permit every
   function on that router, which is broader than what was derived and reviewed.
-  Those flows stay in the simulator, evaluated locally, marked not installable.
-  Closing that gap needs a policy contract nobody has audited, so it is the
-  trigger for the codegen work rather than a reason to write Rust now.
+  Those flows stay in the simulator, evaluated locally, marked not installable —
+  the `swap-two-calls` preset at `/app/simulator` is one, and step 6 of that
+  screen names the constraint rather than omitting the flow. Closing that gap
+  needs a policy contract nobody has audited, so it is the trigger for the
+  codegen work rather than a reason to write Rust now.
 - **`validFromLedger` is not installed.** An OpenZeppelin `ContextRule` has
   `valid_until` and no lower bound. The field stays in the domain model as
   provenance — the ledger the policy was derived from — is labelled as computed

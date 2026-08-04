@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   DEFAULT_SYNTHESIS_OPTIONS,
   SynthesisError,
@@ -10,13 +10,14 @@ import {
 } from '@limen/core';
 import { InstallPlanTable } from '@/components/app/InstallPlanTable';
 import { Pending, ReadFailure } from '@/components/app/ScreenState';
+import { NotEnforceable } from '@/components/NotEnforceable';
 import { PolicyTable } from '@/components/PolicyTable';
 import { ObservedSection } from '@/components/ObservedSection';
 import { Section } from '@/components/Section';
 import { StatusLabel } from '@/components/StatusLabel';
 import { TransactionPicker } from '@/components/TransactionPicker';
 import { type IngestError } from '@/lib/ingest-contract';
-import type { InstallPlan, LowerFailure, LowerRefusal, LowerSuccess } from '@/lib/lower-contract';
+import { useLowering } from '@/lib/use-lowering';
 
 /**
  * Deriving a boundary and lowering it onto the chain's own primitives.
@@ -33,16 +34,6 @@ import type { InstallPlan, LowerFailure, LowerRefusal, LowerSuccess } from '@/li
  * The fourth step cannot complete in this build, and says so in place rather
  * than presenting a button that fails. See `InstallStep`.
  */
-
-type LowerState =
-  | { status: 'idle' }
-  | { status: 'pending' }
-  | { status: 'lowered'; plan: InstallPlan }
-  | { status: 'refused'; constraint: string; message: string }
-  | { status: 'failed'; message: string };
-
-/** A settled answer, tagged with the proposal it answers. */
-type Settled = Exclude<LowerState, { status: 'idle' } | { status: 'pending' }>;
 
 export function NewPolicyScreen({
   initialTransaction,
@@ -74,11 +65,6 @@ export function NewPolicyScreen({
     else throw error;
   }
 
-  // Keyed on the serialized proposal rather than pushed as a pending write, so
-  // a plan for the previous transaction is never on screen beside this one's
-  // derived boundary.
-  const [answer, setAnswer] = useState<{ key: string; state: Settled } | null>(null);
-
   const observe = useCallback(async (reference: string, network: 'testnet' | 'simulated') => {
     setLoading(true);
     setIngestProblem(null);
@@ -109,61 +95,7 @@ export function NewPolicyScreen({
   // Lowering follows the proposal automatically. Making it a button would imply
   // the user is choosing to lower, when in fact there is no version of this
   // flow where they would not: the plan is what they are being asked to review.
-  const serialized = proposal === null ? null : JSON.stringify(proposal);
-  const lowered: LowerState =
-    serialized === null
-      ? { status: 'idle' }
-      : answer?.key === serialized
-        ? answer.state
-        : { status: 'pending' };
-
-  useEffect(() => {
-    if (serialized === null) return;
-
-    let current = true;
-
-    void (async () => {
-      try {
-        const response = await fetch('/api/lower', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: `{"proposal":${serialized}}`,
-        });
-        const body: unknown = await response.json();
-        if (!current) return;
-
-        if (response.status === 422) {
-          const { refusal } = body as LowerRefusal;
-          setAnswer({
-            key: serialized,
-            state: { status: 'refused', constraint: refusal.constraint, message: refusal.message },
-          });
-          return;
-        }
-        if (!response.ok) {
-          setAnswer({
-            key: serialized,
-            state: { status: 'failed', message: (body as LowerFailure).error.message },
-          });
-          return;
-        }
-        setAnswer({ key: serialized, state: { status: 'lowered', plan: (body as LowerSuccess).plan } });
-      } catch (error) {
-        if (!current) return;
-        setAnswer({
-          key: serialized,
-          state: {
-            status: 'failed',
-            message: error instanceof Error ? error.message : String(error),
-          },
-        });
-      }
-    })();
-
-    return () => {
-      current = false;
-    };
-  }, [serialized]);
+  const lowered = useLowering(proposal);
 
   return (
     <div className="flex flex-col gap-14">
@@ -242,26 +174,6 @@ function RefusedToDerive({ message }: { message: string }) {
       <p className="max-w-[76ch] text-[12.5px] leading-relaxed text-muted-dim">
         Refusing is the designed outcome, not a failure of the demo. A synthesizer that guessed here
         would produce a boundary nobody reviewed.
-      </p>
-    </div>
-  );
-}
-
-function NotEnforceable({ constraint, message }: { constraint: string; message: string }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-[4px] border border-unproven-line bg-surface px-5 py-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="eyebrow text-unproven">not enforceable on-chain</span>
-        <StatusLabel name="COMPOSITION ONLY" weight="loud" />
-      </div>
-      <p className="max-w-[78ch] text-[13px] leading-relaxed text-foreground/90">{message}</p>
-      <p className="text-[12.5px] text-muted-dim">
-        constraint: <span className="value">{constraint}</span>
-      </p>
-      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-muted-dim">
-        Closing this gap would take a Limen-authored Rust policy in the authorization path. That is
-        the one place this project has said it will not put unaudited code, so the boundary is
-        refused instead.
       </p>
     </div>
   );

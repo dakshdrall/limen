@@ -22,18 +22,29 @@ import { NETWORK } from '@/lib/network';
  * reason in its tooltip, rather than linking to a route that does not exist.
  *
  * A nav item that 404s is worse than one that says "not built yet": the first
- * looks like the application is broken, the second is just the truth. These
- * flip to `true` as steps 9 and 10 land — the flag is here rather than in a
- * comment so that shipping a screen and lighting its nav entry are the same
- * edit.
+ * looks like the application is broken, the second is just the truth. The flag
+ * is here rather than in a comment so that shipping a screen and lighting its
+ * nav entry are the same edit.
+ *
+ * Every section is built as of step 10, so nothing currently carries
+ * `built: false`. The branch stays: the next section to be planned before it is
+ * written needs it, and rebuilding the mechanism from scratch under deadline is
+ * how a placeholder becomes a 404 instead.
  */
-const SECTIONS = [
+interface Section {
+  label: string;
+  href: string;
+  /** `false` renders the unavailable state below. See above. */
+  built: boolean;
+}
+
+const SECTIONS: readonly Section[] = [
   { label: 'MECHANISM', href: '/', built: true },
   { label: 'INTERFACE', href: '/app/accounts', built: true },
   { label: 'ACTIVITY', href: '/app/activity', built: true },
-  { label: 'SIMULATOR', href: '/app/simulator', built: false },
-  { label: 'DOCS', href: '/docs', built: false },
-] as const;
+  { label: 'SIMULATOR', href: '/app/simulator', built: true },
+  { label: 'DOCS', href: '/docs', built: true },
+];
 
 const NOT_BUILT = 'Not built yet. The chain layer behind this screen is implemented and proven on testnet; the screen is not.';
 

@@ -1,7 +1,7 @@
 # PLAN-V3 — from demo to instrument
 
-Status: **steps 1–6 built and verified on testnet.** Steps 7–12 (persistence,
-screens, simulator, docs, design system, landing) are not started.
+Status: **steps 1–10 built and verified on testnet.** Steps 11 and 12 (the
+design system pass across everything, and the landing rebuild) are not started.
 
 ---
 
@@ -461,6 +461,10 @@ displays works from a script.
 /docs                 pointing an agent at an installed policy
 ```
 
+Built as of step 10, except `/app/accounts/new`: deploying is a write, and the
+missing browser signer blocks it for the same reason install and revoke are
+blocked. It is absent from the nav rather than present and broken.
+
 The **refusal screen** — permitted transaction next to refused attempts, each
 with its hash or its stated absence — is the product. It is the policy detail
 screen's primary content, not a tab.
@@ -564,7 +568,7 @@ gated: if a gate fails, work stops and I report rather than build around it.
 | 7 | Persistence and the account/policy data model | chain re-read on reload, verified | **done** |
 | 8 | Type and grid tokens | before any new screen | **done** |
 | 9 | Screens: accounts → new policy → policy detail (the refusal screen) → activity | each demonstrable | **done — reads only; install still needs a signer** |
-| 10 | Simulator (demoted demo) and docs | | not started |
+| 10 | Simulator (demoted demo) and docs | | **done** |
 | 11 | Design system pass across everything | | not started |
 | 12 | Landing rebuild: spec strip, mechanism with a worked example, deny table, numbers from `evidence.json`, code snippet | | not started |
 
@@ -665,6 +669,79 @@ scroll them, it overlaps the next column. The verdict badge sat on top of the
 adjacent cell's text and a 9-character ledger number ran into the row beside it.
 The tokens stated content width and ignored the 0.75rem of cell padding either
 side; `--col-pad` is now added by the column classes, and a test pins it.
+
+### What step 10 landed
+
+`/demo` is now `/app/simulator`, and `/demo` 308s to it — the old path is in
+this repository's own history and in whatever a reviewer bookmarked while the
+demo was the front door.
+
+**The demotion is stated on the screen, not just enacted by the routing table.**
+A page that quietly stopped being linked from the landing page would still read,
+to anyone who arrived on it, as the thing the product does. It now says what it
+is for — the reasoning engine with the chain taken away — and links to
+`/app/policies/new` as the same derivation against a real account.
+
+What earns the demotion is a sixth beat: **could this be installed?** The
+simulator lowers what it derived and reports the answer. That is where decision
+1 finally has a home on screen: `swap-two-calls` refuses with
+`function_allowlist_not_expressible` and the constraint named, and the screen
+says that is *why the flow lives here* rather than omitting it. Lowering is one
+`useLowering` hook shared with `/app/policies/new`, and `NotEnforceable` is one
+component shared with it, because two copies would drift — and the direction is
+predictable: the screen with no install button is the one where an unenforceable
+boundary costs nothing to render as fine.
+
+Three things came out of building it that the plan had not accounted for:
+
+- **The preset path was a dead end.** Skipping an unconfigured beat 1 advanced
+  to beat 2 with no hash, which rendered "beat 1 has not produced a transaction
+  yet" and nothing to click. Every reviewer running this repository without
+  `LIMEN_DEMO_SECRET` — most of them — hit a wall on the second step of the
+  page that existed so nobody would hit a wall. Presets are now a first-class
+  choice at step 1, always offered, not a fallback.
+- **A shipped fixture was about to be rendered as a transaction.** Fixture
+  hashes are 64 hex characters and their addresses are real StrKey, on purpose,
+  so they look like production data — which meant beat 1's explorer link and its
+  `on-chain` badge would both have been claims about a transaction that never
+  existed. `Beat` gained a third kind, `shipped fixture`, drawn dashed like the
+  third verdict state; the explorer link is replaced by a sentence saying no
+  explorer will find this hash and why. The source is derived from the shipped
+  preset list rather than persisted, so `DemoState` did not have to grow a
+  field — only its accepted beat range widened, which is backward compatible,
+  so a reviewer mid-run does not get reset.
+- **One caveat had outlived its reason.** Beat 5 said the payload could not be
+  submitted because "this MVP does not deploy a smart account". It deploys one;
+  the hashes are in `deployments/testnet.json`. A caveat that is *too*
+  pessimistic is still inaccurate, and it stops being load-bearing the moment
+  someone notices. It now gives the reason that is true: no account to write to
+  and no signature to authorize the write.
+
+`/docs` is the other half. It states the thesis in §5's terms — the claim is not
+that the agent holds no key, it is that the key it holds cannot exceed the
+boundary and can be revoked — then walks the three keys, the install, the
+`AuthPayload` the agent signs, the simulate-twice rule, and what the network
+does when the agent tries to go further. **Every address, hash, cap and error
+code on it is read from `deployments/testnet.json` and `@limen/chain`'s own
+error tables**; none is typed into the page. Documentation that restates a
+contract address in prose is documentation with a stale address in it one script
+run later, and a page whose whole argument is "check this yourself" cannot
+afford one number a reviewer checks and finds wrong.
+
+Two things came from looking at the rendered page rather than the tests. The
+outcome table had hand-rolled `permitted` / `refused` as two coloured words
+instead of using `Verdict`, which is precisely where the glyph-plus-border rule
+quietly stops holding; and the cap was formatted with `toLocaleString()` beside
+the app's own `decimalise` and `ledgersToDuration` everywhere else. Both now use
+the shared components. Verified in full greyscale, and at 390px, where neither
+new screen scrolls the body horizontally.
+
+`design-system.test.ts` could no longer assert that some nav section carries
+`built: false` — every section is built now, and that assertion would only be
+satisfiable by leaving a screen unfinished. It asserts the *branch* survives
+instead, and gained the other half it was missing: every `built: true` href must
+resolve to a page file, which is the typo that produces the exact 404 the flag
+exists to prevent.
 
 ### What step 7 landed
 

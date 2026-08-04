@@ -11,7 +11,7 @@
  * preference.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -168,10 +168,33 @@ describe('the network indicator cannot disagree with the network', () => {
     expect(topBar).toContain("aria-current={active ? 'page' : undefined}");
   });
 
-  it('does not link sections that do not exist yet', () => {
+  it('keeps the unbuilt state available for the next section that needs it', () => {
     // A nav item that 404s reads as a broken application. One that says "not
     // built yet" is just true.
-    expect(topBar).toContain('built: false');
+    //
+    // Every section is built as of step 10, so this can no longer assert that
+    // some section carries `built: false` — that assertion would now only be
+    // satisfiable by leaving a screen unfinished. What has to survive is the
+    // *branch*: the flag, and the state it renders. Deleting it because nothing
+    // currently uses it is how the next planned-before-written section becomes
+    // a 404 instead of a placeholder.
+    expect(topBar).toContain('built: boolean');
     expect(topBar).toContain('Not built yet');
+    expect(topBar).toContain('aria-disabled="true"');
+  });
+
+  it('links only sections this application actually serves', () => {
+    // The other half, and the one that catches a typo: a `built: true` entry
+    // pointing at a route with no page is exactly the 404 the flag exists to
+    // prevent, and it is invisible in review.
+    const routes = topBar.matchAll(/href: '([^']+)', built: true/g);
+    const hrefs = [...routes].map(([, href]) => href);
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      const segments = href === '/' ? [] : href.split('/').filter(Boolean);
+      const page = fileURLToPath(new URL(`../src/app/${[...segments, 'page.tsx'].join('/')}`, import.meta.url));
+      expect(existsSync(page), `${href} is linked as built but ${page} does not exist`).toBe(true);
+    }
   });
 });

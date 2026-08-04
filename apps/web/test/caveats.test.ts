@@ -50,7 +50,7 @@ describe('the fixture caveat survives verbatim', () => {
 
 describe('the evaluator caveat survives', () => {
   it('says refusal is adjudicated by this repository, not enforced on-chain', () => {
-    const stepper = source('components/demo/DemoStepper.tsx');
+    const stepper = source('components/simulator/SimulatorStepper.tsx');
     // `&rsquo;` rather than a literal apostrophe: this is JSX source, and the
     // entity is what the component actually contains.
     expect(stepper).toContain('adjudicated by this repository&rsquo;s evaluator');
@@ -60,14 +60,15 @@ describe('the evaluator caveat survives', () => {
   it('is stated in the README too, and scoped to the screens it is true of', () => {
     // The chain layer produces genuine network refusals, so the unqualified
     // form of this caveat became false. The scoped form must survive, because
-    // `/` and `/demo` still adjudicate locally and a reader who conflates the
-    // two would credit the demo with something it does not do.
+    // `/` and the simulator still adjudicate locally and a reader who conflates
+    // the two would credit them with something they do not do.
     //
-    // Rescoped once already: it said "the two screens that exist" until the
-    // interface screens landed and there were more than two. The names are in
-    // it now, so the next screen cannot silently widen it.
+    // Rescoped twice: it said "the two screens that exist" until the interface
+    // screens landed and there were more than two, and it named `/demo` until
+    // that page moved to `/app/simulator`. The names are in it, so neither a
+    // new screen nor a moved one can silently widen it.
     expect(README).toContain(
-      "On `/` and `/demo`, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
+      "On `/` and `/app/simulator`, the deny table proves refusal as adjudicated by this repository's evaluator, not as enforced on-chain.",
     );
     expect(README).toContain("the ones with transaction hashes above are the network's");
   });
@@ -108,9 +109,19 @@ describe('the composition-only claim is not quietly widened', () => {
 });
 
 describe('the install caveat survives', () => {
-  it('does not claim an install happened without a deployed smart account', () => {
-    const stepper = source('components/demo/DemoStepper.tsx');
-    expect(stepper).toContain('depends on a deployed OpenZeppelin smart account');
+  it('does not claim an install happened, and gives the reason that is true now', () => {
+    // This said the payload could not be submitted because the MVP does not
+    // deploy a smart account. It does deploy one now — the hashes are in
+    // `deployments/testnet.json` — so the old wording was a caveat that had
+    // outlived its reason, which is its own kind of inaccuracy: it would have
+    // had a reviewer believe the project was less far along than it is, and it
+    // would have stopped being load-bearing the moment someone noticed.
+    //
+    // What remains true is why *this screen* submits nothing: no account to
+    // write to, and no signature to authorize the write.
+    const stepper = source('components/simulator/SimulatorStepper.tsx');
+    expect(stepper).not.toContain('which this MVP does not deploy');
+    expect(stepper).toContain('would need a smart account to write to and an owner signature');
     expect(stepper).toContain('nothing here is submitted');
   });
 });
@@ -229,6 +240,74 @@ describe('the install step does not pretend it can sign', () => {
     expect(source('components/app/NewPolicyScreen.tsx')).toContain(
       'There is no form here that accepts a secret key, and there will not be one',
     );
+  });
+});
+
+describe('the simulator says what it is, now that it is not the front door', () => {
+  const page = source('app/app/simulator/page.tsx');
+
+  it('says nothing on it installs anything or was enforced by a network', () => {
+    // The demotion is only real if the page states it. A screen that simply
+    // stopped being linked from the landing page would still read, to anyone
+    // who arrived on it, as the thing the product does.
+    expect(page).toContain('Nothing on this screen installs anything');
+    expect(page).toContain('no boundary drawn here has been enforced by a network');
+  });
+
+  it('points at the screen that does ask a network', () => {
+    expect(page).toContain('/app/policies/new');
+  });
+
+  it('does not hide the flows it cannot install', () => {
+    // PLAN-V3 decision 1. The multi-contract gap is accepted, and the price of
+    // accepting it is saying so where a reviewer meets it.
+    expect(page).toContain('the only place flows live that no audited primitive can constrain');
+    expect(page).toContain('marked as such at step 6 rather than quietly omitted');
+  });
+
+  it('does not offer an explorer link for a transaction that never existed', () => {
+    // A fixture's hash is well-formed and belongs to nothing. Linking it sends
+    // a reviewer to a 404 that reads as the application being broken rather
+    // than as the flow being shipped.
+    const stepper = source('components/simulator/SimulatorStepper.tsx');
+    expect(stepper).toContain('no explorer will find it');
+    expect(stepper).toContain("source === 'testnet'");
+  });
+
+  it('badges a shipped step as shipped rather than as on-chain', () => {
+    expect(source('components/simulator/Beat.tsx')).toContain('never observed on a live network');
+  });
+});
+
+describe('the docs page keeps the agent-key claim in its narrow form', () => {
+  const docs = source('app/docs/page.tsx');
+
+  it('does not claim the agent holds no key', () => {
+    // The false version of this is the tempting one, and it is what every
+    // adjacent product says. An agent that holds no key cannot act.
+    expect(docs).toContain('The claim Limen makes is not that an agent holds no key');
+    expect(docs).toContain('cannot exceed the boundary installed for it');
+  });
+
+  it('repeats that a failure is not a refusal until its code says so', () => {
+    // The same trap, on the page most likely to be read by someone about to
+    // write a client that has to tell the two apart.
+    expect(docs).toContain('A failure is not a refusal until its error code says');
+    expect(docs).toContain('invokeHostFunctionTrapped');
+  });
+
+  it('reads its addresses and hashes rather than restating them', () => {
+    // Documentation that transcribes a contract address is documentation with
+    // a stale contract address in it, one script run from now.
+    expect(docs).toContain('RECORDED_RUN');
+    expect(docs).toContain('SHARED_CONTRACTS');
+    expect(docs).toContain('SPENDING_LIMIT_ERRORS');
+  });
+
+  it('states what is not built rather than leaving it to be discovered', () => {
+    expect(docs).toContain('No browser signer, so nothing installs from the interface');
+    expect(docs).toContain('No revoke button');
+    expect(docs).toContain('One contract per boundary');
   });
 });
 

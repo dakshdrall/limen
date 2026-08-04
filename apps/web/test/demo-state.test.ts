@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INITIAL_STATE,
+  LAST_BEAT,
   PERSISTED_KEYS,
   clearState,
   loadState,
@@ -87,8 +88,27 @@ describe('resume survives bad input rather than crashing on it', () => {
 
   it('rejects an out-of-range beat', () => {
     expect(sanitise({ version: 1, beat: 0, hash: null })).toBeNull();
-    expect(sanitise({ version: 1, beat: 6, hash: null })).toBeNull();
+    expect(sanitise({ version: 1, beat: LAST_BEAT + 1, hash: null })).toBeNull();
     expect(sanitise({ version: 1, beat: 2.5, hash: null })).toBeNull();
+  });
+
+  it('accepts the last beat there is', () => {
+    // The range widened from five to six when the simulator gained "could it be
+    // installed?". Pinned against the constant rather than the literal, so the
+    // stepper and the sanitiser cannot drift into a state where the last beat a
+    // reviewer can reach is one the sanitiser throws away on reload.
+    expect(sanitise({ version: 1, beat: LAST_BEAT, hash: HASH })).toEqual({
+      version: 1,
+      beat: LAST_BEAT,
+      hash: HASH,
+    });
+  });
+
+  it('still loads state written before the range widened', () => {
+    // Widening the accepted range is backward compatible, so the version did
+    // not move. A reviewer who left mid-run before step 10 comes back to where
+    // they were rather than to a reset page.
+    expect(sanitise({ version: 1, beat: 5, hash: HASH })).not.toBeNull();
   });
 
   it('rejects a hash that is not a transaction hash', () => {

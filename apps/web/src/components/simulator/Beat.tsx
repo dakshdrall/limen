@@ -2,16 +2,23 @@
 
 import type { ReactNode } from 'react';
 
-export type BeatKind = 'on-chain' | 'computed';
+export type BeatKind = 'on-chain' | 'computed' | 'shipped';
 
 /**
- * One beat of the walkthrough.
+ * One beat of the simulator.
  *
  * The badge is not decoration. A reviewer must be able to tell, at every step,
  * whether what just happened touched a chain or ran in their browser — and the
  * two must never blur, because the difference between "this was enforced" and
  * "this was evaluated" is the difference between what Limen proves today and
- * what it claims for V2.
+ * what it claims next.
+ *
+ * `shipped` is the third case and it is not a shade of the first. Beats 1 and 2
+ * are on-chain when the simulator performs a transaction and reads it back;
+ * they are `shipped` when the reviewer starts from a fixture instead, which is
+ * the path anyone without a configured demo account takes. A fixed `on-chain`
+ * badge over a fixture would be the single most flattering mislabel available
+ * on this page, so the kind is passed per render rather than declared once.
  */
 export function Beat({
   index,
@@ -88,22 +95,32 @@ export function Beat({
   );
 }
 
+const KINDS: Record<BeatKind, { text: string; title: string; className: string }> = {
+  'on-chain': {
+    text: 'on-chain',
+    title: 'This step reads from or writes to Stellar testnet.',
+    className: 'border-permit-line bg-permit-dim text-permit',
+  },
+  computed: {
+    text: 'computed locally',
+    title: 'This step runs in your browser. Nothing is submitted or enforced on-chain.',
+    className: 'border-border-bright bg-surface-raised text-muted-dim',
+  },
+  // Dashed, like the third verdict state: distinguished by border treatment
+  // rather than by a hue of its own.
+  shipped: {
+    text: 'shipped fixture',
+    title:
+      'This step used a transaction shipped with the repository. It was never observed on a live network, and no chain was contacted.',
+    className: 'border-dashed border-border-bright bg-surface-raised text-muted-dim',
+  },
+};
+
 function KindBadge({ kind }: { kind: BeatKind }) {
-  const onChain = kind === 'on-chain';
+  const { text, title, className } = KINDS[kind];
   return (
-    <span
-      className={`col-head rounded-[3px] border px-2 py-0.5 ${
-        onChain
-          ? 'border-permit-line bg-permit-dim text-permit'
-          : 'border-border-bright bg-surface-raised text-muted-dim'
-      }`}
-      title={
-        onChain
-          ? 'This step reads from or writes to Stellar testnet.'
-          : 'This step runs in your browser. Nothing is submitted or enforced on-chain.'
-      }
-    >
-      {onChain ? 'on-chain' : 'computed locally'}
+    <span className={`col-head rounded-[3px] border px-2 py-0.5 ${className}`} title={title}>
+      {text}
     </span>
   );
 }

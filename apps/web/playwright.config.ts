@@ -3,11 +3,11 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * The browser half of the verification.
  *
- * PLAN-V2 §6.3 asks for the demo stepper to complete end to end against real
+ * PLAN-V2 §6.3 asks for the simulator's stepper to complete end to end against real
  * testnet, twice, from a clean browser profile. The server half of that was
  * already evidenced by calling the routes with curl; what curl cannot reach is
  * the client — in particular the `sessionStorage` rehydration at
- * `DemoStepper.tsx:111`, which is the actual warm-state surface item 3 is
+ * `SimulatorStepper.tsx`, which is the actual warm-state surface item 3 is
  * aimed at.
  *
  * This suite is deliberately NOT part of `npm test` and NOT in the default CI
@@ -48,7 +48,7 @@ export default defineConfig({
     // The production artifact, not `next dev`. This is the same output the
     // demo-signer bundle fence in CI greps.
     command: 'npx next start --port 3000',
-    url: 'http://127.0.0.1:3000/demo',
+    url: 'http://127.0.0.1:3000/app/simulator',
     reuseExistingServer: false,
     timeout: 120_000,
     stdout: 'pipe',
