@@ -31,7 +31,7 @@ export function Section({
           {title}
         </h2>
         {subtitle !== undefined && (
-          <p className="max-w-[78ch] text-[13px] leading-relaxed text-muted">{subtitle}</p>
+          <p className="measure text-[13px] leading-relaxed text-muted">{subtitle}</p>
         )}
       </header>
       {children}

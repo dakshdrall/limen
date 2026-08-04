@@ -146,7 +146,7 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 cursor-pointer rounded-[3px] px-2 py-1 text-[13px] text-muted-dim transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+            className="-mr-1 -mt-1 cursor-pointer rounded-[3px] px-2 py-1 text-[13px] text-muted-dim transition-colors hover:text-foreground"
           >
             <span aria-hidden="true">✕</span>
           </button>
@@ -154,14 +154,19 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
 
         {status === 'done' ? (
           <div ref={confirmationRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+            {/* Named releases rather than "soon", and re-aimed once already:
+                this promised live ingest and smart-account install, both of
+                which have since landed on testnet. A waitlist that keeps
+                promising what has already shipped is a waitlist nobody on it
+                can use to judge progress. */}
             <p className="text-[13.5px] leading-relaxed text-muted">
-              Recorded. You will hear from us when live ingest and smart-account install land — not
-              before.
+              Recorded. You will hear from us when a boundary can be installed from the browser, and
+              when this leaves testnet — not before.
             </p>
             <button
               type="button"
               onClick={onClose}
-              className="self-start cursor-pointer rounded-[4px] border border-border-bright px-3.5 py-2 text-[13px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
+              className="btn" data-variant="secondary"
             >
               Close
             </button>
@@ -220,13 +225,13 @@ export function WaitlistModal({ open, onClose }: { open: boolean; onClose: () =>
             <button
               type="submit"
               disabled={status === 'submitting'}
-              className="cursor-pointer rounded-[4px] border border-accent bg-accent-dim px-3.5 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:border-border-default disabled:bg-transparent disabled:text-faint"
+              className="btn" data-variant="primary"
             >
               {status === 'submitting' ? 'Submitting…' : 'Join'}
             </button>
 
             <p className="text-[12px] leading-relaxed text-muted-dim">
-              Stored to announce the two releases below. Not sold, not shared, no other mail.
+              Stored to announce those two releases. Not sold, not shared, no other mail.
             </p>
           </form>
         )}

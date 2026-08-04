@@ -1,0 +1,115 @@
+{
+  "network": "testnet",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "recordedAt": "2026-08-02",
+  "note": "Produced against live testnet by scripts/, except where a block names a different producer. Every hash here is checkable in an explorer. No secret key appears in this file or anywhere in the repository; the accounts below are disposable testnet accounts.",
+
+  "uploads": {
+    "account": "765c2f5d9ea414f18fbbfab77629d9609a9875dc31ee400b84e3031ff6446cf6",
+    "ed25519Verifier": "dc3b862f2a16832f7815be0c232111bb04d6934cb9ee918b492d4a65267b664a",
+    "webauthnVerifier": "268dc7fc327aa3764ca6e89019d5cdc55a5c1e6aed7cd87491da01f24f8e2177",
+    "spendingLimitPolicy": "7703cb5dd53a89e75dffc59938fde4e0f96d506d39a69967d704926e16a25598"
+  },
+
+  "shared": {
+    "ed25519Verifier": {
+      "contract": "CA3ZVES4QX6QQE7EUALSWFYHOHG6XZ3E65DCGCGODI6GRUSVJ75HPGZX",
+      "deployTx": "41c2459fa8479b4720079181ca06814d5a6fafff2c0e8655bcb283bb7cf81e78"
+    },
+    "webauthnVerifier": {
+      "contract": "CCC4T3F7QDOPQGBJA23PU3JXTQWZTOT5CEO3NN2P2G4HTNN5OF2IAKWY",
+      "deployTx": "f95ff610f348330acc452c71833885aa8fb8793bb67e0f8223abd7c47d18be50"
+    },
+    "spendingLimitPolicy": {
+      "contract": "CDWPYL45SZDHFPF7CZK4PLXFUQPNP4WTW4URIFVQZ4I65HQFYBTH4CSE",
+      "deployTx": "8935d56adb08fd0d2ff7a62e2d62fa2b6dadef77e931825cd31fd7e50d2b4fe4"
+    }
+  },
+
+  "walkthrough": {
+    "smartAccount": "CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V",
+    "deployTx": "d9e735f3ac9d58f17c405d0cee2b21042592e947fe349651d8d5d76c6e76dc8a",
+    "ownerSigner": "GAROIM2HS4IQ4Q2A7GEANZK2RVH3HYX7RGY6FUOHLL7IVEYNELBFNXQT",
+    "agentSigner": "GBFP3AFILGWW3Z7T76HYYBICBBD4Z4WZDG7ZMB3XPJ2LUBC2S5UVE3T4",
+    "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "producedBy": "node packages/chain/scripts/testnet.mjs walkthrough",
+    "installTx": "173bcdef575913366e7e2d52cdefdba29d238084916f965f31caa383f21c6702",
+    "contextRuleId": 5,
+    "contextRuleIdNote": "Rule ids come from an on-chain counter, so each run of the script installs a new one. The script reads the id back out of the transaction rather than assuming it; this is the id the recorded run produced.",
+    "cap": "1000000",
+    "windowLedgers": 17280,
+    "permittedTx": "59cfaf3718fbe19887b9efb19a2284de4d6f85090506a132aff26d29a37841e9",
+    "rejectedTx": "c4fff69b5aedfc89d696e99cb90fdc435ae4c7a8e0eda817f49ab681826f004b",
+    "rejectedError": "SpendingLimitExceeded#3221",
+    "firstRun": {
+      "note": "The same four steps driven by hand before the script existed, kept because they are an independent second run on a different context rule (id 1).",
+      "installTx": "60100240e853e07784193bdeff087c26f288afecc115b2c6f050197a699516c6",
+      "permittedTx": "59bf4c2449e7139b0c127812f473c7aebcebb9daed01b5e3e31c7f06b6be65ca",
+      "rejectedTx": "e763a8c499dc67bfedb7d135924822577972d61b01830f4622f987827e0a0737"
+    }
+  },
+
+  "liveDerivation": {
+    "note": "The other half of the claim, and the half the scripts do not cover: a boundary derived from a transaction that was observed on a live network rather than from a shipped fixture. Recorded here so the page that cites it reads the hash instead of restating it.",
+    "producedBy": "step 1 of /app/simulator, driven by hand in a browser — not by scripts/ and not by the test suite",
+    "hash": "525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e",
+    "ledger": 3929381,
+    "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "function": "transfer",
+    "observedAmount": "1000000",
+    "derivedCap": "1000000",
+    "derivedCapNote": "The derived cap equals the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
+    "installedSeparately": "This transaction was not piped into the install below. The recorded install was built by scripts/testnet.mjs from the same parameters the lowering produces; ingest-to-install in one pass needs a browser signer, which does not exist yet. Both halves are real and they are recorded as two runs, because that is what they are."
+  },
+
+  "denyAxisSurvey": {
+    "note": "One rule (id 2) with a 5,000,000 cap on the native SAC, plus a short-lived rule (id 3) for the expiry axis. Every attempt reached a ledger and failed there; none is simulation-only. `sim` is the error simulation reported, `ledger` the error decoded from the submitted transaction's diagnostic events.",
+    "liveRuleInstallTx": "d5b835b2edc654694daff1084cce75561a8e1eed062d648cd7eb877a09e1a5f0",
+    "shortRuleInstallTx": "f1206b01dd894276a8f58c79137c7fd756e265ea349fa410301375877ce4524c",
+    "axes": [
+      {
+        "axis": "amount",
+        "attempt": "transfer above the cap",
+        "sim": "SpendingLimitExceeded#3221",
+        "ledger": "SpendingLimitExceeded#3221",
+        "hash": "ac4775493a581f2ddc8b72c54bebf1e8ba9e09ba33be5aa4e48e9f7fb0117a77"
+      },
+      {
+        "axis": "function",
+        "attempt": "approve on the permitted token contract",
+        "sim": "NotAllowed#3223",
+        "ledger": "NotAllowed#3223",
+        "hash": "45a0eb2002ac8002d4abe3206979887ba189614794748cb30d2365b0b8c21f58"
+      },
+      {
+        "axis": "asset",
+        "attempt": "transfer of a different token",
+        "sim": "UnvalidatedContext#3002",
+        "ledger": "UnvalidatedContext#3002",
+        "hash": "1312be89cf3b659e825071253be2972ce1aa9167afb65eca5d0d8f785ec64880"
+      },
+      {
+        "axis": "contract",
+        "attempt": "execute on the smart account itself",
+        "sim": "UnvalidatedContext#3002",
+        "ledger": "UnvalidatedContext#3002",
+        "hash": "6b7f4dedfd0e563da16e9510b09cfe2a035e2f340ed8f238c428561ace1c9389"
+      },
+      {
+        "axis": "invocation",
+        "attempt": "appended second invocation",
+        "sim": "ContextRuleIdsLengthMismatch#3014",
+        "ledger": "ContextRuleIdsLengthMismatch#3014",
+        "hash": "e365e6819908a8567cec5afba2a203274df8591f895e34ea21405af202867149"
+      },
+      {
+        "axis": "expiry",
+        "attempt": "same call after valid_until",
+        "sim": "UnvalidatedContext#3002",
+        "ledger": "trapped; contract code not recovered from diagnostics",
+        "ledgerNote": "The transaction failed on-ledger, but this run's diagnostic scan did not surface a contract error code for it, so only the simulation error is attributed. Recorded as it happened rather than filled in from the simulation.",
+        "hash": "f5ebce5170494ddd40eb73096cceaa32de4b287ec9b08bb9d1e53b7e1a848405"
+      }
+    ]
+  }
+}

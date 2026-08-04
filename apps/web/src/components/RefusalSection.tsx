@@ -66,10 +66,10 @@ export function RefusalSection({
       <Block title="What was attempted">{attempted}</Block>
 
       <Block title="Why Limen refused">
-        <p className="max-w-[80ch] text-[13px] leading-relaxed text-foreground">
+        <p className="measure text-[13px] leading-relaxed text-foreground">
           {EXPLANATIONS[code] ?? FALLBACK}
         </p>
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted-dim">
+        <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           <span className="col-head mr-2 text-muted-dim">detail</span>
           <span className="value break-words">{message}</span>
           {detail !== undefined && detail.length > 0 && (
@@ -83,12 +83,12 @@ export function RefusalSection({
 
       {/* The load-bearing part. Without this, a refusal reads as a failure. */}
       <Block title="What it did not do">
-        <ul className="flex max-w-[80ch] flex-col gap-2">
+        <ul className="flex measure flex-col gap-2">
           <DidNot>approximate the constraint with the nearest primitive that fits</DidNot>
           <DidNot>drop the part it could not express and emit the rest</DidNot>
           <DidNot>widen a cap, a window, or an allowlist to make the flow fit</DidNot>
         </ul>
-        <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-muted">
+        <p className="measure text-[12.5px] leading-relaxed text-muted">
           A policy Limen cannot derive exactly is not emitted at all. Silence here is the
           conservative outcome; a policy that looked plausible would not be.
         </p>

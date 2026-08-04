@@ -21,19 +21,55 @@ jobs:
 
       - run: npm ci
 
-      # No explicit @limen/core build step: apps/web has both a `prebuild` and
-      # a `pretest` that build the core workspace first, so whichever apps/web
-      # step runs earliest compiles core as its first action.
+      # No explicit @limen/core build step: every workspace that imports
+      # `@limen/core` by name has its own `prebuild` and `pretest` that build
+      # it first, so whichever step runs earliest compiles core as its first
+      # action.
       #
       # The core suite genuinely needs no build — it imports from `src`. The
-      # web suite does: `@limen/core`'s `exports` point at `dist/`, which a
-      # fresh checkout has never produced. That distinction cost a red build
-      # once, because a warm `dist/` on a developer machine hides it entirely.
+      # web and chain suites do: `@limen/core`'s `exports` point at `dist/`,
+      # which a fresh checkout has never produced. That distinction cost a red
+      # build twice, because a warm `dist/` on a developer machine hides it
+      # entirely.
+      #
+      # The second time is the instructive one. The comment here used to say
+      # "apps/web has both a prebuild and a pretest", which was true and was
+      # not the guarantee it sounded like: it made the build order a property
+      # of which workspace happened to run first, and `packages/chain` — which
+      # did not import core when this was written, and does now — sat ahead of
+      # apps/web with a bare `vitest run`. `lower.test.ts` could not resolve
+      # `@limen/core` and the job died three steps in. The rule is now per
+      # workspace rather than per running order.
       - name: Test @limen/core (deny-case harness)
         run: npm run test -w @limen/core
 
+      # The lowering harness. If this goes red, a proposal is being installed
+      # onto the chain as something broader than what was derived and reviewed,
+      # or a refusal that should have named its constraint did not. Neither is
+      # visible from the core suite, which never looks at what installs.
+      #
+      # These tests reach no network. The testnet scripts that confirm the same
+      # claims against a live host are deliberately not run here, for the same
+      # reason the e2e suite is not: every run spends testnet funds.
+      - name: Test @limen/chain (lowering, refusals, encodings)
+        run: npm run test -w @limen/chain
+
       - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web
+
+      # The landing page states counts — tests passing, transactions recorded,
+      # deny axes refused on-ledger — and states them because a project that
+      # quantifies its own evidence is checkable in a way that adjectives are
+      # not. A hand-typed count rots, and a rotted number on a page about
+      # honesty is worse than no number, so `evidence.json` is generated and
+      # this step proves the committed copy still matches.
+      #
+      # It re-runs the three suites to do that, which is the one duplicated
+      # cost in this workflow. The alternative — trusting the steps above to
+      # have left a report behind — makes the guarantee depend on run order,
+      # and a freshness check that can silently pass is not one.
+      - name: Prove the landing's numbers are not stale
+        run: npm run evidence:check
 
       - name: Lint
         run: npm run lint

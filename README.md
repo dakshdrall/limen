@@ -14,10 +14,10 @@ and never holds a key.
 
 ## The thing this proves
 
-One screen shows a transaction that was performed, the policy Limen derived from
-it, and **a table of adjacent transactions the policy now refuses** — a larger
-amount, a different asset, an extra function call, a different contract, an
-appended invocation, an expired window.
+`/app/simulator` shows a transaction that was performed, the policy Limen
+derived from it, and **a table of adjacent transactions the policy now
+refuses** — a larger amount, a different asset, an extra function call, a
+different contract, an appended invocation, an expired window.
 
 That deny table is the product. Each row changes exactly one dimension of the
 observed transaction, so a `PERMIT` anywhere in the table names the single
@@ -25,18 +25,69 @@ over-permissive dimension of the derived policy. The rows are produced by
 `generateDenyCases` and adjudicated by `evaluate` — the same functions the test
 suite runs, executing in the browser.
 
-That pipeline runs against live testnet, not only against shipped fixtures. A
-worked example, checkable in an explorer rather than taken on trust:
-[`525d5cf0…fb97a35e`](https://stellar.expert/explorer/testnet/tx/525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e)
-is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of
-`/demo` in ledger 3929381, read back through RPC, and turned into a policy whose
-derived spending cap is that same 1000000 — the boundary is exactly the observed
-flow, which is the claim.
+The same six axes, adjudicated by the network instead, are the landing page and
+`/app/policies/[id]`. Those rows carry transaction hashes; the ones above do
+not, and the difference between the two is the subject of half the caveats in
+this file.
 
-That run was **driven by hand through the `/demo` UI, by a person, not by the
-test suite**: all five steps completed in one pass in a real browser. An
-automated suite covers the same walkthrough on demand (see [the end-to-end
-suite](#the-end-to-end-suite)), but this hash is the human-verified one.
+### The boundary is now enforced by the network, not only by our evaluator
+
+A smart account is deployed on testnet, a derived boundary is installed on it,
+and an agent holding its own key operates inside it. Four hashes, all checkable
+in an explorer:
+
+| | |
+|---|---|
+| Smart account deployed | [`d9e735f3…`](https://stellar.expert/explorer/testnet/tx/d9e735f3ac9d58f17c405d0cee2b21042592e947fe349651d8d5d76c6e76dc8a) → [`CBNPFNPW…`](https://stellar.expert/explorer/testnet/contract/CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V) |
+| Policy installed | [`173bcdef…`](https://stellar.expert/explorer/testnet/tx/173bcdef575913366e7e2d52cdefdba29d238084916f965f31caa383f21c6702) |
+| Permitted transaction | [`59cfaf37…`](https://stellar.expert/explorer/testnet/tx/59cfaf3718fbe19887b9efb19a2284de4d6f85090506a132aff26d29a37841e9) |
+| **Network-rejected transaction** | [`c4fff69b…`](https://stellar.expert/explorer/testnet/tx/c4fff69b5aedfc89d696e99cb90fdc435ae4c7a8e0eda817f49ab681826f004b) — `SpendingLimitExceeded#3221` |
+
+The rejection is the OpenZeppelin `spending_limit` policy refusing inside
+`__check_auth`, in a ledger, with fees burned. Not our evaluator's verdict.
+
+**All six deny axes are refused on-chain**, each with its own failed transaction:
+
+| Axis | The attempt | Contract error |
+|---|---|---|
+| `amount` | transfer above the cap | [`SpendingLimitExceeded#3221`](https://stellar.expert/explorer/testnet/tx/ac4775493a581f2ddc8b72c54bebf1e8ba9e09ba33be5aa4e48e9f7fb0117a77) |
+| `function` | `approve` on the permitted token | [`NotAllowed#3223`](https://stellar.expert/explorer/testnet/tx/45a0eb2002ac8002d4abe3206979887ba189614794748cb30d2365b0b8c21f58) |
+| `asset` | transfer of a different token | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/1312be89cf3b659e825071253be2972ce1aa9167afb65eca5d0d8f785ec64880) |
+| `contract` | a call to a different contract | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/6b7f4dedfd0e563da16e9510b09cfe2a035e2f340ed8f238c428561ace1c9389) |
+| `invocation` | an appended second invocation | [`ContextRuleIdsLengthMismatch#3014`](https://stellar.expert/explorer/testnet/tx/e365e6819908a8567cec5afba2a203274df8591f895e34ea21405af202867149) |
+| `expiry` | the same call after `valid_until` | [`UnvalidatedContext#3002`](https://stellar.expert/explorer/testnet/tx/f5ebce5170494ddd40eb73096cceaa32de4b287ec9b08bb9d1e53b7e1a848405) — see note below |
+
+One honest caveat on the last row: that transaction failed on-ledger, but the
+survey run did not recover a contract error code from its diagnostic events, so
+only the simulation error is attributed to it. It is recorded as it happened
+rather than filled in from the simulation.
+
+**A failure is not a refusal until its error code says so.** The first
+over-limit submission returned `FAILED` and was nearly recorded as proof; it was
+`resourceLimitExceeded`, because the footprint came from a recording-mode
+simulation that never runs `__check_auth` and therefore never reaches the
+policy. Every submission is now simulated a second time with the signed auth
+entry attached, and every failure is decoded to a contract error code before it
+is called a refusal — see `isBoundaryRefusal` in `packages/chain/src/errors.ts`.
+
+Full record, including the WASM hashes and the OpenZeppelin tag they were built
+from: [`packages/chain/deployments/testnet.json`](./packages/chain/deployments/testnet.json).
+
+### Deriving from a live transaction
+
+The derivation pipeline runs against live testnet too, not only against shipped
+fixtures. A worked example, checkable in an explorer rather than taken on trust:
+[`525d5cf0…fb97a35e`](https://stellar.expert/explorer/testnet/tx/525d5cf00e92097dddc2706514371acd1f305c4f4f803689fc477289fb97a35e)
+is a real Soroban SAC `transfer` of 1000000 stroops, performed by step 1 of the
+simulator in ledger 3929381, read back through RPC, and turned into a policy
+whose derived spending cap is that same 1000000 — the boundary is exactly the
+observed flow, which is the claim.
+
+That run was **driven by hand through the UI, by a person, not by the test
+suite**: every step completed in one pass in a real browser. An automated suite
+covers the same walkthrough on demand (see [the end-to-end
+suite](#the-end-to-end-suite)), but this hash is the human-verified one. It was
+performed at `/demo`, which is now `/app/simulator`; the path redirects.
 
 ---
 
@@ -53,28 +104,71 @@ No credentials are required. The app ships JSON fixtures and loads one by
 default, so the whole pipeline — ingest → synthesize → deny table → install
 payload — runs with no RPC access and no API key.
 
-### The two screens
+### The screens
 
-- **`/`** — the argument, then the review: a transaction, the policy derived
-  from it, the deny table, and the install payload. Paste any Soroban testnet
-  transaction hash to run it on your own flow, or pick a shipped preset.
-- **`/demo`** — a five-step guided walkthrough that performs a real testnet
-  transaction for you, observes it live, derives the boundary, and tries to
-  exceed it. No wallet and no funded account needed. Each step states whether
-  what happened was **on-chain** or **computed locally**; the two are never
-  blurred.
+- **`/`** — the argument, with the hashes that back it: the mechanism worked
+  through one live-ingested transaction and the rule installed from it, the six
+  refusals the network produced against that boundary, and counts generated
+  from the test run rather than typed. Static, and it holds no interactive demo
+  — that moved to `/app/simulator` in step 10, and step 12 stopped the landing
+  keeping a second copy of it.
+- **`/app/accounts`** — smart accounts this browser has been shown, and for each
+  one the boundary currently installed on it, read from the chain at a stated
+  ledger. Not restored from browser storage.
+- **`/app/policies/new`** — observe a transaction, review the boundary derived
+  from it, and see it lowered onto OpenZeppelin primitives or refused with the
+  constraint named. It stops short of installing, and says why in place of a
+  button.
+- **`/app/policies/[id]`** — the refusal screen: a permitted transaction beside
+  the attempts the network refused, each with its hash. This is the product.
+- **`/app/activity`** — contract events across accounts, with the ledger range
+  actually scanned printed beside them.
+- **`/app/simulator`** — the guided walkthrough, six steps, formerly `/demo`
+  (the old path redirects). Performs a real testnet transaction for you or
+  starts from a shipped flow, derives the boundary, tries to exceed it, and then
+  asks whether an OpenZeppelin account could hold it at all. Each step states
+  whether what happened was **on-chain**, a **shipped fixture**, or **computed
+  locally**; the three are never blurred.
+- **`/docs`** — how to point an agent at an installed policy: who holds which
+  key, what the owner installs, what the agent signs, and what the network does
+  when it tries to exceed the boundary.
 
 ### Optional configuration
 
 | Variable | Effect when unset |
 |---|---|
 | `SOROBAN_RPC_URL` | Live testnet ingest is unavailable and the hash input is disabled with the reason on screen; fixtures still work. It never silently substitutes a fixture for the transaction you asked for. Server-side only — never exposed to the browser. |
-| `LIMEN_DEMO_SECRET` | Step 1 of `/demo` is unavailable and the walkthrough starts from a shipped transaction instead. Testnet seed for the disposable demo account. Server-side only. |
+| `LIMEN_DEMO_SECRET` | Step 1 of the simulator cannot submit, and the walkthrough starts from a shipped flow instead — which it can also do at any time with the account configured. Testnet seed for the disposable demo account. Server-side only. |
 | `LIMEN_DEMO_DESTINATION` | As above. The fixed account the demo transfer is sent to. |
 | `ANTHROPIC_API_KEY` | The plain-English explanation is skipped and the raw structured rationale is shown instead. The deny table is unaffected. |
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
 | `NEXT_PUBLIC_SITE_URL` | OG and Twitter card URLs resolve against Vercel's production hostname, or `http://localhost:3000` outside it. |
+
+### The numbers on the landing page
+
+```bash
+npm run evidence         # regenerate apps/web/src/generated/evidence.json
+npm run evidence:check   # fail if the committed copy has drifted
+```
+
+The landing page states counts — tests passing, testnet transactions recorded,
+deny axes refused on-ledger, context rules installed, Rust files in this
+repository. None of them is typed. `scripts/evidence.mjs` runs the three suites
+and reads `packages/chain/deployments/testnet.json`, and `evidence:check` is a
+CI step that regenerates and compares, so adding a test without regenerating is
+a red build rather than a page that quietly understates itself.
+
+That check proves freshness and nothing else — a generator with a wrong
+definition of "transactions recorded" would agree with itself forever. So
+`apps/web/test/evidence.test.ts` re-derives each chain figure independently,
+deliberately by a different route than the generator uses, and asserts the two
+agree. The same argument that keeps `evaluate` separate from `synthesize`.
+
+The file carries no timestamp, on purpose: one would change on every run, so
+`evidence:check` would fail on a clean tree and the only way to stay green
+would be committing a regenerated file on every push — which trains everyone to
+regenerate without reading, which is exactly how a wrong number gets through.
 
 ### The end-to-end suite
 
@@ -83,7 +177,7 @@ npm run build
 npm run e2e -w @limen/web
 ```
 
-Drives `/demo` in a real Chromium against live testnet: performs a transaction,
+Drives `/app/simulator` in a real Chromium against live testnet: performs a transaction,
 observes it back through RPC, derives the boundary, tries to exceed it, reads
 the payload — then reloads the tab and asserts the walkthrough resumes by
 recomputing from the stored hash rather than restoring a stored answer. It
@@ -113,10 +207,18 @@ English. Its answers become *arguments* to the synthesizer, never its output.
 There is no LLM anywhere in the path that produces authorization logic.
 
 **2. Composition only.** Every policy emitted is a configuration of an existing
-audited OpenZeppelin primitive — `spending_limit` and function allowlists. No
-Rust is generated. If a constraint cannot be expressed by composing those,
+audited OpenZeppelin primitive. No Rust is generated, and none is written by
+hand either. If a constraint cannot be expressed by composing those,
 `synthesize` throws with the constraint named rather than guessing. Future
 codegen is gated behind a `compositionOnly: false` flag that is never set.
+
+This rule now has teeth at install time as well as at derivation time.
+`lower` refuses a proposal it cannot install using only audited primitives, and
+`lower` refuses outright to lower anything with `compositionOnly: false`. The
+temptation this resists is concrete: a ~80-line Rust function-allowlist policy
+would close the multi-contract gap tomorrow. It would also be unaudited code in
+the authorization path, which is the one place this project has said it will not
+put any.
 
 **3. Limen custodies nothing of yours.** No *user's* secret key reaches the
 server, an environment variable, or browser storage. Signing for install is
@@ -188,7 +290,7 @@ be seen succeeding gives you no evidence about when it declines.
 
 ## The demo account
 
-Step 1 of `/demo` submits a real transaction to Stellar testnet so a reviewer
+Step 1 of the simulator submits a real transaction to Stellar testnet so a reviewer
 with no wallet can still complete the walkthrough. That account is **disposable
 and holds trivial funds; its compromise is uninteresting by design.**
 
@@ -227,13 +329,23 @@ packages/core/      @limen/core — dependency-free, no network IO, no DOM
   synthesize.ts     deterministic derivation
   evaluate.ts       independent adjudication
   denycases.ts      single-axis mutations
+packages/chain/     @limen/chain — everything that touches the network
+  lower.ts          PolicyProposal -> InstallPlan; refuses what it cannot enforce
+  plan.ts           plan types and the OpenZeppelin limits they respect
+  authpayload.ts    the AuthPayload __check_auth expects, and the auth digest
+  errors.ts         contract error tables; is this a refusal or a resource failure
+  wasm/manifest.json  the OZ tag, build command, and four WASM hashes
+  deployments/      recorded testnet addresses and transaction hashes
+  scripts/          the testnet scripts behind those hashes
 apps/web/           Next.js 16, App Router, TypeScript, Tailwind
   src/app/api/ingest/          tx hash -> ObservedTransaction (nodejs runtime)
   src/app/api/explain/         Claude: structured rationale -> plain English
   src/app/api/install-preview/ proposal -> Soroban ScVal XDR
   src/app/api/demo/perform/    submits the guided demo's testnet transaction
-  src/app/page.tsx             the review screen
-  src/app/demo/page.tsx        the five-step guided walkthrough
+  src/app/page.tsx             the landing: mechanism, refusals, numbers
+  src/app/app/simulator/       the six-step guided walkthrough
+  src/app/docs/page.tsx        pointing an agent at an installed policy
+  src/generated/evidence.json  the landing's counts; written by scripts/evidence.mjs
   src/lib/extract.ts           XDR -> domain model; accurate or absent
   src/lib/demo-signer.ts       the only signer in the repo; testnet-fenced
   src/fixtures/                shipped JSON transactions
@@ -241,7 +353,51 @@ apps/web/           Next.js 16, App Router, TypeScript, Tailwind
 ```
 
 `packages/core` is free of Next.js and browser globals so a future MCP server
-can import it directly.
+can import it directly. It has no dependency on `packages/chain`, and the
+dependency never runs the other way: the synthesizer is the only thing that
+produces policy, and lowering it onto someone else's primitives must never be
+able to reach back and change what was derived.
+
+`lower.ts` is pure — no SDK, no network, no clock — for the same reason
+`synthesize` is: it can then be tested exhaustively without either.
+
+### Reproducing the chain layer
+
+The four contract WASMs come from
+[`OpenZeppelin/stellar-contracts`](https://github.com/OpenZeppelin/stellar-contracts)
+at the tag pinned in `packages/chain/src/wasm/manifest.json`. Limen writes no
+Rust; the build is a one-time step whose output is recorded by hash, not
+committed:
+
+```bash
+git clone --depth 1 --branch v0.7.2 https://github.com/OpenZeppelin/stellar-contracts
+cd stellar-contracts
+stellar contract build --package multisig-account-example
+stellar contract build --package multisig-ed25519-verifier-example
+stellar contract build --package multisig-webauthn-verifier-example
+stellar contract build --package multisig-spending-limit-policy-example
+```
+
+Byte-for-byte reproducibility across toolchains is **not** claimed and has not
+been tested. The manifest records the `stellar` CLI and `rustc` versions the
+recorded hashes were produced with; rebuild and compare if it matters to you.
+
+To re-run the walkthrough against testnet:
+
+```bash
+npm run build:chain
+LIMEN_DEPLOYER_SECRET=S... LIMEN_OWNER_SECRET=S... LIMEN_AGENT_SECRET=S... \
+  node packages/chain/scripts/testnet.mjs walkthrough
+```
+
+It installs a fresh context rule, submits an over-limit transfer, and then
+submits the permitted one, printing all three hashes. Like the e2e suite, it is
+deliberately not in CI: every run spends testnet funds.
+
+The agent's secret is a **separate key from the owner's**, and that separation
+is the claim. Limen does not assert that an agent holds no key — it asserts that
+the key an agent holds cannot exceed the installed boundary, which is what the
+rejected transaction above demonstrates.
 
 ---
 
@@ -250,17 +406,50 @@ can import it directly.
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
 
-- **No smart account is deployed.** Installing requires an OpenZeppelin smart
-  account to install *onto*, and this MVP does not deploy one. The Install
-  section serializes the real payload — a Soroban `ScVal`, verified to
-  round-trip through XDR — and disables the button. The enclosing transaction
-  (entrypoint name, sequence number, fee, auth entries) depends on the deployed
-  account's interface and is not assembled.
-- **The deny table proves refusal as adjudicated by this repository's
-  evaluator, not as enforced on-chain.** `evaluate` is an independent
-  implementation of the same rules, which is a real check against a wrong
-  synthesizer — but it is not the OpenZeppelin contract. Nothing here has been
-  tested against a deployed policy contract.
+- **Nothing in the app can sign, so nothing in the app can install.** The
+  accounts, new-policy, refusal, and activity screens are built and read live
+  from testnet. Writing — deploy, install, revoke — needs an owner signature,
+  and no browser signer exists yet: the passkey path is unbuilt, and so is the
+  local ed25519 keypair that would stand in for it. The new-policy screen
+  derives a boundary, lowers it, and then says this in place of a button. Every
+  install recorded above was signed by
+  `packages/chain/scripts/testnet.mjs`, which is not part of the application.
+  See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
+- **On `/app/simulator`, the deny table proves refusal as adjudicated by this
+  repository's evaluator, not as enforced on-chain.** That screen runs
+  `evaluate` in the browser. `evaluate` is an independent implementation of the
+  same rules, which is a real check against a wrong synthesizer — it is not the
+  OpenZeppelin contract. Do not read its DENY rows as network refusals; the
+  ones with transaction hashes above are the network's. The refusal screen at
+  `/app/policies/[id]` renders those hashes and nothing else: no locally
+  adjudicated row appears on it, precisely so the two cannot be confused.
+
+  Rescoped in v3 step 12. This named `/` as well, and correctly: the landing
+  ran the same local deny table. The rebuilt landing shows the recorded testnet
+  survey instead — six network refusals with six hashes — so the screen that
+  used to need this caveat now carries the opposite claim, and leaving its name
+  in the list would understate it. Both directions of this sentence are pinned
+  by `apps/web/test/caveats.test.ts`, so neither a new screen nor a moved one
+  can widen or narrow it quietly.
+- **Only single-token transfer flows can be installed.** OpenZeppelin ships
+  three policies — `simple_threshold`, `weighted_threshold`, `spending_limit` —
+  and none of them is a function allowlist. A `['transfer']` allowlist needs no
+  allowlist policy, because `spending_limit::enforce` panics `NotAllowed` for
+  every other function name; that subsumption is asserted explicitly in
+  `packages/chain/src/lower.ts` and confirmed on testnet. **Any other function
+  set, and any contract with no spending limit to constrain it, refuses to
+  install** and names the constraint. A router call beside a token transfer is
+  the common case that refuses: a context rule with no policy would permit every
+  function on that router, which is broader than what was derived and reviewed.
+  Those flows stay in the simulator, evaluated locally, marked not installable —
+  the `swap-two-calls` preset at `/app/simulator` is one, and step 6 of that
+  screen names the constraint rather than omitting the flow. Closing that gap
+  needs a policy contract nobody has audited, so it is the trigger for the
+  codegen work rather than a reason to write Rust now.
+- **`validFromLedger` is not installed.** An OpenZeppelin `ContextRule` has
+  `valid_until` and no lower bound. The field stays in the domain model as
+  provenance — the ledger the policy was derived from — is labelled as computed
+  locally, and is never rendered inside an on-chain rule block.
 - **Live RPC ingest has not met the long tail of real transactions.** The
   extraction path is implemented, and its refusal behaviour is covered by tests
   built on constructed Soroban metadata — a readable transfer, a transfer with a

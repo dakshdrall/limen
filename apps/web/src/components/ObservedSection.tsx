@@ -4,6 +4,7 @@ import type { ObservedTransaction } from '@limen/core';
 import { Address } from './Address';
 import { decimalise } from '@/lib/format';
 import { UNREADABLE_ARG } from '@/lib/markers';
+import { ExplorerLink } from '@/components/ExplorerLink';
 import { explorerTxUrl } from '@/lib/explorer';
 
 export function ObservedSection({ observed }: { observed: ObservedTransaction }) {
@@ -34,14 +35,7 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
               {explorer !== undefined && (
                 <>
                   {' — '}
-                  <a
-                    href={explorer}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-[3px] underline decoration-permit-line underline-offset-4 transition-colors hover:decoration-permit focus-visible:outline focus-visible:outline-1 focus-visible:outline-permit"
-                  >
-                    view on stellar.expert
-                  </a>
+                  <ExplorerLink href={explorer}>view on stellar.expert</ExplorerLink>
                 </>
               )}
               )
@@ -176,7 +170,7 @@ function Movements({ observed }: { observed: ObservedTransaction }) {
         </div>
       )}
 
-      <p className="max-w-[86ch] text-[12.5px] leading-relaxed text-muted-dim">
+      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         Amounts are integers in the asset&apos;s smallest unit; the parenthesised value is a display
         rendering only. Only <span className="font-mono text-deny">OUT</span> movements — those
         leaving the source account — contribute to a derived cap, and they are summed gross: an

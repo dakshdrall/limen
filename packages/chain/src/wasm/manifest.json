@@ -1,0 +1,37 @@
+{
+  "source": {
+    "repository": "https://github.com/OpenZeppelin/stellar-contracts",
+    "tag": "v0.7.2",
+    "commit": "a9c42169000638da937577f592ebf61a7a3c94ca"
+  },
+  "build": {
+    "command": "stellar contract build --package <name>",
+    "stellarCli": "27.1.0",
+    "rustc": "1.97.1",
+    "target": "wasm32v1-none",
+    "reproducible": false,
+    "reproducibilityNote": "Built once from the tag above with the toolchain above; the hashes below are what that build produced. Byte-for-byte reproducibility across toolchains is NOT claimed and has not been tested. Rebuild and compare if it matters to you."
+  },
+  "contracts": {
+    "account": {
+      "package": "multisig-account-example",
+      "wasmHash": "1815dda1b96ea6d23865be8a16ffcbe0b8336d15fc0d3d5ada776c06cb17afde",
+      "bytes": 41430
+    },
+    "ed25519Verifier": {
+      "package": "multisig-ed25519-verifier-example",
+      "wasmHash": "e02b00107a9e408c515cb25240bf9d99b45e043168ca56a15166fc5f7aac2804",
+      "bytes": 1780
+    },
+    "webauthnVerifier": {
+      "package": "multisig-webauthn-verifier-example",
+      "wasmHash": "982e841216dca296ba6b08e56f0de72295ad77cffc5406706e7ab16204b7fef7",
+      "bytes": 12272
+    },
+    "spendingLimitPolicy": {
+      "package": "multisig-spending-limit-policy-example",
+      "wasmHash": "5a45420db383bfc6166519780bdf54cda976f869e441e1a4d98666e4726cbec4",
+      "bytes": 14604
+    }
+  }
+}

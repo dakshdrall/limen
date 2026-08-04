@@ -26,11 +26,25 @@ const STORAGE_KEY = 'limen.demo.v1';
  */
 const VERSION = 1;
 
+/**
+ * The highest beat there is. Six since the simulator gained "could it be
+ * installed?"; the stepper exports the same number, and a state whose beat
+ * exceeds it is discarded rather than clamped.
+ */
+export const LAST_BEAT = 6;
+
 export interface DemoState {
   version: number;
-  /** 1–5; which beat the reviewer has reached. */
+  /** 1–6; which beat the reviewer has reached. */
   beat: number;
-  /** The transaction beat 1 produced, or null before it has run. */
+  /**
+   * The transaction step 1 produced, or null before it has run.
+   *
+   * A shipped fixture's hash goes in this same slot. Which one it is stays
+   * derivable — the fixture hashes are constants of this repository — so
+   * distinguishing a real transaction from a shipped one never needed a stored
+   * flag, and this object did not have to grow a field to gain a second source.
+   */
   hash: string | null;
 }
 
@@ -45,7 +59,12 @@ export function sanitise(raw: unknown): DemoState | null {
   const value = raw as Partial<DemoState>;
 
   if (value.version !== VERSION) return null;
-  if (typeof value.beat !== 'number' || !Number.isInteger(value.beat) || value.beat < 1 || value.beat > 5) {
+  if (
+    typeof value.beat !== 'number' ||
+    !Number.isInteger(value.beat) ||
+    value.beat < 1 ||
+    value.beat > LAST_BEAT
+  ) {
     return null;
   }
   if (value.hash !== null && (typeof value.hash !== 'string' || !/^[0-9a-f]{64}$/i.test(value.hash))) {

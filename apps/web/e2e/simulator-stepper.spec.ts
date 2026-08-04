@@ -20,7 +20,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 const STORAGE_KEY = 'limen.demo.v1';
 const TX_HASH = /^[0-9a-f]{64}$/;
 
-/** The five beats are the only `<ol>` on this page. */
+/** The six beats are the only `<ol>` on this page. */
 function beat(page: Page, index: number): Locator {
   return page.locator('ol').first().locator('> li').nth(index - 1);
 }
@@ -33,8 +33,10 @@ async function persisted(page: Page): Promise<unknown> {
 test('completes end to end against live testnet, then resumes from session state', async ({
   page,
 }) => {
-  await page.goto('/demo');
-  await expect(page.getByRole('heading', { name: 'Five steps, start to finish' })).toBeVisible();
+  await page.goto('/app/simulator');
+  await expect(
+    page.getByRole('heading', { name: 'Derivation, without a chain to write to' }),
+  ).toBeVisible();
 
   // A clean profile, asserted rather than assumed. The stepper writes its
   // initial state on mount, so "clean" is `INITIAL_STATE` rather than an empty
@@ -46,12 +48,15 @@ test('completes end to end against live testnet, then resumes from session state
   /* --- beat 1: perform, on-chain ---------------------------------------- */
 
   const one = beat(page, 1);
+  // The badge, not the blurb: step 1 renders `shipped fixture` when a preset
+  // was chosen instead, and this run must be the on-chain one.
   await expect(one).toContainText('on-chain');
+  await expect(one).not.toContainText('shipped fixture');
 
   // If the deployment has no demo account this button is absent and the beat
   // offers a preset instead. A preset run would prove nothing about testnet,
   // so this fails here rather than sliding into the cheaper path.
-  const perform = one.getByRole('button', { name: 'Perform a transaction' });
+  const perform = one.getByRole('button', { name: 'Perform a transaction on testnet' });
   await expect(
     perform,
     'beat 1 is not offering to submit — the demo account is unconfigured, and a preset run would not satisfy §6.3',
@@ -64,6 +69,8 @@ test('completes end to end against live testnet, then resumes from session state
 
   // The explorer link is part of the claim: a reviewer must be able to leave
   // the page and check the transaction exists.
+  // The link is only rendered for a hash that reached a ledger; a shipped
+  // fixture gets the stated absence instead.
   await expect(one.getByRole('link', { name: 'View on stellar.expert' })).toHaveAttribute(
     'href',
     `https://stellar.expert/explorer/testnet/tx/${hash}`,
@@ -72,7 +79,7 @@ test('completes end to end against live testnet, then resumes from session state
   /* --- beat 2: observe, on-chain read ------------------------------------ */
 
   const two = beat(page, 2);
-  await two.getByRole('button', { name: 'Observe it' }).click();
+  await two.getByRole('button', { name: 'Read it back from testnet' }).click();
 
   // Live, and provably not a fixture: the marker and the caveat share one slot
   // in `ObservedSection`, so asserting both directions pins which one rendered.
@@ -141,6 +148,23 @@ test('completes end to end against live testnet, then resumes from session state
   expect((await xdr.innerText()).trim().length).toBeGreaterThan(100);
   await expect(five).toContainText('nothing here is submitted');
 
+  /* --- beat 6: could it be installed? ------------------------------------- */
+
+  const six = beat(page, 6);
+  await five.getByRole('button', { name: 'Ask whether it could be installed' }).click();
+
+  // A single SAC transfer lowers cleanly — one contract, one spending limit —
+  // so this run must reach a plan. A refusal here would mean `lower` and
+  // `synthesize` disagree about the simplest flow there is, which is worth a
+  // named failure rather than a generic timeout.
+  await expect(six, 'lowering refused the simplest possible flow').not.toContainText(
+    'not enforceable on-chain',
+  );
+  await expect(six).toContainText('This plan is installable', { timeout: 90_000 });
+
+  // …and having said installable, it must not imply it installed anything.
+  await expect(six).toContainText('Nothing installs it here');
+
   /* --- the warm-state surface -------------------------------------------- */
 
   // §0: only the beat index and the hash may survive. A stored proposal, cap,
@@ -148,27 +172,30 @@ test('completes end to end against live testnet, then resumes from session state
   // this run. The Node test pins the allowlist; this pins what a real browser
   // actually wrote.
   const state = await persisted(page);
-  expect(state).toEqual({ version: 1, beat: 5, hash });
+  expect(state).toEqual({ version: 1, beat: 6, hash });
   expect(Object.keys(state as object).sort()).toEqual(['beat', 'hash', 'version']);
 
   // Reload in the same tab: `sessionStorage` survives, so this is the
-  // rehydration path at DemoStepper.tsx:111 plus the resume-observe effect
+  // rehydration path in `SimulatorStepper` plus the resume-observe effect
   // below it. Nothing is clicked after this point.
   await page.reload();
 
   const oneAfter = beat(page, 1);
   await expect(oneAfter.locator('dd').first()).toHaveText(hash);
-  await expect(oneAfter.getByRole('button', { name: 'Perform a transaction' })).toHaveCount(0);
+  await expect(
+    oneAfter.getByRole('button', { name: 'Perform a transaction on testnet' }),
+  ).toHaveCount(0);
 
-  // Beats 3–5 are recomputed from a re-fetched transaction, not restored.
+  // Beats 3–6 are recomputed from a re-fetched transaction, not restored.
   const fiveAfter = beat(page, 5);
   await expect(fiveAfter).toContainText('Unsigned payload', { timeout: 90_000 });
   await expect(fiveAfter.locator('pre')).not.toHaveText('Building…');
   await expect(beat(page, 2)).toContainText('(observed on testnet');
   await expect(beat(page, 4)).toContainText('6 refused');
+  await expect(beat(page, 6)).toContainText('This plan is installable', { timeout: 90_000 });
 
   // Resuming must not have performed a second transaction.
-  expect(await persisted(page)).toEqual({ version: 1, beat: 5, hash });
+  expect(await persisted(page)).toEqual({ version: 1, beat: 6, hash });
 
   // Recorded so the run is checkable against an explorer after the fact, which
   // is the only thing that makes "it ran against testnet" more than a claim.
