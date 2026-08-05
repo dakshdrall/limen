@@ -22,9 +22,20 @@
  * every one of them says whether it is on-chain or computed locally — except on
  * the refusal screen, where rows of different provenance sit in one table and
  * the per-row state is the only thing keeping them apart.
+ *
+ * The fourth state is PLAN-V4 F3, and it exists for the same reason the third
+ * does: two different things were about to be called the same thing. After a
+ * rule is revoked, the call that used to be permitted fails
+ * `ContextRuleNotFound#3000` — which is *not* in `BOUNDARY_REFUSAL_CODES`,
+ * deliberately. "The boundary refused you" and "the boundary is gone" are
+ * different claims, and rendering the second as the first would count a rule
+ * that no longer exists as a rule that did its job. Drawn in the neutral ramp
+ * with a dotted border: distinguished by treatment rather than by a new hue,
+ * because a fourth colour would imply a fourth kind of verdict when what this
+ * actually is is the absence of one.
  */
 
-export type VerdictState = 'permitted' | 'denied' | 'refused-at-simulation';
+export type VerdictState = 'permitted' | 'denied' | 'refused-at-simulation' | 'rule-revoked';
 
 const STATES = {
   permitted: {
@@ -47,6 +58,13 @@ const STATES = {
     tone: 'border-unproven-line bg-unproven-dim text-unproven',
     border: 'border-dashed',
     aria: 'refused at simulation; never reached a ledger',
+  },
+  'rule-revoked': {
+    label: 'NO RULE',
+    glyph: '∅',
+    tone: 'border-border-default bg-surface text-muted',
+    border: 'border-dotted',
+    aria: 'the context rule was revoked; there is no boundary left to permit or refuse this',
   },
 } as const satisfies Record<VerdictState, unknown>;
 

@@ -51,6 +51,13 @@ export {
 export { removeContextRuleFunction, removePolicyFunction } from './revoke.js';
 
 export {
+  invokeContract,
+  nativeTokenId,
+  transferFunction,
+  type TransferOptions,
+} from './token.js';
+
+export {
   assertDistinctSigners,
   assertTestnet,
   signAs,
@@ -60,6 +67,7 @@ export {
 
 export {
   contractErrorCodes,
+  enforcingFootprint,
   opResultName,
   reachedLedger,
   recordAuthEntries,

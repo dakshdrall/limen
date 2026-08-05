@@ -221,24 +221,40 @@ would close the multi-contract gap tomorrow. It would also be unaudited code in
 the authorization path, which is the one place this project has said it will not
 put any.
 
-**3. Limen custodies nothing of yours.** No *user's* secret key reaches the
-server, an environment variable, or browser storage. Signing for install is
-client-side only. There is no code path in this repository that can move a
-user's funds.
+**3. Limen custodies nothing of yours.** No *user's* secret key reaches a Limen
+server, an environment variable, or a log line. Signing is client-side only.
 
-> The mechanism clause used to name `@creit.tech/stellar-wallets-kit`. It no
-> longer does: v4 signs with a disposable browser key and ships no wallet
-> button — see [Why there is no wallet button](#why-there-is-no-wallet-button).
-> The *browser storage* clause above is accurate as written today and stops
-> being so the moment a screen generates that key; it is rewritten then, with
-> `apps/web/test/caveats.test.ts` pinning both directions, rather than being
-> loosened in advance to cover a state the repository has not reached.
+This rule was narrowed in v4, and the narrowing is stated rather than absorbed.
+It used to forbid a user secret reaching browser storage at all. It no longer
+can: creating and using an account from the browser means a key in the browser.
+So — a disposable testnet ed25519 keypair is generated in the page and kept in
+browser storage, labelled `TESTNET ONLY · LOCAL KEY` wherever it is created or
+used. It is not a wallet, it never leaves the browser, and clearing site data
+destroys it — along with the account it owns, which is stated at creation rather
+than discovered later.
 
-There is exactly one code path that can move any funds at all:
-`apps/web/src/lib/demo-signer.ts`, which signs the guided demo's first step with
-a disposable testnet account this project owns. It is fenced four ways — see
-[The demo account](#the-demo-account) — and it can never touch a user's key,
-because it only ever holds its own.
+There is no export, no backup, and no import field, and there will not be one.
+Offering a backup would create the exact thing this rule exists to prevent — a
+user secret in transit through a form — in exchange for protecting an account
+holding testnet dust that friendbot replaces for free. `apps/web/test/local-key-label.test.ts`
+fails the build if any file that generates, stores, or imports a key stops
+carrying the label, and CI greps the built client bundle for a 56-character
+`S…` StrKey so that a pasted or serialized secret is caught without anyone
+needing to know its value.
+
+Two kinds of key can therefore move funds here, and **neither of them is
+Limen's to hold**:
+
+- **Yours**, the local key above. It can move the testnet funds in the account
+  it owns, because that is what it is for. It is generated in your browser and
+  exists nowhere else.
+- **This project's own**, `apps/web/src/lib/demo-signer.ts`, which signs the
+  guided demo's first step with a disposable testnet account we own. It is
+  fenced four ways — see [The demo account](#the-demo-account) — and it can
+  never touch a user's key, because it only ever holds its own.
+
+There is no code path in this repository that gives Limen custody of a user's
+key, and no server-side signer for a user's account.
 
 **4. `evaluate` is an independent implementation of `synthesize`.** The two
 share no code path and no helper — the outflow summation is deliberately written
@@ -475,15 +491,22 @@ rejected transaction above demonstrates.
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
 
-- **Nothing in the app can sign, so nothing in the app can install.** The
-  accounts, new-policy, refusal, and activity screens are built and read live
-  from testnet. Writing — deploy, install, revoke — needs an owner signature,
-  and no browser signer exists yet: the passkey path is unbuilt, and so is the
-  local ed25519 keypair that would stand in for it. The new-policy screen
-  derives a boundary, lowers it, and then says this in place of a button. Every
-  install recorded above was signed by
-  `packages/chain/scripts/testnet.mjs`, which is not part of the application.
-  See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
+- **Your account is stranded if you clear your browser.** The owner key is
+  generated in the page and stored there, and there is deliberately no export
+  and no recovery — see [design rule 3](#design-rules). Clearing site data
+  destroys the key and with it the ability to sign for the account it owns. The
+  account and everything installed on it stay on chain and stay readable by
+  anyone; nobody can act on them again. This is stated at creation rather than
+  discovered later, and it is an acceptable trade only because these are
+  disposable testnet accounts.
+
+  This replaces the caveat that stood here through v3 — *"nothing in the app can
+  sign, so nothing in the app can install"*. That is retired in v4: deploy,
+  install, the agent's permitted and refused calls, and revoke all run from the
+  browser, signed client-side by a key that never leaves it. The retirement is
+  pinned in both directions by `apps/web/test/caveats.test.ts`, because a caveat
+  that outlives its reason understates the work and that is its own kind of
+  inaccuracy. See [`PLAN-V4.md`](./PLAN-V4.md) for what is built and what is not.
 - **On `/app/simulator`, the deny table proves refusal as adjudicated by this
   repository's evaluator, not as enforced on-chain.** That screen runs
   `evaluate` in the browser. `evaluate` is an independent implementation of the

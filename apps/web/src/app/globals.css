@@ -290,6 +290,10 @@ body::before {
 
   .panel[data-tone='refused'] { border-color: var(--deny-line); }
   .panel[data-tone='unproven'] { border-color: var(--unproven-line); }
+  /* For the panel that reports a write landing on a ledger. A border only —
+     the write screens end in a result that a reviewer should be able to find
+     without reading, and this is the existing permit line doing that job. */
+  .panel[data-tone='permitted'] { border-color: var(--permit-line); }
   .panel[data-tone='pending'] {
     border-color: var(--border);
     border-style: dashed;

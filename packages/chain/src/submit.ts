@@ -321,6 +321,51 @@ export async function submitWithBorrowedFootprint({
 }
 
 /**
+ * The footprint from an enforcing simulation, without submitting anything.
+ *
+ * The same two-simulation dance as `submitAuthorized`, stopped one step early:
+ * the caller wants the footprint, not the transaction.
+ *
+ * It exists for the attempts that are *supposed* to fail. A failed simulation
+ * yields no footprint, so an attempt that the boundary refuses cannot reach a
+ * ledger on its own — and an attempt with no hash is this repository's word for
+ * what would have happened rather than a transaction anyone can look up. The
+ * footprint has to be borrowed from a call that touches the same contracts and
+ * does not fail.
+ *
+ * The clearest case is the agent trying to revoke its own boundary: the owner's
+ * revoke simulates cleanly, and its footprint is what lets the agent's refused
+ * attempt be submitted, burn a fee, and be told no on a ledger.
+ */
+export async function enforcingFootprint({
+  rpcUrl,
+  passphrase,
+  feeSource,
+  func,
+  signAuthEntry,
+  fee = DEFAULT_FEE,
+}: Pick<
+  SubmitOptions,
+  'rpcUrl' | 'passphrase' | 'feeSource' | 'func' | 'signAuthEntry' | 'fee'
+>): Promise<xdr.SorobanTransactionData> {
+  assertTestnet(passphrase);
+  const server = new rpc.Server(rpcUrl);
+
+  const auth: xdr.SorobanAuthorizationEntry[] = [];
+  for (const entry of await recordAuthEntries({ rpcUrl, passphrase, feeSource, func, fee })) {
+    auth.push(signAuthEntry === undefined ? entry : await signAuthEntry(entry));
+  }
+
+  const sim = await server.simulateTransaction(
+    build(await server.getAccount(feeSource), passphrase, fee, func, auth),
+  );
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`enforcing simulation failed: ${sim.error}`);
+  }
+  return sim.transactionData.build();
+}
+
+/**
  * A recording simulation on its own, for callers that need the auth entry
  * before they know what they will do with it.
  *

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useStored } from '@/lib/use-store';
 import { Address } from '@/components/Address';
+import { AgentRunSteps } from '@/components/app/AgentRunSteps';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
 import { PermittedRow, RefusedTable } from '@/components/app/RefusalTable';
 import { Section } from '@/components/Section';
@@ -131,6 +132,23 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
 
       <Section
         index={3}
+        title="Exercise it, then take it back"
+        subtitle="Five transactions against this rule, from this browser: inside the boundary, outside it, the agent's own attempt to remove it, the revoke, and the same call afterwards."
+        emphasis
+      >
+        {state.status === 'ok' && rule !== undefined ? (
+          <AgentRunSteps contractId={contractId} rule={rule} onWritten={reload} />
+        ) : (
+          <p className="measure text-[13px] leading-relaxed text-muted-dim">
+            {state.status === 'ok'
+              ? 'There is no rule here to exercise.'
+              : 'Waiting for the rule to be read from the chain.'}
+          </p>
+        )}
+      </Section>
+
+      <Section
+        index={4}
         title="Where this boundary came from"
         subtitle="Derivation provenance. This exists nowhere on chain — it is what this browser recorded when the policy was derived."
       >

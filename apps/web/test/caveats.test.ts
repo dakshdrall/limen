@@ -137,18 +137,49 @@ describe('the install caveat survives', () => {
   });
 });
 
-describe('the custody claim stays accurate now that a signer exists', () => {
-  it('drops the unqualified claim and names the one signer that exists', () => {
-    // The unqualified sentence became false the moment the demo signer landed.
+describe('the custody claim stays accurate as signers are added', () => {
+  // This claim has now been narrowed twice, and each narrowing is pinned in
+  // both directions. First the demo signer made the unqualified sentence false;
+  // then the browser key made the qualified one false too, because that key can
+  // move the funds in the account it owns. What is asserted here is the claim
+  // that survives — Limen holds nothing — plus the absence of the two wordings
+  // that no longer hold.
+  it('drops both superseded wordings', () => {
     expect(README).not.toContain(
       'There is no code path in this repository that can move user funds.',
     );
-    expect(README).toContain("There is no code path in this repository that can move a user's funds.");
-    expect(README).toContain('There is exactly one code path that can move any funds at all');
+    // False since v4: the local key exists precisely so it can move funds.
+    expect(README).not.toContain(
+      "There is no code path in this repository that can move a user's funds.",
+    );
+    expect(README).not.toContain('There is exactly one code path that can move any funds at all');
+  });
+
+  it('states the claim that survives, about custody rather than capability', () => {
+    expect(README).toContain(
+      'There is no code path in this repository that gives Limen custody of a user',
+    );
+    expect(README).toContain('no server-side signer for a user');
+    expect(README).toContain("neither of them is Limen's to hold");
+  });
+
+  it('does not soften the browser key into something it is not', () => {
+    // The honest half of the narrowing. A key in browser storage is a user
+    // secret in browser storage, and the rule used to forbid exactly that.
+    expect(README).toContain('It used to forbid a user secret reaching browser storage at all');
+    expect(README).toContain('clearing site data destroys it');
+    expect(README).toContain('There is no export, no backup, and no import field');
   });
 
   it('still describes the demo account as disposable', () => {
     expect(README).toContain('disposable and holds trivial funds');
+  });
+
+  it('keeps the NO CUSTODY label a claim about custody, not about capability', () => {
+    const label = source('components/StatusLabel.tsx');
+    expect(label).not.toContain('There is no code path here that can move your funds');
+    expect(label).toContain('No key of yours reaches a Limen server');
+    expect(label).toContain('generated in your browser, stays in it');
   });
 });
 
@@ -241,15 +272,80 @@ describe('a boundary that could not be read is not shown as an absent one', () =
   });
 });
 
-describe('the install step does not pretend it can sign', () => {
-  it('says the signer paths do not exist yet, in place of a button', () => {
+describe('the install step, now that it can sign', () => {
+  // Retired in v4 step 6, and retired the way PLAN-V4 §9 requires: by the thing
+  // the caveat described becoming possible, not by deleting the sentence. Both
+  // directions are asserted, because a caveat that outlives its reason
+  // understates the work and that is its own kind of inaccuracy.
+  it('no longer claims neither signer path exists', () => {
     const screen = source('components/app/NewPolicyScreen.tsx');
-    expect(screen).toContain('Neither signer path exists in the browser yet');
+    expect(screen).not.toContain('Neither signer path exists in the browser yet');
+    expect(screen).not.toContain('not built yet');
   });
 
-  it('rules out ever taking a secret key from a form', () => {
-    expect(source('components/app/NewPolicyScreen.tsx')).toContain(
-      'There is no form here that accepts a secret key, and there will not be one',
+  it('rules out ever taking a secret key from a form — on both screens', () => {
+    // The survivor. It was true when nothing could sign and it is more
+    // load-bearing now that something can, so it is pinned in the component
+    // that replaced the caveat as well as in the one that still carries it.
+    const sentence = 'There is no form here that accepts a secret key, and there will not be one';
+    expect(source('components/app/NewPolicyScreen.tsx')).toContain(sentence);
+    expect(source('components/app/InstallControl.tsx')).toContain(sentence);
+  });
+
+  it('says which key signs the install, and which one the boundary binds', () => {
+    // The claim the product makes is that the agent's key cannot exceed a
+    // boundary the owner's key installed. A screen that signs without saying
+    // which of the two is acting has asked to be taken on trust.
+    const control = source('components/app/InstallControl.tsx');
+    expect(control).toContain('signs this install');
+    expect(control).toContain('bounded by it');
+    expect(control).toContain('it does not sign this');
+  });
+
+  it('says a boundary installed here can be taken back', () => {
+    expect(source('components/app/InstallControl.tsx')).toContain(
+      'A boundary installed here can be taken back',
+    );
+  });
+});
+
+describe('the agent run distinguishes a refusal from a missing rule', () => {
+  const steps = source('components/app/AgentRunSteps.tsx');
+
+  it('does not count a revoked rule as a boundary refusal', () => {
+    // PLAN-V4 F3. `ContextRuleNotFound#3000` is deliberately absent from
+    // BOUNDARY_REFUSAL_CODES, and the screen has to carry that distinction
+    // rather than flattening both into DENY.
+    expect(steps).toContain('isRevokedRule');
+    expect(steps).toContain('Not counted as a refusal');
+    expect(steps).toContain('there was no boundary left to consult');
+  });
+
+  it('says why the permitted step deliberately spends less than the cap', () => {
+    // If step 01 exhausted the cap, step 05 would fail for two reasons at once
+    // and demonstrate neither.
+    expect(steps).toContain('still inside the cap');
+    expect(steps).toContain('not because a limit was reached');
+  });
+
+  it('does not attribute an undecodable failure to the boundary', () => {
+    expect(steps).toContain('no code identifying a boundary refusal was decoded');
+    expect(source('components/app/WriteResult.tsx')).toContain(
+      'A failure is not a refusal until its error code says so',
+    );
+  });
+
+  it('reports a step that succeeded when it should not have, as it happened', () => {
+    // The one that matters most if the boundary ever fails to hold: a screen
+    // that rendered an unexpected success as anything other than a success
+    // would be hiding exactly the result a reviewer came for.
+    expect(steps).toContain('that means the boundary did not hold');
+  });
+
+  it('says an attempt with no hash is not evidence', () => {
+    expect(source('lib/chain-write.ts')).toContain('never reached a ledger');
+    expect(source('components/app/WriteResult.tsx')).toContain(
+      'did not reach a ledger, so there is no hash',
     );
   });
 });
@@ -338,7 +434,14 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
   });
 
   it('states what is not built, on the page most likely to be read first', () => {
-    expect(page).toContain('Nothing installs from the browser');
+    // Retired in v4: installing from the browser is what the app now does, so
+    // this limit is replaced rather than deleted. What took its place are the
+    // two limits that are true — no wallet, and no way back from a cleared
+    // browser — because a limits list that quietly shortens as features land
+    // reads as marketing.
+    expect(page).not.toContain('Nothing installs from the browser');
+    expect(page).toContain('No wallet, and no key recovery');
+    expect(page).toContain('strands the account it owns');
     expect(page).toContain('One contract per boundary');
     expect(page).toContain('Testnet, and not audited');
   });
@@ -370,9 +473,22 @@ describe('the docs page keeps the agent-key claim in its narrow form', () => {
   });
 
   it('states what is not built rather than leaving it to be discovered', () => {
-    expect(docs).toContain('No browser signer, so nothing installs from the interface');
-    expect(docs).toContain('No revoke button');
+    // Both v3 limits are retired by v4 building the thing they described.
+    // Asserted absent as well as present: the docs page is where someone
+    // deciding whether to trust this reads, and a stale limit there is a claim
+    // that the project is less far along than it is.
+    expect(docs).not.toContain('No browser signer, so nothing installs from the interface');
+    expect(docs).not.toContain('No revoke button');
+    expect(docs).toContain('No wallet, and no way back if you clear your browser');
+    expect(docs).toContain('No connected wallet as owner');
     expect(docs).toContain('One contract per boundary');
+  });
+
+  it('says the wallet path was measured and dropped, not merely skipped', () => {
+    // "We did not get to it" and "we tried it and the platform does not support
+    // it" are different claims, and only the second one is true here.
+    expect(docs).toContain('dropped on a measurement, not');
+    expect(docs).toContain('does not appear in either simulation');
   });
 });
 

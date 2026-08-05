@@ -19,6 +19,10 @@
       "types": "./dist/network.d.ts",
       "default": "./dist/network.js"
     },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
     "./lower": {
       "types": "./dist/lower.d.ts",
       "default": "./dist/lower.js"

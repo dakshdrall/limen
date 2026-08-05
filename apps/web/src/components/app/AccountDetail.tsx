@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Address } from '@/components/Address';
+import { AccountWriteSteps } from '@/components/app/AccountWriteSteps';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
 import { RulesTable } from '@/components/app/RulesTable';
 import { StatusLabel } from '@/components/StatusLabel';
@@ -96,6 +97,16 @@ export function AccountDetail({ contractId }: { contractId: string }) {
               atLedger={state.snapshot.ledger}
             />
           )}
+
+          {/* Re-reads the chain after every write rather than patching the
+              snapshot in place. The rules above are the ledger's answer at a
+              stated sequence number, and a locally-applied edit would make them
+              this application's answer wearing that sequence number. */}
+          <AccountWriteSteps
+            contractId={contractId}
+            rules={state.snapshot.rules}
+            onWritten={reload}
+          />
         </>
       )}
     </div>

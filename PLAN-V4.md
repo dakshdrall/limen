@@ -374,6 +374,33 @@ funds. Any key reaching a server, an environment variable, or a log line.
    argument that shaped the demo-signer fence, applied to the network instead of
    to a sentinel.
 
+   #### Level 3, measured — 2026-08-05. The absence half is unachievable, and the fence is moved rather than dropped.
+
+   Written before the SDK was in the browser, and wrong once it is. The built
+   client bundle contains:
+
+   ```js
+   var e=((l=e||{}).PUBLIC="Public Global Stellar Network ; September 2015",
+                    l.TESTNET="Test SDF Network ; September 2015",…
+   ```
+
+   That is `@stellar/stellar-sdk`'s own `Networks` enum. It ships in every build
+   that can sign anything, so "the mainnet passphrase does not appear in the
+   client bundle" fails forever — and a check that fails forever is one that
+   gets deleted rather than satisfied. Asserting it as specified would have
+   bought a red build and then, predictably, no fence at all.
+
+   So the assertion moves to where it is both true and load-bearing. **Limen's
+   own source never names mainnet** — not the passphrase literal, not
+   `Networks.PUBLIC` — scanned across `apps/web/src` and `packages/*/src`; and
+   **no mainnet endpoint reaches the bundle**, because an endpoint is the part
+   that cannot be borrowed from a library constant. A passphrase nothing
+   references, with nowhere to send it, is not a path to mainnet. Levels 1 and 2
+   are what make that structural; this proves neither has been routed around.
+
+   Both halves are still shown able to fire, and the testnet-present check
+   stays, for the reason it was always there.
+
 The existing demo-signer fence is unchanged and stays. One addition: no
 56-character `S…` StrKey literal may appear in the client bundle, which catches
 a pasted secret without needing to know its value.

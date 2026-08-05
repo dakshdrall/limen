@@ -115,6 +115,25 @@ jobs:
       # `import()` precisely so the read-only screens do not pay for the SDK,
       # and a bundling change that dropped it entirely would otherwise turn
       # this step green while removing the thing it guards.
+      #
+      # WHAT THIS DELIBERATELY DOES NOT ASSERT, and why nobody should "fix" it:
+      #
+      # PLAN-V4 §4 specified this level as "the mainnet passphrase string does
+      # not appear in the client bundle at all". That is unachievable, and the
+      # plan was written before it could be known: v4 puts the Stellar SDK in
+      # the browser because there is no signing without it, and the SDK ships
+      # its own `Networks` enum —
+      #
+      #     var e=((l=e||{}).PUBLIC="Public Global Stellar Network ; September 2015",
+      #                     l.TESTNET="Test SDF Network ; September 2015",…
+      #
+      # — so the string is present in every build that can sign anything. A
+      # check for its absence would fail forever, and the way that failure gets
+      # resolved at 2am is by deleting the check. So the assertion is moved to
+      # where it is both true and meaningful: Limen's own code never names
+      # mainnet, and the bundle cannot address a mainnet endpoint. A passphrase
+      # constant that nothing references and no endpoint to send it to is not a
+      # path to mainnet; levels 1 and 2 are what make that structural.
       - name: Prove the client bundle can only reach testnet
         env:
           TESTNET: 'Test SDF Network ; September 2015'
@@ -126,13 +145,49 @@ jobs:
             echo "::error::testnet passphrase not found in the client bundle — this check is vacuous and proves nothing"
             exit 1
           fi
-          echo "testnet passphrase present in the client bundle; the negative check below is meaningful"
+          echo "testnet passphrase present in the client bundle; the checks below are meaningful"
 
-          if grep -rIlF -- "$MAINNET" apps/web/.next/static; then
-            echo "::error::the mainnet passphrase reached the client bundle"
+          # 1. Limen's own source never names mainnet. This is the assertion the
+          #    plan was reaching for, made where the SDK's own constants cannot
+          #    drown it out.
+          #
+          #    The self-match below is not testing grep. It is testing that the
+          #    passphrase survived the trip through the environment intact —
+          #    it contains spaces and a semicolon, and a quoting mistake here
+          #    would silently search for something shorter, or for nothing, and
+          #    report a clean bill of health either way.
+          if ! printf '%s' "$MAINNET" | grep -qF -- "$MAINNET"; then
+            echo "::error::the mainnet passphrase did not survive shell quoting — this check is broken, not passing"
             exit 1
           fi
-          echo "mainnet passphrase absent from the client bundle"
+
+          if grep -rIn --include='*.ts' --include='*.tsx' --include='*.mjs' \
+               -F -- "$MAINNET" apps/web/src packages/*/src; then
+            echo "::error::Limen source names the mainnet passphrase"
+            exit 1
+          fi
+          echo "no Limen module names the mainnet passphrase"
+
+          if grep -rIn --include='*.ts' --include='*.tsx' --include='*.mjs' \
+               -E 'Networks\.PUBLIC' apps/web/src packages/*/src; then
+            echo "::error::Limen source references Networks.PUBLIC"
+            exit 1
+          fi
+          echo "no Limen module references Networks.PUBLIC"
+
+          # 2. And the bundle cannot address mainnet even if it held the string.
+          #    An endpoint is the part that cannot be borrowed from a library
+          #    constant: to submit to mainnet a build has to know where it is.
+          if ! printf 'horizon.stellar.org' | grep -qE 'horizon\.stellar\.org|mainnet\.sorobanrpc\.com'; then
+            echo "::error::the mainnet endpoint pattern is broken, not passing"
+            exit 1
+          fi
+
+          if grep -rIlE 'horizon\.stellar\.org|mainnet\.sorobanrpc\.com' apps/web/.next/static; then
+            echo "::error::a mainnet endpoint reached the client bundle"
+            exit 1
+          fi
+          echo "no mainnet endpoint in the client bundle"
 
       # A pasted secret key, caught without needing to know its value. The
       # local key is generated in the page and never leaves it, so no `S…`
