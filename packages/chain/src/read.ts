@@ -17,6 +17,7 @@
 
 import { Address, rpc, scValToNative, xdr } from '@stellar/stellar-sdk';
 import type { Amount } from '@limen/core';
+import { toHex } from './bytes.js';
 
 /** A context rule as it exists on-chain, decoded. */
 export interface InstalledContextRule {
@@ -75,7 +76,7 @@ function decodeSigner(value: unknown): InstalledSigner {
   return {
     kind: 'External',
     verifier: String(parts[1]),
-    publicKey: Buffer.from(parts[2] as Uint8Array).toString('hex'),
+    publicKey: toHex(parts[2] as Uint8Array),
   };
 }
 

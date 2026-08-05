@@ -80,3 +80,29 @@ export const BOUNDARY_REFUSAL_CODES: ReadonlySet<number> = new Set([
 export function isBoundaryRefusal(codes: readonly number[]): boolean {
   return codes.some((c) => BOUNDARY_REFUSAL_CODES.has(c));
 }
+
+/**
+ * The codes that mean the rule is not there any more.
+ *
+ * `remove_context_rule` deletes the storage entry
+ * (`packages/accounts/src/smart_account/storage.rs:845-850`), and a later
+ * `get_context_rule` for that id panics `ContextRuleNotFound`.
+ *
+ * `3000` is deliberately **not** in `BOUNDARY_REFUSAL_CODES` above, and this is
+ * a decision rather than an omission to patch. *"The boundary refused you"* and
+ * *"the boundary is gone"* are different claims. Widening the refusal set so a
+ * revoked rule rendered identically to a spending-limit refusal would blur
+ * exactly the distinction the deny table exists to keep sharp — and it would
+ * overstate the result, by counting a rule that no longer exists as a rule that
+ * did its job.
+ *
+ * Separate predicate, separate presentation, on the `REFUSED AT SIMULATION`
+ * precedent: a third thing that is neither a permit nor a boundary deny.
+ */
+export const REVOKED_RULE_CODES: ReadonlySet<number> = new Set([
+  3000, // ContextRuleNotFound - the rule was removed
+]);
+
+export function isRevokedRule(codes: readonly number[]): boolean {
+  return codes.some((c) => REVOKED_RULE_CODES.has(c));
+}

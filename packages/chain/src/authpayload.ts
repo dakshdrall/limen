@@ -18,7 +18,8 @@
  *     array of integers.
  */
 
-import { Address, hash, xdr } from '@stellar/stellar-sdk';
+import { Address, xdr } from '@stellar/stellar-sdk';
+import { concatBytes, scvBytes, sha256 } from './bytes.js';
 
 const sym = (s: string) => xdr.ScVal.scvSymbol(s);
 const u32 = (n: number) => xdr.ScVal.scvU32(n);
@@ -39,7 +40,7 @@ export function externalSigner(verifier: string, publicKey: Uint8Array): xdr.ScV
   return xdr.ScVal.scvVec([
     sym('External'),
     new Address(verifier).toScVal(),
-    xdr.ScVal.scvBytes(Buffer.from(publicKey)),
+    scvBytes(publicKey),
   ]);
 }
 
@@ -75,9 +76,9 @@ export function i128(value: bigint): xdr.ScVal {
  * `signaturePayload` is the 32-byte hash the host hands to `__check_auth` —
  * the same value `authorizeEntry` passes to its signing callback.
  */
-export function authDigest(signaturePayload: Uint8Array, contextRuleIds: number[]): Buffer {
+export function authDigest(signaturePayload: Uint8Array, contextRuleIds: number[]): Uint8Array {
   const ids = xdr.ScVal.scvVec(contextRuleIds.map(u32));
-  return hash(Buffer.concat([Buffer.from(signaturePayload), ids.toXDR()]));
+  return sha256(concatBytes(signaturePayload, new Uint8Array(ids.toXDR())));
 }
 
 export interface SignerSignature {
@@ -104,7 +105,7 @@ export function authPayload(
       xdr.ScVal.scvMap(
         signatures.map(
           ({ signer, signature }) =>
-            new xdr.ScMapEntry({ key: signer, val: xdr.ScVal.scvBytes(Buffer.from(signature)) }),
+            new xdr.ScMapEntry({ key: signer, val: scvBytes(signature) }),
         ),
       ),
     ],

@@ -10,6 +10,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./network": {
+      "types": "./dist/network.d.ts",
+      "default": "./dist/network.js"
+    },
+    "./lower": {
+      "types": "./dist/lower.d.ts",
+      "default": "./dist/lower.js"
+    },
+    "./plan": {
+      "types": "./dist/plan.d.ts",
+      "default": "./dist/plan.js"
     }
   },
   "files": [

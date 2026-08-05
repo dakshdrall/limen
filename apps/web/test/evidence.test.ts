@@ -34,6 +34,7 @@ const recorded = JSON.parse(recordedText) as {
   recordedAt: string;
   uploads: Record<string, string>;
   walkthrough: { smartAccount: string; installTx: string; firstRun: { installTx: string } };
+  v4ChainRun: { smartAccount: string; installTx: string };
   denyAxisSurvey: {
     liveRuleInstallTx: string;
     shortRuleInstallTx: string;
@@ -68,8 +69,20 @@ describe('the chain figures are what the deployments file says', () => {
       recorded.walkthrough.firstRun.installTx,
       recorded.denyAxisSurvey.liveRuleInstallTx,
       recorded.denyAxisSurvey.shortRuleInstallTx,
+      recorded.v4ChainRun.installTx,
     ]);
     expect(EVIDENCE.chain.contextRulesInstalled).toBe(installs.size);
+  });
+
+  it('counts every smart account written to, not only the first one', () => {
+    // Also hand-listed, and for the same reason the installs are. The
+    // generator used to read this off the walkthrough alone, which was correct
+    // for exactly as long as there was one account: the V4 chain run deployed
+    // its own and the figure would have kept saying "1" with nothing to show it
+    // had stopped looking.
+    const accounts = new Set([recorded.walkthrough.smartAccount, recorded.v4ChainRun.smartAccount]);
+    expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
+    expect(accounts.size).toBeGreaterThan(1);
   });
 
   it('does not round a refusal without a decoded code up to one with', () => {

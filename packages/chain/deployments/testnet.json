@@ -1,8 +1,9 @@
 {
   "network": "testnet",
   "networkPassphrase": "Test SDF Network ; September 2015",
-  "recordedAt": "2026-08-02",
+  "recordedAt": "2026-08-05",
   "note": "Produced against live testnet by scripts/, except where a block names a different producer. Every hash here is checkable in an explorer. No secret key appears in this file or anywhere in the repository; the accounts below are disposable testnet accounts.",
+  "recordedAtNote": "The date of the most recent run in this file, which is what the landing page reads. Individual blocks carry their own dates where they were recorded on a different day; `walkthrough` and `denyAxisSurvey` are from 2026-08-02 and `v4ChainRun` from 2026-08-05.",
 
   "uploads": {
     "account": "765c2f5d9ea414f18fbbfab77629d9609a9875dc31ee400b84e3031ff6446cf6",
@@ -60,6 +61,60 @@
     "derivedCap": "1000000",
     "derivedCapNote": "The derived cap equals the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
     "installedSeparately": "This transaction was not piped into the install below. The recorded install was built by scripts/testnet.mjs from the same parameters the lowering produces; ingest-to-install in one pass needs a browser signer, which does not exist yet. Both halves are real and they are recorded as two runs, because that is what they are."
+  },
+
+  "v4ChainRun": {
+    "note": "PLAN-V4 steps 1-3, in one process. A smart account created from a code path that uses no Node API, a boundary derived from a transaction observed on that account and installed in the same pass, an agent run inside it and outside it, the agent's own attempt to revoke it, and the revoke. Eleven transactions, every one of them on a ledger.",
+    "producedBy": "node packages/chain/scripts/acceptance.mjs run",
+    "signedBy": "an ed25519 keypair generated in the process and never written anywhere. Not a browser, and this block does not claim to be one: the browser-signed reference run is PLAN-V4 step 6 and is not recorded yet.",
+    "ranAt": "2026-08-05",
+
+    "smartAccount": "CBYJPUD4Q2EPT6TYNIPLYSBOEMTK5JVQNNE5KYOAW243NDGL4VPO5GKW",
+    "ownerSigner": "GA5FAUHEJK5J4XNMWO4JXJ3FZ5WKLDHEYQROB6RFZSJD27S7IDYILONF",
+    "agentSigner": "GCH676JI3EGCUG7PUDIPEBI2BQGD7TJQBOJQYFHIZXOAHQNIZBHNRPFS",
+    "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+
+    "deployTx": "610f7e9a91020f1f8390bd21b5b0a5807784301197d6092b3d0714d7598da2d4",
+    "deployNote": "Operation.createCustomContract with the account wasm hash from wasm/manifest.json and two constructor arguments. The smart account signs nothing at deploy: the constructor runs as part of creation, so the only signature the network required was the fee source's on the envelope.",
+    "defaultRuleId": 0,
+    "defaultRuleNote": "The constructor's Default rule, read back off the account rather than assumed to be 0. It happened to be 0 here; the code does not rely on that.",
+    "seedTx": "3a58313326037f3fbc6cbcc3ac3310cfb4a060549fc086b210f5cfea85ae3c9a",
+
+    "observedTx": "c16e2ca2f58817c19647928260f7cb96220d5e1dd09fcd08196ad77496e03e39",
+    "observedLedger": 3976732,
+    "observedAmount": "1000000",
+    "observedNote": "The smart account moving its own funds, authorized by its owner through __check_auth under the Default rule. The boundary below is derived from this transaction, read back off the ledger — not from the constant the script sent.",
+    "derivedCap": "1000000",
+    "derivedCapNote": "Equal to the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
+    "windowLedgers": 120960,
+    "validUntilLedger": 4097692,
+
+    "installTx": "db6a52d7559b60b3c625e81e76f0234bea0e99b922adc28d14f95f2800144a68",
+    "contextRuleId": 1,
+    "installedInSamePass": "Derived and installed in one process from one observed transaction. The two halves of `liveDerivation` above were two runs; these are not.",
+
+    "permittedTx": "00eca33c38e107246fe6c34e9b84f4354273e3033233e86f4c74eb32edc23c8a",
+    "permittedAmount": "400000",
+    "permittedNote": "Signed by the agent's key and paid for by the agent's own account. No owner signature is anywhere near it.",
+
+    "refusedTx": "bbb0b66f8dc4f53eea9d815150ac93e6a02fe334a903f1aae31647d691e68353",
+    "refusedAmount": "2000000",
+    "refusedError": "SpendingLimitExceeded#3221",
+    "refusedIsBoundaryRefusal": true,
+
+    "agentRevokeTx": "fca28f06c92d42e10f82e1460670f3e0ae08089bd83968382cdf66457052ae4e",
+    "agentRevokeError": "UnvalidatedContext#3002",
+    "agentRevokeNote": "The agent attempting to remove its own boundary. Refused by the contract, not by this application declining to offer a button: remove_context_rule requires the account to authorize itself, and the agent's rule is CallContract(token), which does not match a call to the account. The owner's Default rule does.",
+
+    "revokeTx": "8bfb1cc52ffe287987c8b7dda5dd443fdac53e618955a5cea647340935b2781c",
+    "rulesAfterRevoke": [0],
+    "rulesAfterRevokeNote": "Re-read from the chain after the write, not assumed. Rule 1 is gone; the owner's Default rule 0 remains.",
+
+    "postRevokeTx": "631f211bbb1a1a94c759e5ce754f9060fa94187c00d260d0f56ea6a2af639ef3",
+    "postRevokeError": "ContextRuleNotFound#3000",
+    "postRevokeIsBoundaryRefusal": false,
+    "postRevokeIsRevokedRule": true,
+    "postRevokeNote": "The agent repeating the call that worked at permittedTx, for an amount still inside the cap. It fails because the rule is gone, not because the limit was reached — which is why the permitted transfer deliberately spent less than the cap. 3000 is not in BOUNDARY_REFUSAL_CODES and is not counted as a refusal: 'the boundary refused you' and 'the boundary is gone' are different claims."
   },
 
   "denyAxisSurvey": {
