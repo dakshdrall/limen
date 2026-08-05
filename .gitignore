@@ -145,3 +145,10 @@ vite.config.ts.timestamp-*
 # Playwright (the on-demand e2e suite; see apps/web/playwright.config.ts)
 test-results/
 playwright-report/
+
+# Throwaway probes. Scripts written to ask the network or the SDK one question
+# and then keep as a record of the answer for an hour. Anything worth keeping
+# graduates to packages/chain/scripts/ with a comment explaining what it
+# measured; everything else is noise that would otherwise be committed by a
+# distracted `git add -A`.
+.scratch/
