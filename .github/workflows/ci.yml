@@ -102,6 +102,68 @@ jobs:
           fi
           echo "demo signer absent from the client bundle"
 
+      # Level 3 of the mainnet gate. Levels 1 and 2 — the one-member passphrase
+      # union in `lib/network.ts` and the hard throw in `@limen/chain`'s
+      # `signAs` — are assertions the type checker and a unit test can make
+      # about source. This step is the one that looks at what actually ships to
+      # a browser that can now sign.
+      #
+      # Two-sided for the same reason the check above is: the testnet
+      # passphrase must be *found* first, or the absence of the mainnet one is
+      # the absence of any Stellar code at all and proves nothing. That failure
+      # mode is not hypothetical here — the write path is loaded by dynamic
+      # `import()` precisely so the read-only screens do not pay for the SDK,
+      # and a bundling change that dropped it entirely would otherwise turn
+      # this step green while removing the thing it guards.
+      - name: Prove the client bundle can only reach testnet
+        env:
+          TESTNET: 'Test SDF Network ; September 2015'
+          MAINNET: 'Public Global Stellar Network ; September 2015'
+        run: |
+          set -euo pipefail
+
+          if ! grep -rIqF -- "$TESTNET" apps/web/.next/static; then
+            echo "::error::testnet passphrase not found in the client bundle — this check is vacuous and proves nothing"
+            exit 1
+          fi
+          echo "testnet passphrase present in the client bundle; the negative check below is meaningful"
+
+          if grep -rIlF -- "$MAINNET" apps/web/.next/static; then
+            echo "::error::the mainnet passphrase reached the client bundle"
+            exit 1
+          fi
+          echo "mainnet passphrase absent from the client bundle"
+
+      # A pasted secret key, caught without needing to know its value. The
+      # local key is generated in the page and never leaves it, so no `S…`
+      # StrKey should appear in shipped source at all; one that does is either
+      # a hardcoded secret or a test fixture that escaped, and both are worth a
+      # red build.
+      #
+      # This pattern can never match a correct bundle, which by the argument
+      # above makes it worthless unless the pattern itself is shown to work. So
+      # it is run against a known secret-shaped string first. That proves the
+      # regex is live rather than quietly broken by a shell-quoting change.
+      - name: Prove no secret key literal reached the client bundle
+        env:
+          # S + 55 base32 characters. Structurally a StrKey, deliberately not a
+          # usable one — it exists only to fire the pattern.
+          CANARY: SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$CANARY" | grep -qE '\bS[A-Z2-7]{55}\b'; then
+            echo "::error::the StrKey pattern does not match a known StrKey — this check is broken, not passing"
+            exit 1
+          fi
+          echo "StrKey pattern matches a known StrKey; the scan below is meaningful"
+
+          if grep -rIlE '\bS[A-Z2-7]{55}\b' apps/web/.next/static; then
+            echo "::error::something StrKey-shaped reached the client bundle"
+            exit 1
+          fi
+          echo "no secret key literal in the client bundle"
+
       # Runs last so build and test results are always visible even when this
       # fails. Threshold is `moderate`, not `low`, because 23 low-severity
       # advisories are currently unfixable: they all reduce to `elliptic`,
