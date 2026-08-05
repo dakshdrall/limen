@@ -223,8 +223,16 @@ put any.
 
 **3. Limen custodies nothing of yours.** No *user's* secret key reaches the
 server, an environment variable, or browser storage. Signing for install is
-client-side only, via `@creit.tech/stellar-wallets-kit`. There is no code path
-in this repository that can move a user's funds.
+client-side only. There is no code path in this repository that can move a
+user's funds.
+
+> The mechanism clause used to name `@creit.tech/stellar-wallets-kit`. It no
+> longer does: v4 signs with a disposable browser key and ships no wallet
+> button — see [Why there is no wallet button](#why-there-is-no-wallet-button).
+> The *browser storage* clause above is accurate as written today and stops
+> being so the moment a screen generates that key; it is rewritten then, with
+> `apps/web/test/caveats.test.ts` pinning both directions, rather than being
+> loosened in advance to cover a state the repository has not reached.
 
 There is exactly one code path that can move any funds at all:
 `apps/web/src/lib/demo-signer.ts`, which signs the guided demo's first step with
@@ -286,6 +294,66 @@ the page shows what was attempted, why Limen refused, and what it specifically
 did *not* do — approximate, drop a constraint, or widen a cap to fit. The
 `over-limit` preset exists to demonstrate this on demand. A system that can only
 be seen succeeding gives you no evidence about when it declines.
+
+### Why there is no wallet button
+
+Connecting Freighter or xBull as the owner of a smart account was planned, and
+was dropped on a measurement rather than on effort. The finding is recorded here
+because "we did not get to it" and "we tried it and the platform does not
+support it" are different statements, and only one of them is true.
+
+A wallet cannot be an `External` signer: `External` verification hands raw bytes
+to a verifier contract, and wallets sign envelopes and auth entries, not
+arbitrary 32-byte digests. So a wallet can only be `Delegated`, which resolves
+inside `__check_auth` as:
+
+```rust
+// packages/accounts/src/smart_account/storage.rs:353
+Signer::Delegated(addr) => {
+    let args = (auth_digest.clone(),).into_val(e);
+    addr.require_auth_for_args(args)
+}
+```
+
+That raises a **nested** authorization requirement from inside `__check_auth`.
+Recording-mode simulation never runs `__check_auth`, so the requirement never
+appears in `simulateTransaction`'s `result.auth`. The remaining hope was the
+second, *enforcing* simulation, which does run it — and that was the experiment,
+run against a throwaway `Delegated`-owned account on testnet
+(`node packages/chain/scripts/acceptance.mjs f4`):
+
+```
+escalating error to VM trap from failed host function call: require_auth_for_args
+["Unauthorized function call for address", GBWSU5Z62RFSMLWHQYJPIB5XDHBN66FFH4TIOQZLWFP535GVA2EH2WOQ]
+HostError: Error(Auth, InvalidAction)   — no contract error code
+```
+
+`require_auth_for_args` is reached and the host refuses it for want of a
+matching entry. The simulation **fails** rather than reporting what it wanted:
+no `result.auth` comes back, and a failed simulation hands a wallet nothing to
+sign. Discovery-by-simulation is unavailable on *both* simulations.
+
+The script keeps a control case alongside it, because the first version of the
+experiment asked the wrong question and got a confident answer to it. A payload
+with an empty `signers` map fails `UnvalidatedContext#3002` — inside
+`__check_auth`, but *before* the `Delegated` branch runs. That looks identical
+at a glance to "nested auth cannot be discovered" and is nothing of the kind.
+It is kept so the real result cannot be misread the same way twice.
+
+What remains is hand-constructing the entry. It is not impossible — the failure
+names exactly what is missing, and `auth_digest` is already computed
+client-side. It is unverifiable: there is no simulation to check the invocation
+tree against, so a mistake is discovered only by spending a submission.
+
+The fallback — connect a wallet for identity and fees while the browser key
+stays the actual owner — was also declined. Someone who connects a wallet has
+told you what they believe is about to happen, and a caption correcting them is
+worse than never offering the button. So the owner is this browser's disposable
+key, the screen says which key owns the account at the moment it is created, and
+there is no wallet button to misread.
+
+The full finding, including what it costs, is in [`PLAN-V4.md`](./PLAN-V4.md)
+under F4.
 
 ---
 
@@ -541,17 +609,18 @@ are installed whether or not the HOT Wallet and Trezor modules are used, because
 npm installs a package's dependency tree regardless of which subpaths an
 application imports.
 
-### Subpath importing, and what it does not do
+### Nothing imports the wallet kit, and what that does not do
 
-The install flow imports only the two modules it uses:
+This section used to describe subpath importing — the install flow reaching for
+`modules/freighter` and `modules/xbull` and nothing else, so that `elliptic`
+never entered the bundle. That was written ahead of the flow, and the flow was
+never built. The accurate statement is stronger and less flattering:
+**`@creit.tech/stellar-wallets-kit` is a declared dependency of `apps/web` that
+no source file imports at all.** With the wallet path dropped (see [Why there is
+no wallet button](#why-there-is-no-wallet-button)), none ever will.
 
-```ts
-import('@creit.tech/stellar-wallets-kit/modules/freighter')
-import('@creit.tech/stellar-wallets-kit/modules/xbull')
-```
-
-Neither pulls in `@hot-wallet/sdk` or `@trezor/*`, so `elliptic` is never
-bundled into the client and never executes at runtime.
+So `elliptic` is not bundled into the client and never executes at runtime —
+for a better reason than the one this section used to give.
 
 **This is a mitigation of runtime exposure, not of supply-chain exposure.** Be
 precise about the distinction:
@@ -561,11 +630,18 @@ precise about the distinction:
 - ❌ It still runs its install scripts and still appears in `npm audit`, SBOMs,
   and any supply-chain scan.
 
-So subpath importing is the *only* available mitigation for the `elliptic`
-advisories, and it is a partial one. Removing them entirely would require the
-wallet kit to move its wallet modules to optional peer dependencies, or
-replacing the kit with per-wallet integrations. Neither is in scope for this
-MVP, and neither is something this repository can fix on its own.
+That used to be the end of it: removing the advisories entirely would have
+required the wallet kit to move its wallet modules to optional peer
+dependencies, or replacing the kit with per-wallet integrations — neither in
+scope, and neither something this repository can fix on its own.
+
+**That is no longer true, and the change is a consequence of dropping the wallet
+path.** An unimported dependency can simply be removed, which would take the
+audit count from 23 to zero and let the audit gate's threshold drop from
+`moderate` to `low`. It has not been done yet: it is a lockfile change with its
+own verification, and it does not belong in the same diff as the signing path.
+It is the next obvious piece of work rather than an unfixable condition, and
+this section will be deleted rather than edited when it happens.
 
 ---
 

@@ -6,11 +6,16 @@
  *
  * > Limen custodies nothing of yours. No user's secret key reaches a Limen
  * > server, an environment variable, or a log line. Signing is client-side
- * > only. On the browser-key path a disposable testnet ed25519 keypair is
- * > generated in the page and kept in browser storage, labelled
- * > `TESTNET ONLY · LOCAL KEY` wherever it is created or used; it is not a
- * > wallet, it never leaves the browser, and clearing site data destroys it.
- * > On the connected-wallet path no key enters the page at all.
+ * > only. A disposable testnet ed25519 keypair is generated in the page and
+ * > kept in browser storage, labelled `TESTNET ONLY · LOCAL KEY` wherever it is
+ * > created or used; it is not a wallet, it never leaves the browser, and
+ * > clearing site data destroys it.
+ *
+ * The rule used to end "on the connected-wallet path no key enters the page at
+ * all". That clause is gone with the path it described: PLAN-V4's F4
+ * measurement found a `Delegated` owner's nested auth requirement undiscoverable
+ * from either simulation, so v4 has no connected-wallet owner. This module is
+ * not one of two ways to sign — it is the only one.
  *
  * Every clause of that is a constraint on this module:
  *
