@@ -286,6 +286,22 @@ describe('accessibility is a constraint, not a pass', () => {
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\*,/);
   });
+
+  it('has no keyframe animation, and is not allowed to grow one', () => {
+    // PLAN-V4 §8, and the one design rule step 7 could most easily have broken.
+    // Every motion this system permits is a transition on a data change: the
+    // ground's heartbeat and a policy's closing window both move because a
+    // ledger sequence arrived, and both stop when one stops arriving. A
+    // keyframe loop runs on its own authority — it would keep going with the
+    // network unreachable, which is this project's definition of decoration.
+    //
+    // Read with comments stripped, so the block in `globals.css` that explains
+    // this rule at length does not fail it.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(withoutComments).not.toContain('@keyframes');
+    expect(withoutComments).not.toMatch(/animation-name\s*:/);
+    expect(withoutComments).not.toMatch(/\banimation\s*:(?!\s*none)/);
+  });
 });
 
 describe('the network indicator cannot disagree with the network', () => {

@@ -1,8 +1,8 @@
 # PLAN-V4 — a person can actually use it
 
-Status: **steps 1–4 and 6 built; G4 answered, wallet path dropped; step 7 next.
-§11's browser half is UNRUN — see §11.** Written against the repository at
-`7ce1e7a` and against
+Status: **steps 1–4, 6 and 7 built; G4 answered, wallet path dropped. §11's
+browser half is UNRUN — see §11.** Written against the repository at `7ce1e7a`
+and against
 `OpenZeppelin/stellar-contracts` at commit `a9c42169`, the tag pinned in
 `packages/chain/src/wasm/manifest.json`. Every claim below about someone else's
 contract cites the line it came from, because the last time this project trusted
@@ -522,6 +522,62 @@ keyframe loop is by definition not one. The existing bans on gradient, glow and
 shadow depth (`design-system.test.ts:249`) are unchanged, as is the global
 `prefers-reduced-motion` rule at `globals.css:166`.
 
+### Step 7, built — 2026-08-05. Four things the plan did not anticipate.
+
+All three readings ship. One poller for the whole application — `LedgerSource`
+in the root layout — because a top bar counting one sequence above a hairline
+computed from another is two instruments disagreeing about the present. The
+arithmetic is in `lib/ledger.ts`: no React, no clock, no network, and
+`ledger-motion.test.ts` asserts §8's condition directly — a frozen sequence
+produces no change, a `null` one produces no motion.
+
+**1. `getLatestLedger` is the wrong method, by three orders of magnitude.**
+Measured on `soroban-testnet.stellar.org`, not assumed:
+
+```
+getLatestLedger   186,664 bytes   (full ledger header + metadata XDR)
+getHealth             205 bytes   (carries latestLedger)
+```
+
+A poll every five seconds for a seven-digit number would have cost about 2 MB a
+minute per open tab. `getHealth` carries the same sequence and additionally says
+whether the endpoint considers itself to be serving current data, which is a
+second stop condition worth having. The obviously-named method is the expensive
+one, so the reason is a comment in `use-ledger.ts` rather than a commit message.
+
+**2. "Brightens one contrast step on each ledger close" is narrowed to parity.**
+Read as a pulse — brighten, then decay — it needs a second state change the
+ledger did not cause, driven by a timer, and a timer is exactly the thing that
+keeps running when the network stops. Read as parity it is one contrast step of
+change on every close, caused by the close and by nothing else, and it is a pure
+function of the sequence — which is the enforceable form §8 actually specifies.
+The narrowing is taken deliberately and written down at the function.
+
+**3. `prefers-reduced-motion` is honoured by kind, not by blanket.** The global
+rule at `globals.css:166` collapses transition durations to `0.01ms`. Applied to
+a texture that changes every five seconds, that converts a slow fade into a hard
+blink — reduced motion made *worse*. So the heartbeat is switched off entirely
+under `reduce`; it carries no information and the honest reduced form is none of
+it. The closing window is deliberately not disabled: its length is a quantity a
+reader is being shown, and what should go is the easing, which the global rule
+already removes.
+
+**4. `StoredProvenance.validityLedgers` does not hold a span.** It holds
+`PlannedContextRule.validUntilLedger` verbatim, which is an absolute ledger
+sequence. Reading it as a duration gives a denominator around four million and a
+bar that never visibly moves. The closing window takes its span from
+`validUntilLedger - observedLedger` instead — both ends recorded, neither
+assumed — and the misleading field now carries a comment saying so. Renaming it
+is a stored-shape change and is not in this step.
+
+The layout now wraps every page in a client provider, which is the one change
+here that could have undone the dynamic-import discipline. It did not: the SDK
+lives in two chunks, and **no chunk the landing loads contains either of them**.
+The poller reaches RPC with `fetch` and a JSON body, and imports nothing from
+`@stellar/stellar-sdk`.
+
+---
+
 ## 9. The caveats this retires, and what replaces them
 
 This project pins its honesty caveats by test, so retiring one is a deliberate
@@ -561,7 +617,7 @@ Chain layer before screens. Gates stop work rather than route around it.
 | ~~5~~ | ~~Wallet-kit as the second owner path~~ — **not built.** The F4 experiment ran first, as planned, and answered the question against the path | the written finding above, and this row |
 | **G4** | **Gate — taken.** Fell back per F4: browser-key-only, no wallet button | |
 | 6 | Screens, in order: create → observe → install → agent run → revoke | ~~the §1 acceptance test completes by hand~~ — **built, condition unmet: the test is UNRUN in a browser (§11)** |
-| 7 | Motion | three readings, each `null`-safe |
+| 7 | Motion | **built** — three readings, each `null`-safe, asserted in `ledger-motion.test.ts` |
 
 Step 7 is the most cuttable thing in this plan and is sequenced accordingly.
 
@@ -599,8 +655,8 @@ one green tick would be the exact failure this section exists to prevent.
 | Check | Result |
 |---|---|
 | `@limen/core` + `@limen/chain` suites | 103 passed |
-| `@limen/web` suite | 213 passed |
-| Production build | clean |
+| `@limen/web` suite | 236 passed, including step 7's `ledger-motion.test.ts` |
+| Production build | clean; no SDK chunk on the landing |
 | `npm run evidence:check` | up to date |
 | `npm run lint` | clean |
 | `npm audit --omit=dev --audit-level=moderate` | green — 23 low, all `elliptic`, per §12 |

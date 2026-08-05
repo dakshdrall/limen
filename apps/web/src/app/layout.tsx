@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { LedgerSource } from "@/components/LedgerSource";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
@@ -80,8 +81,15 @@ export default function RootLayout({
       className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TopBar />
-        {children}
+        {/* One ledger poll for the whole application, per PLAN-V4 §8. It wraps
+            rather than sits beside, so the top bar's counter and any screen's
+            closing window read the same sequence and cannot disagree about what
+            the present is. `children` is passed through as a prop, so the pages
+            under it stay server components. */}
+        <LedgerSource>
+          <TopBar />
+          {children}
+        </LedgerSource>
       </body>
     </html>
   );

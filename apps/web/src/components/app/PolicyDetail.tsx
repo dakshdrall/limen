@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useStored } from '@/lib/use-store';
 import { Address } from '@/components/Address';
 import { AgentRunSteps } from '@/components/app/AgentRunSteps';
+import { ClosingWindow } from '@/components/ClosingWindow';
+import { useLedger } from '@/components/LedgerSource';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
 import { PermittedRow, RefusedTable } from '@/components/app/RefusalTable';
 import { Section } from '@/components/Section';
@@ -29,6 +31,7 @@ import { useAccountSnapshot } from '@/lib/use-account-snapshot';
 
 export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleId: number }) {
   const { state, reload } = useAccountSnapshot(contractId);
+  const ledger = useLedger();
   const provenance = useStored<StoredProvenance | null>(
     () => getProvenance(contractId, ruleId) ?? null,
     [contractId, ruleId],
@@ -81,7 +84,26 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
               </p>
             </EmptyState>
           ) : (
-            <RuleFacts rule={rule} atLedger={state.snapshot.ledger} />
+            <div className="flex flex-col gap-7">
+              <RuleFacts rule={rule} atLedger={state.snapshot.ledger} />
+              {/* The window closing, drawn only when all three of its inputs are
+                  real. `windowLedgers` is the span from the derivation to the
+                  expiry — the on-chain `valid_until` minus the ledger this
+                  browser recorded observing at. Both ends exist; nothing here
+                  is assumed. Absent provenance renders nothing rather than a
+                  full bar, which would claim the window had barely started. */}
+              <ClosingWindow
+                sequence={ledger}
+                validUntilLedger={rule.validUntilLedger}
+                windowLedgers={
+                  provenance === undefined ||
+                  provenance === null ||
+                  rule.validUntilLedger === null
+                    ? null
+                    : rule.validUntilLedger - provenance.observedLedger
+                }
+              />
+            </div>
           ))}
       </Section>
 

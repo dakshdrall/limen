@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { LedgerCounter } from '@/components/LedgerCounter';
+import { useLedger } from '@/components/LedgerSource';
 import { NETWORK } from '@/lib/network';
 
 /**
@@ -64,6 +66,7 @@ function isActive(pathname: string, href: string): boolean {
 
 export function TopBar() {
   const pathname = usePathname();
+  const ledger = useLedger();
 
   // The bar is solid, not translucent. At 95% with no blur it is not restraint,
   // it is content bleeding through the chrome — and blurring it to hide that
@@ -141,6 +144,11 @@ export function TopBar() {
           </span>
           {NETWORK}
         </span>
+
+        {/* Beside the network label because it qualifies it: which chain, and
+            how far along that chain this browser has read. Absent rather than
+            blank when the endpoint is not answering — see `LedgerCounter`. */}
+        <LedgerCounter sequence={ledger} />
       </nav>
     </header>
   );
