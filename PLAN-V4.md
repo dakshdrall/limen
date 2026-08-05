@@ -1,7 +1,8 @@
 # PLAN-V4 — a person can actually use it
 
-Status: **steps 1–4 built and on chain; G4 answered, wallet path dropped; step 6
-in progress.** Written against the repository at `7ce1e7a` and against
+Status: **steps 1–4 and 6 built; G4 answered, wallet path dropped; step 7 next.
+§11's browser half is UNRUN — see §11.** Written against the repository at
+`7ce1e7a` and against
 `OpenZeppelin/stellar-contracts` at commit `a9c42169`, the tag pinned in
 `packages/chain/src/wasm/manifest.json`. Every claim below about someone else's
 contract cites the line it came from, because the last time this project trusted
@@ -521,8 +522,6 @@ keyframe loop is by definition not one. The existing bans on gradient, glow and
 shadow depth (`design-system.test.ts:249`) are unchanged, as is the global
 `prefers-reduced-motion` rule at `globals.css:166`.
 
----
-
 ## 9. The caveats this retires, and what replaces them
 
 This project pins its honesty caveats by test, so retiring one is a deliberate
@@ -561,7 +560,7 @@ Chain layer before screens. Gates stop work rather than route around it.
 | 4 | `lib/local-key.ts`, storage, label, `assertDistinctSigners`, the three-level mainnet gate and its CI proof | tripwire tests live and green; fences shown firing |
 | ~~5~~ | ~~Wallet-kit as the second owner path~~ — **not built.** The F4 experiment ran first, as planned, and answered the question against the path | the written finding above, and this row |
 | **G4** | **Gate — taken.** Fell back per F4: browser-key-only, no wallet button | |
-| 6 | Screens, in order: create → observe → install → agent run → revoke | the §1 acceptance test completes by hand |
+| 6 | Screens, in order: create → observe → install → agent run → revoke | ~~the §1 acceptance test completes by hand~~ — **built, condition unmet: the test is UNRUN in a browser (§11)** |
 | 7 | Motion | three readings, each `null`-safe |
 
 Step 7 is the most cuttable thing in this plan and is sequenced accordingly.
@@ -589,6 +588,70 @@ Step 7 is the most cuttable thing in this plan and is sequenced accordingly.
 An opt-in Playwright spec mirrors the flow, and like the existing e2e suite it
 stays out of CI: every run spends testnet funds, and a gate that flakes is a
 gate people learn to ignore.
+
+### Status — 2026-08-05. The non-browser half passes. The browser half is UNRUN.
+
+Split, because the two halves have different standing and collapsing them into
+one green tick would be the exact failure this section exists to prevent.
+
+**Run, and passing:**
+
+| Check | Result |
+|---|---|
+| `@limen/core` + `@limen/chain` suites | 103 passed |
+| `@limen/web` suite | 213 passed |
+| Production build | clean |
+| `npm run evidence:check` | up to date |
+| `npm run lint` | clean |
+| `npm audit --omit=dev --audit-level=moderate` | green — 23 low, all `elliptic`, per §12 |
+| Demo-signer bundle fence | green, both sides shown firing |
+| Mainnet / testnet-only bundle fence | green, both sides shown firing |
+| StrKey-literal bundle fence | green, pattern shown matching a known StrKey |
+| `git diff --stat packages/core` | empty |
+
+**Not run — the two browser completions, and everything that depends on them:**
+
+The §1 acceptance test **has never been driven in a real browser.** Not once,
+let alone twice with the second cold. The attempt was set up — dev server
+running, all routes serving, `/api/ingest` reading live testnet transactions
+back — and was stopped by the reviewer's port forwarding failing on both the
+tunnel URL and `127.0.0.1`, from a Codespace whose server answered `200` to
+`curl` throughout. A tooling failure on the driving end, not a finding about
+the code.
+
+The distinction being recorded is between *unrun* and *skipped*. Nothing here
+has been waived, judged unnecessary, or covered by something else. The
+following are open:
+
+- Two completions from a clean browser profile, the second cold.
+- Every hash confirmed against Horizon from outside the process that produced
+  it. The tooling for this half exists and is validated — it reconstructs the
+  whole of `v4ChainRun` from public Horizon given only the owner key, the agent
+  key and the contract address, with the fee source on each row read off the
+  transaction rather than off which account's feed it arrived on. It has been
+  run against a recorded run and never against a browser run, because there is
+  no browser run.
+- The `browserRun` block in `deployments/testnet.json`. **Deliberately not
+  written.** There is nothing to put in it, and a block recording a run that did
+  not happen is the one thing that file must never contain.
+- The second run's hashes in this plan's own record, per open question 3.
+- No page scrolls the body sideways at 1280, 1024, 768, 390px.
+- Every screen still states on-chain vs computed locally vs shipped fixture.
+
+**What therefore may not be said anywhere.** The browser write path is
+*implemented*, and that is the whole of the claim. It has never signed a
+transaction in a browser — the signing that produced `v4ChainRun` was
+`packages/chain/scripts/acceptance.mjs`, a Node process, which is what step 6
+exists to stop being the only thing that has ever done it. Until the two runs
+land, no README sentence, landing figure, docs page or commit message may
+describe it as verified, demonstrated, or run. Step 6's "done when" in §10 —
+*the §1 acceptance test completes by hand* — is precisely the unmet condition,
+and the step is marked accordingly.
+
+Step 7 proceeds while this is parked. It is the row this plan already called
+its most cuttable, it touches no signing path, and its three readings are unit
+testable without a ledger — so it is not blocked on the acceptance run and does
+not pretend to substitute for it.
 
 ---
 

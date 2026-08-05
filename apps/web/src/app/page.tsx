@@ -285,12 +285,19 @@ export default function Home() {
       >
         <ul className="flex flex-col gap-4">
           <Limit title="No wallet, and no key recovery">
-            Deploying, installing, and revoking all run from the browser now, signed by a disposable
-            ed25519 key generated in the page. There is no connected-wallet path — a wallet can only
-            be a <span className="value">Delegated</span> signer, and that requirement cannot be
-            discovered from a simulation, so there is nothing to hand it to sign. And there is no
-            export and no backup: clearing site data destroys the key and strands the account it
-            owns.
+            Deploying, installing, and revoking are all built as browser code paths now, signed by a
+            disposable ed25519 key generated in the page. There is no connected-wallet path — a
+            wallet can only be a <span className="value">Delegated</span> signer, and that
+            requirement cannot be discovered from a simulation, so there is nothing to hand it to
+            sign. And there is no export and no backup: clearing site data destroys the key and
+            strands the account it owns.
+          </Limit>
+          <Limit title="The browser has not signed anything yet">
+            That path is written and it has not been driven end to end in a real browser, which are
+            different claims. No hash on this page was signed in a browser — each was signed either
+            by a script or, for the derivation above, by this repository&rsquo;s server-side demo
+            signer. The acceptance run that would change that is recorded as unrun rather than
+            quietly dropped.
           </Limit>
           <Limit title="One contract per boundary">
             A flow that touches a second contract cannot be installed, because no audited primitive

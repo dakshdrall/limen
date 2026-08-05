@@ -447,6 +447,54 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
   });
 });
 
+describe('a built write path is not a demonstrated one', () => {
+  const page = source('app/page.tsx');
+
+  // The narrowest and most tempting overstatement v4 has available, and the one
+  // this project would fall into by accident rather than by intent: the screens
+  // exist, the chain layer works, the hashes are real — and every one of those
+  // hashes was signed by a Node script. "Deploying, installing and revoking all
+  // run from the browser" was the wording that shipped with step 6, and it reads
+  // as a completed run to anyone who has not read PLAN-V4 §11.
+  //
+  // Pinned in both directions, as every other retirement here is. The negative
+  // half matters more than usual: the sentence this replaces is the one a future
+  // edit would restore without noticing, because it is shorter and sounds better.
+  it('does not claim on the landing that the browser has run the flow', () => {
+    expect(page).not.toContain('all run from the browser now');
+    expect(page).toContain('built as browser code paths now');
+  });
+
+  it('states on the landing that nothing on it was signed in a browser', () => {
+    expect(page).toContain('The browser has not signed anything yet');
+    expect(page).toContain('No hash on this page was signed in a browser');
+  });
+
+  it('does not let the README describe the path as demonstrated', () => {
+    expect(README).not.toContain('and revoke all run from the browser');
+    expect(README).toContain('are all built as browser code paths');
+  });
+
+  it('says in the README that the acceptance runs have not happened', () => {
+    expect(README).toContain(
+      'The browser write path has never signed a transaction in a browser.',
+    );
+    expect(README).toContain('It is implemented and it is not yet demonstrated');
+    expect(README).toContain('recorded as unrun rather than waived');
+  });
+
+  it('keeps the deployments file free of a run that did not happen', () => {
+    // The check that would fail loudest if someone decided to "fill in"
+    // `browserRun` from the script run's hashes. There is no browser run to
+    // record, and a block named for one is a claim regardless of what is in it.
+    const recorded = readFileSync(
+      fileURLToPath(new URL('../../../packages/chain/deployments/testnet.json', import.meta.url)),
+      'utf8',
+    );
+    expect(recorded).not.toContain('browserRun');
+  });
+});
+
 describe('the docs page keeps the agent-key claim in its narrow form', () => {
   const docs = source('app/docs/page.tsx');
 

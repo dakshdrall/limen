@@ -502,11 +502,26 @@ pretend otherwise.
 
   This replaces the caveat that stood here through v3 — *"nothing in the app can
   sign, so nothing in the app can install"*. That is retired in v4: deploy,
-  install, the agent's permitted and refused calls, and revoke all run from the
-  browser, signed client-side by a key that never leaves it. The retirement is
-  pinned in both directions by `apps/web/test/caveats.test.ts`, because a caveat
-  that outlives its reason understates the work and that is its own kind of
-  inaccuracy. See [`PLAN-V4.md`](./PLAN-V4.md) for what is built and what is not.
+  install, the agent's permitted and refused calls, and revoke are all built as
+  browser code paths, signed client-side by a key that never leaves it. The
+  retirement is pinned in both directions by `apps/web/test/caveats.test.ts`,
+  because a caveat that outlives its reason understates the work and that is its
+  own kind of inaccuracy. See [`PLAN-V4.md`](./PLAN-V4.md) for what is built and
+  what is not.
+- **The browser write path has never signed a transaction in a browser.** It is
+  implemented and it is not yet demonstrated, and those are different claims.
+  Every hash recorded in `packages/chain/deployments/testnet.json` was produced
+  by a Node script — `scripts/testnet.mjs` or `scripts/acceptance.mjs` — which
+  is exactly what the browser path exists to stop being the only thing that has
+  ever done it. The acceptance test in [`PLAN-V4.md`](./PLAN-V4.md) §11 calls for
+  two completions from a clean browser profile, the second cold, with every hash
+  confirmed against Horizon from outside the process that produced it. **Those
+  runs have not happened**: the attempt was blocked by port forwarding on the
+  reviewing machine, not by anything in this repository, and it is recorded as
+  unrun rather than waived. There is no `browserRun` block in the deployments
+  file for the same reason — a record of a run that did not happen is the one
+  thing that file must never hold. Until the runs land, read the paragraph above
+  as what the code does, not as something that has been shown to work.
 - **On `/app/simulator`, the deny table proves refusal as adjudicated by this
   repository's evaluator, not as enforced on-chain.** That screen runs
   `evaluate` in the browser. `evaluate` is an independent implementation of the
