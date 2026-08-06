@@ -465,9 +465,22 @@ describe('a built write path is not a demonstrated one', () => {
     expect(page).toContain('built as browser code paths now');
   });
 
-  it('states on the landing that nothing on it was signed in a browser', () => {
-    expect(page).toContain('The browser has not signed anything yet');
-    expect(page).toContain('No hash on this page was signed in a browser');
+  // Retired on 2026-08-06, by the run happening rather than by the sentence
+  // being deleted — §9's rule, applied to the caveat §11 was most careful about.
+  //
+  // What replaced it is narrower than "it works", and the narrowing is the
+  // point. Two things were true at once and had to stay distinguishable: the
+  // browser has now signed, and no person has clicked. A driver is not a hand.
+  // So the negative half below forbids the retired wording *and* the
+  // overstatement it would be tempting to replace it with.
+  it('states on the landing that the browser has signed and no person has clicked', () => {
+    expect(page).not.toContain('The browser has not signed anything yet');
+    expect(page).not.toContain('No hash on this page was signed in a browser');
+
+    expect(page).toContain('The browser has signed, and no person has clicked');
+    expect(page).toContain('driven by a test, not by a hand');
+    // The claim that must not creep back in as a shorter, better-sounding one.
+    expect(page).not.toContain('anyone can run it');
   });
 
   it('does not let the README describe the path as demonstrated', () => {
@@ -475,23 +488,49 @@ describe('a built write path is not a demonstrated one', () => {
     expect(README).toContain('are all built as browser code paths');
   });
 
-  it('says in the README that the acceptance runs have not happened', () => {
-    expect(README).toContain(
+  it('says in the README that the browser has signed and nobody has clicked', () => {
+    // Both directions. The retired sentences must not survive alongside their
+    // replacement — a README carrying both would be contradicting itself in a
+    // way that reads as caution.
+    expect(README).not.toContain(
       'The browser write path has never signed a transaction in a browser.',
     );
-    expect(README).toContain('It is implemented and it is not yet demonstrated');
-    expect(README).toContain('recorded as unrun rather than waived');
+    expect(README).not.toContain('It is implemented and it is not yet demonstrated');
+    expect(README).not.toContain('**Those\n  runs have not happened**');
+
+    expect(README).toContain(
+      'The browser write path has signed in a browser. Nobody has clicked it.',
+    );
+    expect(README).toContain('a driver is not a hand');
+    // The unmet condition stays named. This is the half a later edit would drop.
+    expect(README).toContain('still unmet and still recorded as unmet');
   });
 
-  it('keeps the deployments file free of a run that did not happen', () => {
-    // The check that would fail loudest if someone decided to "fill in"
-    // `browserRun` from the script run's hashes. There is no browser run to
-    // record, and a block named for one is a claim regardless of what is in it.
+  it('records the browser run, and says what it was not', () => {
+    // This assertion used to read `not.toContain('browserRun')`, and it was the
+    // loudest check in the file: it existed to stop anyone "filling in" the
+    // block from the script run's hashes, because a block named for a browser
+    // run is a claim regardless of what is in it.
+    //
+    // The block is now there because the run happened. So the check inverts and
+    // gains the thing that keeps it honest — the record must carry its own
+    // limits with it. A `browserRun` block that did not say it was driven by a
+    // test would be exactly the overstatement the old assertion was guarding
+    // the empty file against.
     const recorded = readFileSync(
       fileURLToPath(new URL('../../../packages/chain/deployments/testnet.json', import.meta.url)),
       'utf8',
     );
-    expect(recorded).not.toContain('browserRun');
+    const parsed = JSON.parse(recorded) as {
+      browserRun?: { notByHand?: string; runs?: unknown[]; verifiedBy?: string };
+    };
+
+    expect(parsed.browserRun, 'the browser run is not recorded').toBeDefined();
+    // §11 asks for two completions, the second cold. One is not two.
+    expect(parsed.browserRun?.runs).toHaveLength(2);
+    // The limit travels with the record or the record overstates itself.
+    expect(parsed.browserRun?.notByHand).toContain('a scripted driver is not a hand');
+    expect(parsed.browserRun?.verifiedBy).toContain('verify-browser-run');
   });
 });
 

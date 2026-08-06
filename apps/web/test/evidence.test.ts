@@ -35,6 +35,7 @@ const recorded = JSON.parse(recordedText) as {
   uploads: Record<string, string>;
   walkthrough: { smartAccount: string; installTx: string; firstRun: { installTx: string } };
   v4ChainRun: { smartAccount: string; installTx: string };
+  browserRun: { runs: { smartAccount: string; installTx: string }[] };
   denyAxisSurvey: {
     liveRuleInstallTx: string;
     shortRuleInstallTx: string;
@@ -70,6 +71,10 @@ describe('the chain figures are what the deployments file says', () => {
       recorded.denyAxisSurvey.liveRuleInstallTx,
       recorded.denyAxisSurvey.shortRuleInstallTx,
       recorded.v4ChainRun.installTx,
+      // The browser runs, added by hand for the same reason as the rest: two
+      // completions means two installs, and a list that grew by pattern would
+      // have absorbed them without anyone confirming there were two.
+      ...recorded.browserRun.runs.map((run) => run.installTx),
     ]);
     expect(EVIDENCE.chain.contextRulesInstalled).toBe(installs.size);
   });
@@ -80,7 +85,14 @@ describe('the chain figures are what the deployments file says', () => {
     // for exactly as long as there was one account: the V4 chain run deployed
     // its own and the figure would have kept saying "1" with nothing to show it
     // had stopped looking.
-    const accounts = new Set([recorded.walkthrough.smartAccount, recorded.v4ChainRun.smartAccount]);
+    const accounts = new Set([
+      recorded.walkthrough.smartAccount,
+      recorded.v4ChainRun.smartAccount,
+      // Each browser run created its own, from its own key, in its own clean
+      // profile. That they are two different addresses is the evidence that the
+      // second run was cold rather than a repeat against the first's account.
+      ...recorded.browserRun.runs.map((run) => run.smartAccount),
+    ]);
     expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
     expect(accounts.size).toBeGreaterThan(1);
   });

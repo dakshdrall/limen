@@ -508,20 +508,40 @@ pretend otherwise.
   because a caveat that outlives its reason understates the work and that is its
   own kind of inaccuracy. See [`PLAN-V4.md`](./PLAN-V4.md) for what is built and
   what is not.
-- **The browser write path has never signed a transaction in a browser.** It is
-  implemented and it is not yet demonstrated, and those are different claims.
-  Every hash recorded in `packages/chain/deployments/testnet.json` was produced
-  by a Node script — `scripts/testnet.mjs` or `scripts/acceptance.mjs` — which
-  is exactly what the browser path exists to stop being the only thing that has
-  ever done it. The acceptance test in [`PLAN-V4.md`](./PLAN-V4.md) §11 calls for
-  two completions from a clean browser profile, the second cold, with every hash
-  confirmed against Horizon from outside the process that produced it. **Those
-  runs have not happened**: the attempt was blocked by port forwarding on the
-  reviewing machine, not by anything in this repository, and it is recorded as
-  unrun rather than waived. There is no `browserRun` block in the deployments
-  file for the same reason — a record of a run that did not happen is the one
-  thing that file must never hold. Until the runs land, read the paragraph above
-  as what the code does, not as something that has been shown to work.
+- **The browser write path has signed in a browser. Nobody has clicked it.**
+  Both halves are load-bearing, and the second is the reason this caveat still
+  exists rather than being deleted.
+
+  The §1 acceptance flow — create an account, fund it, make the transaction the
+  boundary is derived from, install the boundary, run the agent inside it and
+  outside it, watch the agent fail to revoke, revoke as the owner, and watch the
+  same call fail differently — has now run end to end in a real Chromium
+  **twice, the second cold**, against a production build. Every key was generated
+  in the page by `createLocalKeys` and never left it. Eighteen transactions,
+  recorded under `browserRun` in `packages/chain/deployments/testnet.json` and
+  re-checked by `scripts/verify-browser-run.mjs`, which is handed only the two
+  public keys and the contract address and reads everything else off public
+  Horizon and the public RPC. What it checks is listed in that file; the ones
+  worth naming here are that the agent's four transactions carry no owner
+  signature — verified cryptographically, not by looking at who paid — and that
+  the installed cap equals the observed outflow exactly.
+
+  What has **not** happened is a person doing it. The runs were driven by
+  `apps/web/e2e/account-lifecycle.spec.ts`, and a driver is not a hand.
+  [`PLAN-V4.md`](./PLAN-V4.md) §10 step 6 says *completes by hand*, and that
+  condition is still unmet and still recorded as unmet.
+
+  Running it found three defects that no Node test could reach, all of which made
+  the flow unusable and none of which failed anything: both ownership checks
+  compared a `G…` StrKey against the hex a context rule stores, so the browser
+  never recognised an account it had just created; the write steps were mounted
+  inside the chain snapshot's success branch, so each hash vanished a second
+  after it landed and the tenth transaction became unreachable after the revoke;
+  and `extract.ts` set the observed transaction's `source` to the fee payer
+  rather than the account the policy installs on, so no cap was ever derived from
+  a smart account's own transfer and every boundary was refused at lowering.
+  That is what §11 meant when it insisted the browser half was *unrun* rather
+  than *fine*.
 - **On `/app/simulator`, the deny table proves refusal as adjudicated by this
   repository's evaluator, not as enforced on-chain.** That screen runs
   `evaluate` in the browser. `evaluate` is an independent implementation of the

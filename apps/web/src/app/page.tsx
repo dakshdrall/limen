@@ -292,12 +292,13 @@ export default function Home() {
             sign. And there is no export and no backup: clearing site data destroys the key and
             strands the account it owns.
           </Limit>
-          <Limit title="The browser has not signed anything yet">
-            That path is written and it has not been driven end to end in a real browser, which are
-            different claims. No hash on this page was signed in a browser — each was signed either
-            by a script or, for the derivation above, by this repository&rsquo;s server-side demo
-            signer. The acceptance run that would change that is recorded as unrun rather than
-            quietly dropped.
+          <Limit title="The browser has signed, and no person has clicked">
+            The acceptance flow has been driven end to end in a real browser twice, and every hash it
+            produced is recorded and re-checked against public Horizon by a process that did not
+            produce it. It was driven by a test, not by a hand — so what is retired is the claim that
+            only a script had ever signed, and what is not claimed is that anyone has sat in front of
+            it. The hashes on <em>this</em> page are still the script&rsquo;s; the browser&rsquo;s are
+            in the deployments file.
           </Limit>
           <Limit title="One contract per boundary">
             A flow that touches a second contract cannot be installed, because no audited primitive
