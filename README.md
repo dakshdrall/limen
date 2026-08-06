@@ -531,12 +531,25 @@ pretend otherwise.
   [`PLAN-V4.md`](./PLAN-V4.md) §10 step 6 says *completes by hand*, and that
   condition is still unmet and still recorded as unmet.
 
+  What that run would add is worth stating exactly, because it is not what the
+  runs above already cover. It would add a **usability** claim, not a
+  correctness one. Correctness is settled by the verifier: the transactions
+  exist, the agent's carry no owner signature, the cap is the observed outflow,
+  and none of that gets truer for having been clicked. What a driver cannot
+  answer is whether a person **finds the buttons, in order, without the click
+  path in front of them** — the spec is handed the selectors and the sequence,
+  so it proves the steps work and says nothing about whether they can be found.
+  Every defect above was of exactly that kind: each was invisible to a Node test
+  and each made the flow unusable rather than incorrect, which is the same class
+  of fault a by-hand run exists to catch and the reason the gap is a real
+  question rather than a formality.
+
   Running it found three defects that no Node test could reach, all of which made
   the flow unusable and none of which failed anything: both ownership checks
   compared a `G…` StrKey against the hex a context rule stores, so the browser
   never recognised an account it had just created; the write steps were mounted
   inside the chain snapshot's success branch, so each hash vanished a second
-  after it landed and the tenth transaction became unreachable after the revoke;
+  after it landed and the ninth transaction became unreachable after the revoke;
   and `extract.ts` set the observed transaction's `source` to the fee payer
   rather than the account the policy installs on, so no cap was ever derived from
   a smart account's own transfer and every boundary was refused at lowering.
