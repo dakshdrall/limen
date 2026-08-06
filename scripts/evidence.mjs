@@ -81,9 +81,12 @@ function runSuite({ workspace, directory, covers }, reportDirectory) {
 
   // Inherited stderr, piped stdout: vitest's own progress stays visible, and
   // the report is read from the file rather than parsed out of the stream.
+  // `npm` is `npm.cmd` on Windows, which needs a shell to run; the arguments
+  // here are fixed strings, so there is nothing a shell could re-read.
   execFileSync('npm', ['run', 'test', '-w', workspace, '--', '--reporter=json', `--outputFile=${report}`], {
     cwd: root,
     stdio: ['ignore', 'ignore', 'inherit'],
+    shell: true,
   });
 
   const result = JSON.parse(readFileSync(report, 'utf8'));

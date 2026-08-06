@@ -17,7 +17,7 @@ import { ObservedSection } from '@/components/ObservedSection';
 import { Section } from '@/components/Section';
 import { StatusLabel } from '@/components/StatusLabel';
 import { TransactionPicker } from '@/components/TransactionPicker';
-import { type IngestError } from '@/lib/ingest-contract';
+import { type IngestError, parseIngestResponse } from '@/lib/ingest-contract';
 import { useLowering } from '@/lib/use-lowering';
 
 /**
@@ -89,13 +89,26 @@ export function NewPolicyScreen({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ hash: reference, network }),
       });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        setIngestProblem((body as IngestError).error);
-        return;
+      const outcome = await parseIngestResponse(response);
+      switch (outcome.kind) {
+        case 'observed':
+          setObserved(outcome.observed);
+          setActiveKey(reference);
+          break;
+        case 'error':
+          setIngestProblem(outcome.error);
+          break;
+        case 'malformed':
+          // Neither a transaction nor a structured refusal. The route's
+          // contract is exactly those two shapes, so anything else is a
+          // transport failure, not Limen declining.
+          setIngestProblem({
+            code: 'rpc_failed',
+            message: 'the lookup returned a response this build cannot read; nothing was derived',
+            detail: `HTTP ${outcome.status}`,
+          });
+          break;
       }
-      setObserved(body as ObservedTransaction);
-      setActiveKey(reference);
     } catch (error) {
       setIngestProblem({
         code: 'rpc_failed',

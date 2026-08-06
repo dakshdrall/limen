@@ -11,7 +11,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObservedTransaction } from '@limen/core';
 import { POST } from '@/app/api/ingest/route';
-import { REFUSAL_CODES, type IngestError } from '@/lib/ingest-contract';
+import { FIXTURES } from '@/fixtures';
+import { REFUSAL_CODES, parseIngestResponse, type IngestError } from '@/lib/ingest-contract';
 import { clearCache } from '@/lib/tx-cache';
 
 function post(body: unknown, ip = '203.0.113.1'): Request {
@@ -56,6 +57,17 @@ describe('fixtures resolve with no network access', () => {
     const observed = (await (await POST(post({}))).json()) as ObservedTransaction;
     expect(observed.network).toBe('simulated');
   });
+
+  it('refuses prototype-key references instead of serving a fabricated transaction', async () => {
+    for (const hash of ['__proto__', 'constructor', 'hasOwnProperty']) {
+      const response = await POST(post({ hash, network: 'testnet' }));
+      // `FIXTURES['__proto__']` would resolve to `Object.prototype` — truthy,
+      // and served as a fabricated 200 `{}`. It is neither a fixture key nor a
+      // 64-hex hash, so the route must refuse it as a bad request.
+      expect(response.status).toBe(400);
+      expect((await errorOf(response)).code).toBe('bad_request');
+    }
+  });
 });
 
 describe('malformed input is refused, never fabricated', () => {
@@ -99,12 +111,55 @@ describe('malformed input is refused, never fabricated', () => {
       { hash: 'zzzz', network: 'testnet' },
       { hash: 'a'.repeat(64), network: 'mainnet' },
       { hash: 'a'.repeat(64), network: 'futurenet' },
+      { hash: '__proto__', network: 'testnet' },
     ]) {
       const payload = (await (await POST(post(body))).json()) as Record<string, unknown>;
       expect(payload).not.toHaveProperty('invocations');
       expect(payload).not.toHaveProperty('movements');
       expect(payload).toHaveProperty('error');
     }
+  });
+});
+
+describe('parseIngestResponse only yields a transaction the page can render', () => {
+  it('accepts a well-formed transaction body', async () => {
+    const response = new Response(JSON.stringify(FIXTURES['simple-transfer']), { status: 200 });
+    const outcome = await parseIngestResponse(response);
+    expect(outcome.kind).toBe('observed');
+    if (outcome.kind === 'observed') {
+      expect(outcome.observed.hash).toBe(FIXTURES['simple-transfer'].hash);
+    }
+  });
+
+  it.each([
+    ['an empty object', '{}'],
+    ['an empty array', '[]'],
+    ['null', 'null'],
+    ['a truncated transaction', JSON.stringify({ hash: 'a'.repeat(64), network: 'simulated' })],
+  ])('rejects %s as malformed', async (_label, json) => {
+    const outcome = await parseIngestResponse(new Response(json, { status: 200 }));
+    expect(outcome.kind).toBe('malformed');
+  });
+
+  it('returns the structured error for an error body', async () => {
+    const body = { error: { code: 'not_found', message: 'no such transaction' } };
+    const outcome = await parseIngestResponse(new Response(JSON.stringify(body), { status: 404 }));
+    expect(outcome.kind).toBe('error');
+    if (outcome.kind === 'error') {
+      expect(outcome.error.code).toBe('not_found');
+      expect(outcome.error.message).toBe('no such transaction');
+    }
+  });
+
+  it('flags an error body without a structured error as malformed', async () => {
+    const outcome = await parseIngestResponse(new Response('{}', { status: 500 }));
+    expect(outcome.kind).toBe('malformed');
+  });
+
+  it('flags a non-JSON body as malformed', async () => {
+    const response = new Response('not json', { status: 200 });
+    const outcome = await parseIngestResponse(response);
+    expect(outcome.kind).toBe('malformed');
   });
 });
 

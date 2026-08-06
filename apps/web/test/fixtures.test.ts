@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SynthesisError, evaluate, generateDenyCases, synthesize } from '@limen/core';
-import { FIXTURES, REFUSING_FIXTURES } from '@/fixtures';
+import { FIXTURES, REFUSING_FIXTURES, resolveFixture } from '@/fixtures';
 
 function fixture(key: string) {
   const tx = FIXTURES[key];
@@ -79,5 +79,22 @@ describe('over-limit is refused, and that is its purpose', () => {
 
   it('is listed as a refusing fixture so the demo can label it', () => {
     expect(REFUSING_FIXTURES.has('over-limit')).toBe(true);
+  });
+});
+
+describe('prototype keys are not fixtures', () => {
+  // `FIXTURES['__proto__']` reads `Object.prototype` — truthy, and not a
+  // transaction. A resolver that hands that out has turned a lookup bug into a
+  // fabricated transaction for the ingest route to serve.
+  it.each(['__proto__', 'constructor', 'prototype', 'hasOwnProperty', 'toString'])(
+    'resolveFixture(%s) is undefined',
+    (key) => {
+      expect(resolveFixture(key)).toBeUndefined();
+    },
+  );
+
+  it('still resolves shipped keys and full hashes', () => {
+    expect(resolveFixture('simple-transfer')?.hash).toBe(FIXTURES['simple-transfer'].hash);
+    expect(resolveFixture(FIXTURES['swap-two-calls'].hash)).toEqual(FIXTURES['swap-two-calls']);
   });
 });
