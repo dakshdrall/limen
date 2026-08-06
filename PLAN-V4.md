@@ -659,7 +659,7 @@ one green tick would be the exact failure this section exists to prevent.
 | Production build | clean; no SDK chunk on the landing |
 | `npm run evidence:check` | up to date |
 | `npm run lint` | clean |
-| `npm audit --omit=dev --audit-level=moderate` | green — 23 low, all `elliptic`, per §12 |
+| `npm audit --omit=dev --audit-level=low` | green — 0 advisories, threshold lowered per §12 |
 | Demo-signer bundle fence | green, both sides shown firing |
 | Mainnet / testnet-only bundle fence | green, both sides shown firing |
 | StrKey-literal bundle fence | green, pattern shown matching a known StrKey |
@@ -730,22 +730,36 @@ not pretend to substitute for it.
 - **`validFromLedger` on-chain.** No counterpart; stays local provenance.
 - **A shared backing store.** Cache and rate limits stay process-local; the
   write path now has no Limen server in it at all.
-- **The 23 low-severity `elliptic` advisories.** Unchanged in v4 — but the
-  reasoning here has inverted and should not be left standing as written. This
-  bullet used to say that taking the wallet path forecloses the one route that
-  would have cleared them, counted as a cost of the decision. G4 declines the
-  wallet path, so that route is now **open**: every one of the 23 reduces to
-  `@creit.tech/stellar-wallets-kit`, which is a declared dependency of
-  `apps/web` that **no source file imports** — the README's "the install flow
-  imports only the two modules it uses" describes a flow that was never built.
-  Dropping the dependency would take the audit count to zero.
+- ~~**The 23 low-severity `elliptic` advisories.**~~ **Done — 2026-08-06, in its
+  own commit.** This bullet twice described a thing v4 would not do, and it is
+  struck rather than edited because the thing was done.
 
-  Deliberately not done in this plan. It is a lockfile change with its own
-  verification — the audit gate's threshold could then drop from `moderate` to
-  `low`, and the README's whole "What cannot be fixed, and why" section is
-  retired rather than edited — and bundling it into the step that ships the
-  screens would put an unrelated dependency removal in the same diff as the
-  signing path. Recorded here as the next obvious piece of work.
+  The route it identified was the right one: every one of the 23 reduced to
+  `@creit.tech/stellar-wallets-kit`, a declared dependency of `apps/web` that no
+  source file imported, and G4's decision against the wallet path meant none ever
+  would. Dropping it took the audit count to zero and the gate's threshold from
+  `moderate` to `low`. The README's "What cannot be fixed, and why" section is
+  retired, as this bullet said it would be.
+
+  One thing the plan did not anticipate, recorded because it cost the most time
+  and would cost it again. Removing the package changes npm's **hoisting**, not
+  just its advisory count: with the kit gone there was no longer a root-level
+  version conflict forcing `@stellar/stellar-sdk` into per-workspace
+  `node_modules`, so it hoisted to the root. Two things fell out of that.
+
+  First, this is a workspace with four `node_modules` directories. Clearing only
+  the root — which is what the README's reproduce note said to do — leaves the
+  three workspace copies to seed the resolve from their old layout, and produces
+  a tree where the SDK keeps its nested position and its own declared dependency
+  on `@noble/ed25519` is never installed at all. The chain suite then fails on a
+  missing package that the lockfile correctly lists. The note now says to clear
+  all four.
+
+  Second, `test/stubs/stellar-sdk-browser.mjs` reached the SDK's UMD bundle by
+  the literal path `../../node_modules/@stellar/stellar-sdk/dist/…`, which had
+  silently encoded the nested layout as an assumption. It resolves the package
+  entry and walks up to its root now, which holds under either layout. A hardcoded
+  path into `node_modules` is a dependency on someone else's dependency graph.
 
 ---
 

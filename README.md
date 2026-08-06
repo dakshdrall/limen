@@ -582,9 +582,10 @@ pretend otherwise.
 - **No Rust policy codegen, no MCP server, no mainnet, no multi-account
   management, no wallet.** Each is marked with a `TODO(roadmap)` comment at the
   point where it will attach.
-- **`npm audit` is not clean** — 23 low-severity advisories remain, all of them
-  unfixable at the dependency level. See [Dependency
-  advisories](#dependency-advisories) for the full accounting.
+- ~~**`npm audit` is not clean**~~ — it is. The 23 low-severity advisories that
+  stood here all reduced to a package no source file imported, and it has been
+  removed. See [Dependency advisories](#dependency-advisories) for the
+  accounting, including what the count was before.
 
 ---
 
@@ -596,6 +597,10 @@ pretend otherwise.
 |---|---|---|---|---|---|
 | before overrides | 1 | 10 | 6 | 19 | **36** |
 | after overrides | 0 | 0 | 0 | 23 | **23** |
+| after dropping the wallet kit | 0 | 0 | 0 | 0 | **0** |
+
+The CI gate runs at `--audit-level=low`, which is the strictest npm offers. It
+sat at `moderate` for as long as the third row did not exist.
 
 ### What the overrides fix
 
@@ -611,75 +616,65 @@ The root `package.json` pins five transitive packages:
 }
 ```
 
-This clears every critical, high, and moderate advisory — including the critical
+This cleared every critical, high, and moderate advisory — including the critical
 one, arbitrary code execution in `protobufjs` (GHSA-xq3m-2v4x-88gg), which
 arrived via `@trezor/*`. All five resolve within a compatible range, so nothing
 is force-upgraded across a breaking major. `npm test`, `npm run lint`, and
 `npm run build` all pass with them applied, and the app was smoke-tested
 end-to-end afterwards.
 
+Three of the five still bind: `axios` (pulled up from the `1.18.0` the Stellar
+SDK pins), `postcss` and `sharp` (both up from what Next declares). The other
+two — `protobufjs` and `uuid` — no longer have anything to act on, because the
+packages that brought them in left the tree with the wallet kit. They are kept
+rather than deleted: an override on an absent package costs nothing, and each is
+a floor that a future dependency cannot silently drop back through.
+
 > **Reproducing this:** npm seeds resolution from an existing `node_modules`, so
-> adding an override to a populated tree appears to do nothing — the old version
-> stays pinned and the audit count does not move. Delete both `node_modules` and
-> `package-lock.json` before re-resolving, or you will conclude the overrides
-> are broken. They are not.
+> changing dependencies on a populated tree appears to do nothing — the old
+> version stays pinned and the audit count does not move.
+>
+> This is a workspace, so there are **four** `node_modules` directories, not one.
+> Deleting the root and `package-lock.json` is not enough: the copies under
+> `apps/web/`, `packages/chain/` and `packages/core/` survive and seed the
+> resolve from the layout they already had. That failure is quiet and it does not
+> look like a stale tree — it looks like a broken dependency. Removing the wallet
+> kit and clearing only the root produced a tree in which `@stellar/stellar-sdk`
+> kept its old nested position and its own declared dependency on
+> `@noble/ed25519` was never installed at all, so the chain suite failed on a
+> missing package that the lockfile correctly listed.
+>
+> ```
+> rm -rf node_modules */*/node_modules package-lock.json && npm install
+> ```
 
-### What cannot be fixed, and why
+### Where the last 23 went
 
-The 23 remaining advisories are all low severity and all reduce to a single
-root cause: **`elliptic`** (GHSA-848j-6mx2-7j84, "uses a cryptographic primitive
-with a risky implementation"). The advisory covers `*` — every published
-version, including the current 6.6.1 — so there is no version to pin to. An
-override cannot fix it; only removing the dependency can.
+Two sections stood here: one explaining that the 23 remaining advisories could
+not be fixed, and one explaining that nothing imported the package they came
+from. Both are **retired**, because the condition they described is gone rather
+than merely re-argued.
 
-It arrives through two independent paths, both inside the wallet kit:
+All 23 were low severity and all reduced to one root cause, **`elliptic`**
+(GHSA-848j-6mx2-7j84). Its advisory covers `*` — every published version — so
+there was no version to pin to and no override that could reach it. It arrived
+through two independent paths, both unconditional dependencies of
+`@creit.tech/stellar-wallets-kit`, and it was installed whether or not the HOT
+Wallet and Trezor modules were used.
 
-```
-@creit.tech/stellar-wallets-kit
-├─ @hot-wallet/sdk → @near-js/crypto → secp256k1 → elliptic
-└─ @trezor/connect-plugin-stellar → @trezor/connect
-     ├─ @trezor/blockchain-link → crypto-browserify → browserify-sign → elliptic
-     └─ @trezor/utxo-lib → tiny-secp256k1 → elliptic
-```
+That package was a declared dependency of `apps/web` that **no source file ever
+imported**, and once the wallet path was struck (see [Why there is no wallet
+button](#why-there-is-no-wallet-button)) none ever would. So it was removed. The
+count went to zero, and the audit gate's threshold moved from `moderate` to
+`low`.
 
-Both are unconditional dependencies of `@creit.tech/stellar-wallets-kit`. They
-are installed whether or not the HOT Wallet and Trezor modules are used, because
-npm installs a package's dependency tree regardless of which subpaths an
-application imports.
-
-### Nothing imports the wallet kit, and what that does not do
-
-This section used to describe subpath importing — the install flow reaching for
-`modules/freighter` and `modules/xbull` and nothing else, so that `elliptic`
-never entered the bundle. That was written ahead of the flow, and the flow was
-never built. The accurate statement is stronger and less flattering:
-**`@creit.tech/stellar-wallets-kit` is a declared dependency of `apps/web` that
-no source file imports at all.** With the wallet path dropped (see [Why there is
-no wallet button](#why-there-is-no-wallet-button)), none ever will.
-
-So `elliptic` is not bundled into the client and never executes at runtime —
-for a better reason than the one this section used to give.
-
-**This is a mitigation of runtime exposure, not of supply-chain exposure.** Be
-precise about the distinction:
-
-- ✅ `elliptic` is not in the shipped browser bundle and no code path reaches it.
-- ❌ It is still installed on every `npm ci`, in CI and on any developer machine.
-- ❌ It still runs its install scripts and still appears in `npm audit`, SBOMs,
-  and any supply-chain scan.
-
-That used to be the end of it: removing the advisories entirely would have
-required the wallet kit to move its wallet modules to optional peer
-dependencies, or replacing the kit with per-wallet integrations — neither in
-scope, and neither something this repository can fix on its own.
-
-**That is no longer true, and the change is a consequence of dropping the wallet
-path.** An unimported dependency can simply be removed, which would take the
-audit count from 23 to zero and let the audit gate's threshold drop from
-`moderate` to `low`. It has not been done yet: it is a lockfile change with its
-own verification, and it does not belong in the same diff as the signing path.
-It is the next obvious piece of work rather than an unfixable condition, and
-this section will be deleted rather than edited when it happens.
+The distinction the retired sections drew is worth keeping even though its
+occasion is gone, because it is the thing that made removal worth doing rather
+than optional. Not importing `elliptic` only ever mitigated *runtime* exposure:
+it was still installed on every `npm ci`, still ran its install scripts, and
+still appeared in `npm audit`, SBOMs, and any supply-chain scan. Removing the
+dependency is the only move that addresses the second kind, and an unimported
+dependency is the one case where it costs nothing.
 
 ---
 

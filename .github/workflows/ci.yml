@@ -220,13 +220,22 @@ jobs:
           echo "no secret key literal in the client bundle"
 
       # Runs last so build and test results are always visible even when this
-      # fails. Threshold is `moderate`, not `low`, because 23 low-severity
-      # advisories are currently unfixable: they all reduce to `elliptic`,
-      # whose advisory covers every published version, so there is no version
-      # to pin to. See "Dependency advisories" in the README.
+      # fails.
+      #
+      # Threshold is `low`, which is the strictest npm offers. It used to be
+      # `moderate`, held there by 23 low-severity advisories that all reduced to
+      # `elliptic` — an advisory covering every published version, so there was
+      # no version to pin to and no override that could clear it. All 23 arrived
+      # through `@creit.tech/stellar-wallets-kit`, which no source file ever
+      # imported; dropping it took the count to zero and let the threshold move
+      # down to where nothing has to be tolerated.
+      #
+      # The point of lowering it is that `moderate` silently permitted every
+      # future low-severity advisory in order to tolerate one specific set. That
+      # set is gone, so the permission should go with it.
       #
       # This gate exists so a future dependency bump cannot quietly reintroduce
-      # a high or critical. If it starts failing, fix the advisory or move the
-      # threshold deliberately — do not silence it.
+      # an advisory at any severity. If it starts failing, fix the advisory or
+      # move the threshold deliberately — do not silence it.
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=low

@@ -19,14 +19,27 @@
  */
 
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 
 // The bundle expects a browser-ish global to hang itself off.
 globalThis.self ??= globalThis;
 
-// Not a package subpath import: `dist/` is not in the SDK's `exports` map.
-require('../../node_modules/@stellar/stellar-sdk/dist/stellar-sdk.min.js');
+// `dist/` is not in the SDK's `exports` map, so the bundle has to be reached by
+// file path rather than as a package subpath. The path is *derived* rather than
+// written down: this used to be a literal `../../node_modules/@stellar/…`, which
+// silently encoded an assumption about where npm had hoisted the SDK. That
+// assumption held only while a root-level version conflict forced a nested copy
+// into `packages/chain/node_modules`; when the conflicting dependency was
+// dropped the SDK hoisted to the workspace root and the literal path resolved to
+// nothing. Resolving the package entry and walking up to its root works under
+// either layout, and under a future one nobody has predicted.
+const entry = require.resolve('@stellar/stellar-sdk');
+const marker = `${path.sep}@stellar${path.sep}stellar-sdk${path.sep}`;
+const packageRoot = entry.slice(0, entry.lastIndexOf(marker) + marker.length);
+
+require(path.join(packageRoot, 'dist', 'stellar-sdk.min.js'));
 
 const sdk = globalThis.StellarSdk;
 if (sdk === undefined || sdk.xdr === undefined) {
