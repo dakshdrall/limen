@@ -259,7 +259,13 @@ export function NewAccountScreen() {
               install.
             </p>
             <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[12.5px]">
-              <div className="flex flex-col gap-0.5">
+              {/* `min-w-0`: the `scroll-x` on the value below cannot do
+                  anything while its flex parent is sized to the content. A
+                  64-character hash has no break opportunity, so the item's
+                  `min-width: auto` resolved to 440px and pushed the document
+                  sideways at 390px — the box scrolls only once it is allowed to
+                  be narrower than what is in it. */}
+              <div className="flex min-w-0 flex-col gap-0.5">
                 <dt className="col-head text-muted-dim">account wasm hash</dt>
                 <dd className="value scroll-x text-[12px] text-foreground">{ACCOUNT_WASM_HASH}</dd>
               </div>
