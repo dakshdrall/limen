@@ -36,7 +36,9 @@ export const DEFAULT_FIXTURE_KEY = 'simple-transfer';
  * be driven either way.
  */
 export function resolveFixture(reference: string): ObservedTransaction | undefined {
-  const byKey = FIXTURES[reference];
-  if (byKey !== undefined) return byKey;
+  // Own properties only. `FIXTURES['__proto__']` would otherwise read
+  // `Object.prototype` — truthy, and exactly the fabricated-looking response
+  // this function exists to never produce.
+  if (Object.hasOwn(FIXTURES, reference)) return FIXTURES[reference];
   return Object.values(FIXTURES).find((tx) => tx.hash === reference);
 }

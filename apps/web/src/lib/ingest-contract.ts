@@ -7,6 +7,8 @@
  * route, and through it the SDK, into the browser bundle.
  */
 
+import type { ObservedTransaction } from '@limen/core';
+
 export type IngestErrorCode =
   // the caller sent something this route cannot act on
   | 'bad_request'
@@ -49,3 +51,55 @@ export const REFUSAL_CODES: ReadonlySet<IngestErrorCode> = new Set<IngestErrorCo
   'ambiguous_subject',
   'mainnet_out_of_scope',
 ]);
+
+/**
+ * Whether a response body is a usable `ObservedTransaction`.
+ *
+ * A wire guard, not a typechecker: it checks the fields the page actually
+ * reads. The alternative — trusting a cast — turns a server bug into a white
+ * screen mid-render: `{}` passes `body as ObservedTransaction` and fails here.
+ */
+export function isObservedTransaction(value: unknown): value is ObservedTransaction {
+  if (typeof value !== 'object' || value === null) return false;
+  const tx = value as Record<string, unknown>;
+  return (
+    typeof tx.hash === 'string' &&
+    typeof tx.network === 'string' &&
+    typeof tx.ledger === 'number' &&
+    typeof tx.source === 'string' &&
+    Array.isArray(tx.invocations) &&
+    Array.isArray(tx.movements) &&
+    (tx.attribution === 'exact' || tx.attribution === 'transaction-level')
+  );
+}
+
+export type IngestResponse =
+  | { kind: 'observed'; observed: ObservedTransaction }
+  | { kind: 'error'; error: IngestError['error'] }
+  | { kind: 'malformed'; status: number };
+
+/**
+ * Parses a `/api/ingest` response into one of three outcomes.
+ *
+ * The route's contract is `ObservedTransaction | IngestError`. A body that is
+ * neither is not a refusal — presenting it as one would claim judgement the
+ * server never exercised — so it becomes `malformed` and the page says the
+ * lookup failed rather than that Limen declined.
+ */
+export async function parseIngestResponse(response: Response): Promise<IngestResponse> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { kind: 'malformed', status: response.status };
+  }
+  if (!response.ok) {
+    const error = (body as IngestError | null | undefined)?.error;
+    if (typeof error?.code === 'string' && typeof error.message === 'string') {
+      return { kind: 'error', error };
+    }
+    return { kind: 'malformed', status: response.status };
+  }
+  if (isObservedTransaction(body)) return { kind: 'observed', observed: body };
+  return { kind: 'malformed', status: response.status };
+}
