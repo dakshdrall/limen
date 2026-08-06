@@ -50,7 +50,7 @@
  */
 
 import { Keypair } from '@stellar/stellar-sdk';
-import { assertTestnet, type Ed25519Signer } from '@limen/chain/browser';
+import { assertTestnet, toHex, type Ed25519Signer } from '@limen/chain/browser';
 import { LOCAL_KEY_LABEL } from '@/components/StatusLabel';
 import { KEY_ROLES, NOT_EXPORTABLE, type KeyRole } from '@/lib/key-roles';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
@@ -82,6 +82,19 @@ export interface LocalKey {
   publicKey: string;
   /** The raw 32 bytes the verifier contract stores. */
   rawPublicKey: Uint8Array;
+  /**
+   * The same 32 bytes as hex — the form a context rule's `External` signer
+   * comes back in from `readAllContextRules`.
+   *
+   * Carried here rather than converted at each comparison, because the two
+   * representations of one key are exactly what the ownership checks on
+   * `/app/accounts/[id]` and `/app/policies/[id]` got wrong: they compared a
+   * `G…` StrKey against `read.ts`'s hex, which can never be equal, so every
+   * account this browser created was reported as somebody else's and the whole
+   * write flow after deploy was unreachable. Storing both forms makes the
+   * mismatch impossible to reintroduce at a call site.
+   */
+  hexPublicKey: string;
   /** Signs 32-byte digests. The only way the secret is reachable. */
   signer: Ed25519Signer;
   /** Signs a transaction envelope, for fee-source signatures. */
@@ -134,6 +147,7 @@ function toLocalKey(role: KeyRole, keypair: Keypair): LocalKey {
     role,
     publicKey: keypair.publicKey(),
     rawPublicKey: new Uint8Array(keypair.rawPublicKey()),
+    hexPublicKey: toHex(new Uint8Array(keypair.rawPublicKey())),
     signer: {
       rawPublicKey: () => new Uint8Array(keypair.rawPublicKey()),
       sign: (message) => new Uint8Array(keypair.sign(message as never)),
@@ -253,10 +267,19 @@ export function subscribeToLocalKeys(listener: () => void): () => void {
  * Public keys only. The snapshot is a value React holds, compares, and may pass
  * through a devtools boundary; there is no version of this that should contain
  * a secret.
+ *
+ * Each role contributes `ROLE:G…:hex`. Both public forms travel together for
+ * the reason `hexPublicKey` exists: a screen comparing this browser's key
+ * against one read off a context rule needs the hex, and a screen showing it to
+ * a person needs the `G…`. Deriving one from the other at the call site is what
+ * was wrong before, and it was wrong silently.
  */
 export function readLocalKeySnapshot(): string | null {
   if (typeof window === 'undefined') return null;
-  return KEY_ROLES.map((role) => `${role}:${getLocalKey(role)?.publicKey ?? ''}`).join('|');
+  return KEY_ROLES.map((role) => {
+    const key = getLocalKey(role);
+    return `${role}:${key?.publicKey ?? ''}:${key?.hexPublicKey ?? ''}`;
+  }).join('|');
 }
 
 /** The server has no browser storage, so it renders the not-yet-known state. */

@@ -12,7 +12,8 @@ import { ED25519_VERIFIER, RPC_URL } from '@/lib/chain-config';
 import { loadChain, type ChainBrowser } from '@/lib/chain-write';
 import { decimalise } from '@/lib/format';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
-import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';
+import { useLastRead } from '@/lib/use-last-read';
+import { useLocalKeyPublics, useLocalKeyRawPublics, useSigners } from '@/lib/use-local-keys';
 import { useWriteLog, type WriteState } from '@/lib/use-write';
 
 /**
@@ -78,14 +79,24 @@ interface PermittedCall {
 
 export function AgentRunSteps({
   contractId,
-  rule,
+  rule: readRule,
+  reading,
   onWritten,
 }: {
   contractId: string;
-  rule: SnapshotRule;
+  /**
+   * The rule as last read, or `null` while a read is in flight and after the
+   * revoke has removed it. This component stays mounted through both — see
+   * {@link useLastRead} for why, and for what it cost to find out.
+   */
+  rule: SnapshotRule | null;
+  /** True while the chain is being read, to tell "not yet" from "not there". */
+  reading: boolean;
   onWritten: () => void;
 }) {
+  const rule = useLastRead(readRule);
   const publics = useLocalKeyPublics();
+  const raws = useLocalKeyRawPublics();
   const signers = useSigners();
   const log = useWriteLog();
 
@@ -113,15 +124,27 @@ export function AgentRunSteps({
   const owner = publics?.OWNER;
   const agent = publics?.AGENT;
 
-  const cap = rule.policies[0]?.limit?.limit ?? null;
-  const token = rule.contract;
+  const cap = rule?.policies[0]?.limit?.limit ?? null;
+  const token = rule?.contract ?? null;
 
   // The agent this rule was installed for is the one named in its signers. A
   // browser holding some other agent key can read this screen and sign nothing
   // under this rule, which is the correct outcome and worth rendering as one.
+  //
+  // Compared in hex, for the reason spelled out in `AccountWriteSteps`: a rule's
+  // `External` signer is the raw 32 bytes the contract stores, and `agent` is
+  // the `G…` a person reads. Comparing the two made this false for every rule
+  // this browser had just installed.
+  //
+  // `agent` is narrowed here as well as `agentRaw`. The hex decides the
+  // question; the StrKey is what the badges below render, and this branch is
+  // what makes both defined by the time they are used.
+  const agentRaw = raws?.AGENT;
   const boundedByThisBrowser =
     agent !== undefined &&
-    rule.signers.some((signer) => signer.kind === 'External' && signer.publicKey === agent);
+    agentRaw !== undefined &&
+    rule !== null &&
+    rule.signers.some((signer) => signer.kind === 'External' && signer.publicKey === agentRaw);
 
   const ownsThisAccount = owner !== undefined;
 
@@ -135,7 +158,10 @@ export function AgentRunSteps({
    */
   const prepare = async () => {
     const keys = signers();
-    if (keys === null || token === null || cap === null) return null;
+    // `rule` is retained across the revoke on purpose — step 05 submits under a
+    // rule id that no longer exists, which is the only way to produce
+    // `ContextRuleNotFound` — so it is checked here rather than assumed.
+    if (keys === null || rule === null || token === null || cap === null) return null;
 
     const chain = await loadChain();
     const { rpc, xdr } = await import('@stellar/stellar-sdk');
@@ -154,6 +180,10 @@ export function AgentRunSteps({
       xdr,
       keys,
       expiry,
+      // Carried on the context rather than read off `rule` at each call site.
+      // `rule` is nullable now that this component outlives the revoke, and the
+      // one place that has already established it is not null is here.
+      ruleId: rule.id,
       defaultRuleId: defaultRule?.id ?? null,
       agentSigns: chain.signAs({
         signer: keys.agent.signer,
@@ -276,7 +306,7 @@ export function AgentRunSteps({
       'agent-revoke',
       'The agent tries to remove the boundary that binds it',
       async () => {
-        const revokeFunc = ctx.chain.removeContextRuleFunction(contractId, rule.id);
+        const revokeFunc = ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId);
 
         // Borrowed from the *owner's* revoke, which simulates cleanly. The
         // agent's own attempt does not, which is the finding.
@@ -322,7 +352,7 @@ export function AgentRunSteps({
         passphrase: NETWORK_PASSPHRASE,
         feeSource: ctx.keys.owner.publicKey,
         signEnvelope: ctx.keys.owner.signEnvelope,
-        func: ctx.chain.removeContextRuleFunction(contractId, rule.id),
+        func: ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId),
         signAuthEntry: ownerSigns,
         label: 'revoke',
       }),
@@ -361,6 +391,20 @@ export function AgentRunSteps({
   };
 
   if (publics === undefined) return null;
+
+  // Never read, and still being read, are different answers and get different
+  // words. This branch is only reachable before the first successful read —
+  // once a rule has been seen, `useLastRead` holds it through every subsequent
+  // reload, including the one after the revoke that removes it.
+  if (rule === null) {
+    return (
+      <p className="measure text-[13px] leading-relaxed text-muted-dim">
+        {reading
+          ? 'Waiting for the rule to be read from the chain.'
+          : 'There is no rule here to exercise.'}
+      </p>
+    );
+  }
 
   if (!ownsThisAccount || !boundedByThisBrowser) {
     return (

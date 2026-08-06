@@ -42,19 +42,48 @@ export type LocalKeyPublics = Partial<Record<KeyRole, string>>;
  * the same point where it produces the snapshot.
  */
 export function useLocalKeyPublics(): LocalKeyPublics | undefined {
-  const snapshot = useSyncExternalStore(
+  return parseSnapshot(useKeySnapshot(), 1);
+}
+
+/**
+ * The same keys as hex, which is how a context rule names them.
+ *
+ * `readAllContextRules` returns an `External` signer's key as hex of the raw 32
+ * bytes — it is reporting what the contract stores. `useLocalKeyPublics`
+ * returns `G…`, because that is what a person reads. Both are correct and they
+ * are never equal, so a screen asking *does this browser hold the key this rule
+ * names* must ask in hex. It is a separate hook rather than a second field on
+ * the same one so that a comparison cannot reach for the wrong form: the type
+ * of the display value and the type of the comparison value are the same
+ * `string`, and nothing but the hook name distinguishes them.
+ *
+ * This existing in a shape that can be got wrong is the reason it is documented
+ * at this length. Comparing the two forms directly is what made every account
+ * created in this browser render as somebody else's.
+ */
+export function useLocalKeyRawPublics(): LocalKeyPublics | undefined {
+  return parseSnapshot(useKeySnapshot(), 2);
+}
+
+function useKeySnapshot(): string | null {
+  return useSyncExternalStore(
     subscribeToLocalKeys,
     readLocalKeySnapshot,
     () => SERVER_KEY_SNAPSHOT,
   );
+}
 
+/** `ROLE:G…:hex` per role, `field` selecting which of the two public forms. */
+function parseSnapshot(snapshot: string | null, field: 1 | 2): LocalKeyPublics | undefined {
   if (snapshot === null) return undefined;
 
   const publics: LocalKeyPublics = {};
   for (const entry of snapshot.split('|')) {
-    const [role, publicKey] = entry.split(':');
-    if (publicKey !== undefined && publicKey.length > 0 && (KEY_ROLES as readonly string[]).includes(role!)) {
-      publics[role as KeyRole] = publicKey;
+    const parts = entry.split(':');
+    const role = parts[0];
+    const value = parts[field];
+    if (value !== undefined && value.length > 0 && (KEY_ROLES as readonly string[]).includes(role!)) {
+      publics[role as KeyRole] = value;
     }
   }
   return publics;

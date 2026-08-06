@@ -98,17 +98,26 @@ export function AccountDetail({ contractId }: { contractId: string }) {
             />
           )}
 
-          {/* Re-reads the chain after every write rather than patching the
-              snapshot in place. The rules above are the ledger's answer at a
-              stated sequence number, and a locally-applied edit would make them
-              this application's answer wearing that sequence number. */}
-          <AccountWriteSteps
-            contractId={contractId}
-            rules={state.snapshot.rules}
-            onWritten={reload}
-          />
         </>
       )}
+
+      {/* Re-reads the chain after every write rather than patching the snapshot
+          in place. The rules above are the ledger's answer at a stated sequence
+          number, and a locally-applied edit would make them this application's
+          answer wearing that sequence number.
+
+          Outside the `status === 'ok'` branch, and that is the fix rather than
+          the arrangement: every write here ends by calling `reload()`, which
+          swaps the snapshot to `pending`, which unmounted this component and
+          discarded the hash of the transaction that had just landed. The table
+          above still goes blank while the chain is re-read — that part is
+          correct — but what this browser has just done is not the chain's
+          answer and must not vanish with it. See `useLastRead`. */}
+      <AccountWriteSteps
+        contractId={contractId}
+        rules={state.status === 'ok' ? state.snapshot.rules : null}
+        onWritten={reload}
+      />
     </div>
   );
 }

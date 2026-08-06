@@ -22,6 +22,7 @@ export type IngestErrorCode =
   | 'no_invocations'
   | 'unreadable_movement'
   | 'unreadable_meta'
+  | 'ambiguous_subject'
   // this caller is asking too often
   | 'rate_limited';
 
@@ -42,5 +43,9 @@ export const REFUSAL_CODES: ReadonlySet<IngestErrorCode> = new Set<IngestErrorCo
   'no_invocations',
   'unreadable_movement',
   'unreadable_meta',
+  // Limen read the authorization and found more than one account in it, so it
+  // declined to pick which one a boundary is for. Judgement exercised, not a
+  // failure to look.
+  'ambiguous_subject',
   'mainnet_out_of_scope',
 ]);

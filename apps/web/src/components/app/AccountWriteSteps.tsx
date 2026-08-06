@@ -9,7 +9,8 @@ import { loadChain } from '@/lib/chain-write';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
 import type { SnapshotRule } from '@/lib/account-contract';
 import { decimalise } from '@/lib/format';
-import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';
+import { useLastRead } from '@/lib/use-last-read';
+import { useLocalKeyPublics, useLocalKeyRawPublics, useSigners } from '@/lib/use-local-keys';
 import { useWriteLog } from '@/lib/use-write';
 
 /**
@@ -49,21 +50,30 @@ const AUTH_VALIDITY_LEDGERS = 200;
 
 export function AccountWriteSteps({
   contractId,
-  rules,
+  rules: readRules,
   onWritten,
 }: {
   contractId: string;
-  /** The rules as last read. `null` while the read is still in flight. */
+  /**
+   * The rules as last read. `null` while the read is still in flight — which
+   * now includes every re-read this component's own writes trigger, because it
+   * stays mounted through them. {@link useLastRead} is what keeps the Default
+   * rule known across that gap, so the buttons below do not disappear and
+   * reappear after each transaction.
+   */
   rules: SnapshotRule[] | null;
   /** Re-read the chain. Called after every write that lands. */
   onWritten: () => void;
 }) {
+  const rules = useLastRead(readRules);
   const publics = useLocalKeyPublics();
+  const raws = useLocalKeyRawPublics();
   const signers = useSigners();
   const log = useWriteLog();
 
   const owner = publics?.OWNER;
   const agent = publics?.AGENT;
+  const ownerRaw = raws?.OWNER;
 
   // The constructor's Default rule, read back off the account rather than
   // assumed to be 0. Its id comes from the same on-chain counter every other
@@ -74,11 +84,18 @@ export function AccountWriteSteps({
   // Owning this account means holding the key its Default rule names. A browser
   // that merely pasted the address can read everything and sign nothing, which
   // is correct and is what this check renders.
+  //
+  // In hex, and not in the `G…` above it. A rule's `External` signer carries the
+  // raw 32 bytes the contract stores, which `read.ts` hands back as hex; `owner`
+  // is the StrKey a person reads. The two are the same key and never the same
+  // string, so comparing them made this branch permanently false — every account
+  // created in this browser rendered as somebody else's, and everything below
+  // was unreachable. See `useLocalKeyRawPublics`.
   const ownsThisAccount =
-    owner !== undefined &&
+    ownerRaw !== undefined &&
     defaultRule !== null &&
     defaultRule.signers.some(
-      (signer) => signer.kind === 'External' && signer.publicKey === owner,
+      (signer) => signer.kind === 'External' && signer.publicKey === ownerRaw,
     );
 
   const observed = log.stateOf('observe');

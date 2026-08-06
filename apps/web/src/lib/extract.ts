@@ -46,7 +46,11 @@ import type {
 } from '@limen/core';
 import { UNREADABLE_ARG } from './markers';
 
-export type ExtractionErrorCode = 'no_invocations' | 'unreadable_movement' | 'unreadable_meta';
+export type ExtractionErrorCode =
+  | 'no_invocations'
+  | 'unreadable_movement'
+  | 'unreadable_meta'
+  | 'ambiguous_subject';
 
 /**
  * Thrown rather than guessed, in the same spirit as `SynthesisError`. `detail`
@@ -103,6 +107,73 @@ function readInvocations(tx: Transaction): Invocation[] {
 
 function bigintSafe(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? value.toString() : value;
+}
+
+/**
+ * The account the policy installs on — which is not the account that paid.
+ *
+ * `ObservedTransaction.source` is documented in `@limen/core` as *the account
+ * the policy installs on*, and `synthesize` uses it for exactly one thing: it
+ * counts a movement toward the derived cap only when `movement.from === source`.
+ * So getting it wrong does not produce a wrong cap. It produces **no cap at
+ * all**, a proposal with a bare function allowlist, and a `lower` that refuses
+ * the flow as unenforceable — with a message about audited policies that says
+ * nothing about the actual cause.
+ *
+ * This module used to answer with the envelope's source account. For every
+ * transaction the simulator observes that is the same account, because a
+ * classic account invoking `transfer` on its own balance both authorizes and
+ * pays. For PLAN-V4's flow it is never the same account: the smart account
+ * spends, and the owner's classic account pays the fee. Every boundary derived
+ * from a smart account's own transaction was therefore refused at lowering, and
+ * the browser could not install anything at all — found on the first browser run
+ * of the §1 acceptance test, and invisible before it, because the recorded Node
+ * run built its `ObservedTransaction` by hand instead of going through here.
+ *
+ * ## What is read instead
+ *
+ * The authorization on the invocation. A Soroban auth entry carries either:
+ *
+ *   - **address credentials** — some account signed for this call through
+ *     `__check_auth`. That address is the one whose permission was exercised,
+ *     and therefore the one a boundary would be installed on; or
+ *   - **source-account credentials** — the envelope's own signature stands as
+ *     the authorization, so the subject is the envelope source.
+ *
+ * Read off the transaction, never inferred from the movements: deriving the
+ * subject from who spent, and then counting spend by the subject, would be a
+ * circle that always closes and never checks anything.
+ *
+ * Several distinct address credentials mean several accounts authorized parts of
+ * one transaction, and nothing in the XDR says which of them a boundary is being
+ * derived for. That throws rather than picking the first — the same rule the
+ * banner at the top of this file states.
+ */
+function readSubject(tx: Transaction): string {
+  const authorizers = new Set<string>();
+
+  for (const operation of tx.operations) {
+    if (operation.type !== 'invokeHostFunction') continue;
+    for (const entry of operation.auth ?? []) {
+      const credentials = entry.credentials();
+      if (credentials.switch() !== xdr.SorobanCredentialsType.sorobanCredentialsAddress()) continue;
+      authorizers.add(Address.fromScAddress(credentials.address().address()).toString());
+    }
+  }
+
+  // Invoker authorization: the envelope signature is the authorization, so the
+  // account that signed the envelope is the one whose permission was used.
+  if (authorizers.size === 0) return tx.source;
+
+  if (authorizers.size > 1) {
+    throw new ExtractionError(
+      'ambiguous_subject',
+      'this transaction was authorized by more than one account, so there is no single account a boundary would install on',
+      `authorizing addresses: ${[...authorizers].sort().join(', ')}`,
+    );
+  }
+
+  return [...authorizers][0]!;
 }
 
 /**
@@ -326,7 +397,10 @@ export function extractObservedTransaction(
     hash,
     network,
     ledger: response.ledger,
-    source: inner.source,
+    // The account the policy installs on, not the account that paid. See
+    // `readSubject` — the two coincide for a classic account spending its own
+    // balance and never coincide for a smart account spending its own.
+    source: readSubject(inner),
     invocations,
     attribution,
     movements,
