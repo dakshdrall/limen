@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Address } from '@/components/Address';
 import { AccountLink } from '@/components/app/AccountLink';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
@@ -45,8 +46,9 @@ export function AccountsScreen() {
             <span className="value break-all">CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V</span>
           </p>
           <p className="mt-2.5">
-            A browser that has never seen an account can still read any account. It will not be able
-            to <em>sign</em> for one, which is correct: the signing keys are not here.
+            A browser that has never seen an account can still read any account. It can only{' '}
+            <em>sign</em> for one it owns — that is, one whose signer is a key this browser
+            generated. Reading is open to everyone; acting is not.
           </p>
         </EmptyState>
       ) : (
@@ -92,9 +94,17 @@ function AddAccount({ known }: { known: StoredAccount[] }) {
         setValue('');
       }}
     >
-      <label htmlFor="account-address" className="col-head text-muted">
-        Read a smart account
-      </label>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <label htmlFor="account-address" className="col-head text-muted">
+          Read a smart account
+        </label>
+        {/* Reading someone else's account and creating your own are different
+            acts, so they are different controls rather than one field that
+            changes meaning. */}
+        <Link href="/app/accounts/new" className="text-[12.5px] link">
+          Create one instead
+        </Link>
+      </div>
       <div className="flex flex-wrap items-center gap-2.5">
         <input
           id="account-address"

@@ -101,8 +101,18 @@ const NAMES_A_SECRET = /\b(?:secret|seed|privateKey|Keypair|signingKey)\b/i;
 /** The label, either as the literal or as the shared constant. */
 const CARRIES_THE_LABEL = /TESTNET ONLY · LOCAL KEY|LOCAL_KEY_LABEL/;
 
-/** An import of the local key module, by alias or by relative path. */
-const IMPORTS_THE_LOCAL_KEY_MODULE = /from\s+'(?:@\/lib\/local-key|(?:\.\.?\/)+(?:lib\/)?local-key)'/;
+/**
+ * An import of the local key module, by alias or by relative path.
+ *
+ * Both spellings, because the write screens have a reason to prefer the second:
+ * `local-key.ts` reaches the Stellar SDK, so a screen that wants to keep it out
+ * of its initial chunk loads it with `import()` at the moment a person acts. A
+ * pattern that only understood `from '…'` would have let exactly the screens
+ * that generate keys slip past the label requirement — the tripwire failing
+ * open on the path most likely to take it.
+ */
+const IMPORTS_THE_LOCAL_KEY_MODULE =
+  /(?:from|import)\s*\(?\s*'(?:@\/lib\/local-key|(?:\.\.?\/)+(?:lib\/)?local-key)'/;
 
 /** The label reaching a screen, rather than sitting in a string somewhere. */
 const RENDERS_THE_LABEL = /<StatusLabel\b[\s\S]{0,80}?(?:LOCAL_KEY_LABEL|TESTNET ONLY · LOCAL KEY)/;
@@ -151,10 +161,15 @@ describe('the detectors can fire', () => {
       "import { createLocalKey } from '@/lib/local-key';",
       "import { createLocalKey } from '../lib/local-key';",
       "import { createLocalKey } from './local-key';",
+      // Deferred, which is how a write screen keeps the SDK out of its initial
+      // chunk — and would have been the way around this rule.
+      "const keys = await import('@/lib/local-key');",
+      "void import('../lib/local-key');",
     ]) {
       expect(IMPORTS_THE_LOCAL_KEY_MODULE.test(sample), sample).toBe(true);
     }
     expect(IMPORTS_THE_LOCAL_KEY_MODULE.test("import { NETWORK } from '@/lib/network';")).toBe(false);
+    expect(IMPORTS_THE_LOCAL_KEY_MODULE.test("await import('@/lib/chain-write');")).toBe(false);
   });
 
   it('reads code, so prose can neither accuse a file nor excuse one', () => {

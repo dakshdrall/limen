@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   Account,
+  Address,
   Asset,
   Keypair,
   Networks,
@@ -482,5 +483,102 @@ describe('arguments', () => {
     // The marker exists and is a distinct sentinel, so the UI can render it as
     // unreadable rather than as a value.
     expect(UNREADABLE_ARG).toBe('<unreadable>');
+  });
+});
+
+/* --- the subject: who the boundary is for -------------------------------- */
+
+/**
+ * PLAN-V4's flow spends from a smart account and pays the fee from a classic
+ * one, so `source` — documented in `@limen/core` as *the account the policy
+ * installs on* — is not the envelope's source account. It used to be set to
+ * exactly that, and the consequence was not a wrong cap but no cap: `synthesize`
+ * counts a movement toward the limit only when `movement.from === source`, so a
+ * smart account's own transfer contributed nothing, the proposal came out as a
+ * bare function allowlist, and `lower` refused it as unenforceable while
+ * reporting an unrelated reason.
+ *
+ * Found on the first browser run of the §1 acceptance test. It could not have
+ * been found before one: the recorded Node run built its `ObservedTransaction`
+ * by hand and never went through this module.
+ */
+describe('the account a boundary installs on', () => {
+  /** An auth entry authorizing `contract` through `__check_auth`. */
+  function addressAuth(contract: string): xdr.SorobanAuthorizationEntry {
+    return new xdr.SorobanAuthorizationEntry({
+      credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
+        new xdr.SorobanAddressCredentials({
+          address: new Address(contract).toScAddress(),
+          nonce: xdr.Int64.fromString('1'),
+          signatureExpirationLedger: LEDGER + 100,
+          signature: xdr.ScVal.scvVoid(),
+        }),
+      ),
+      rootInvocation: new xdr.SorobanAuthorizedInvocation({
+        function:
+          xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(
+            new xdr.InvokeContractArgs({
+              contractAddress: new Address(TOKEN).toScAddress(),
+              functionName: 'transfer',
+              args: [],
+            }),
+          ),
+        subInvocations: [],
+      }),
+    });
+  }
+
+  function invokeAuthorizedBy(authorizers: string[]): xdr.Operation {
+    const operation = Operation.invokeContractFunction({
+      contract: TOKEN,
+      function: 'transfer',
+      args: [],
+      auth: authorizers.map(addressAuth),
+    });
+    return operation;
+  }
+
+  it('is the envelope source when the envelope signature is the authorization', () => {
+    // Invoker auth: a classic account spending its own balance. The two
+    // coincide here, which is why this was never noticed.
+    const observed = extract(
+      [invokeOp(TOKEN, 'transfer')],
+      meta([transferEvent(SOURCE.publicKey(), RECIPIENT.publicKey(), 500_000_000n)]),
+    );
+    expect(observed.source).toBe(SOURCE.publicKey());
+  });
+
+  it('is the smart account when the smart account authorized the call', () => {
+    const smartAccount = StrKey.encodeContract(Buffer.alloc(32, 11));
+    const observed = extract(
+      [invokeAuthorizedBy([smartAccount])],
+      meta([transferEvent(smartAccount, RECIPIENT.publicKey(), 1_000_000n)]),
+    );
+
+    // Not the envelope source, which paid the fee and authorized nothing.
+    expect(observed.source).not.toBe(SOURCE.publicKey());
+    expect(observed.source).toBe(smartAccount);
+  });
+
+  it('lets synthesize derive the cap from a smart account’s own transfer', () => {
+    // The whole point. Before the fix this produced no spending limit at all,
+    // and every boundary derived from the browser flow was refused at lowering.
+    const smartAccount = StrKey.encodeContract(Buffer.alloc(32, 11));
+    const observed = extract(
+      [invokeAuthorizedBy([smartAccount])],
+      meta([transferEvent(smartAccount, RECIPIENT.publicKey(), 1_000_000n)]),
+    );
+
+    const proposal = synthesize(observed);
+    const limit = proposal.policies.find((p) => p.kind === 'spending_limit');
+    expect(limit?.kind === 'spending_limit' && limit.limit).toBe('1000000');
+  });
+
+  it('refuses rather than picking one when several accounts authorized it', () => {
+    const one = StrKey.encodeContract(Buffer.alloc(32, 11));
+    const two = StrKey.encodeContract(Buffer.alloc(32, 12));
+    expect(() => extract([invokeAuthorizedBy([one, two])], meta([]))).toThrow(
+      /authorized by more than one account/,
+    );
   });
 });

@@ -102,14 +102,140 @@ jobs:
           fi
           echo "demo signer absent from the client bundle"
 
+      # Level 3 of the mainnet gate. Levels 1 and 2 — the one-member passphrase
+      # union in `lib/network.ts` and the hard throw in `@limen/chain`'s
+      # `signAs` — are assertions the type checker and a unit test can make
+      # about source. This step is the one that looks at what actually ships to
+      # a browser that can now sign.
+      #
+      # Two-sided for the same reason the check above is: the testnet
+      # passphrase must be *found* first, or the absence of the mainnet one is
+      # the absence of any Stellar code at all and proves nothing. That failure
+      # mode is not hypothetical here — the write path is loaded by dynamic
+      # `import()` precisely so the read-only screens do not pay for the SDK,
+      # and a bundling change that dropped it entirely would otherwise turn
+      # this step green while removing the thing it guards.
+      #
+      # WHAT THIS DELIBERATELY DOES NOT ASSERT, and why nobody should "fix" it:
+      #
+      # PLAN-V4 §4 specified this level as "the mainnet passphrase string does
+      # not appear in the client bundle at all". That is unachievable, and the
+      # plan was written before it could be known: v4 puts the Stellar SDK in
+      # the browser because there is no signing without it, and the SDK ships
+      # its own `Networks` enum —
+      #
+      #     var e=((l=e||{}).PUBLIC="Public Global Stellar Network ; September 2015",
+      #                     l.TESTNET="Test SDF Network ; September 2015",…
+      #
+      # — so the string is present in every build that can sign anything. A
+      # check for its absence would fail forever, and the way that failure gets
+      # resolved at 2am is by deleting the check. So the assertion is moved to
+      # where it is both true and meaningful: Limen's own code never names
+      # mainnet, and the bundle cannot address a mainnet endpoint. A passphrase
+      # constant that nothing references and no endpoint to send it to is not a
+      # path to mainnet; levels 1 and 2 are what make that structural.
+      - name: Prove the client bundle can only reach testnet
+        env:
+          TESTNET: 'Test SDF Network ; September 2015'
+          MAINNET: 'Public Global Stellar Network ; September 2015'
+        run: |
+          set -euo pipefail
+
+          if ! grep -rIqF -- "$TESTNET" apps/web/.next/static; then
+            echo "::error::testnet passphrase not found in the client bundle — this check is vacuous and proves nothing"
+            exit 1
+          fi
+          echo "testnet passphrase present in the client bundle; the checks below are meaningful"
+
+          # 1. Limen's own source never names mainnet. This is the assertion the
+          #    plan was reaching for, made where the SDK's own constants cannot
+          #    drown it out.
+          #
+          #    The self-match below is not testing grep. It is testing that the
+          #    passphrase survived the trip through the environment intact —
+          #    it contains spaces and a semicolon, and a quoting mistake here
+          #    would silently search for something shorter, or for nothing, and
+          #    report a clean bill of health either way.
+          if ! printf '%s' "$MAINNET" | grep -qF -- "$MAINNET"; then
+            echo "::error::the mainnet passphrase did not survive shell quoting — this check is broken, not passing"
+            exit 1
+          fi
+
+          if grep -rIn --include='*.ts' --include='*.tsx' --include='*.mjs' \
+               -F -- "$MAINNET" apps/web/src packages/*/src; then
+            echo "::error::Limen source names the mainnet passphrase"
+            exit 1
+          fi
+          echo "no Limen module names the mainnet passphrase"
+
+          if grep -rIn --include='*.ts' --include='*.tsx' --include='*.mjs' \
+               -E 'Networks\.PUBLIC' apps/web/src packages/*/src; then
+            echo "::error::Limen source references Networks.PUBLIC"
+            exit 1
+          fi
+          echo "no Limen module references Networks.PUBLIC"
+
+          # 2. And the bundle cannot address mainnet even if it held the string.
+          #    An endpoint is the part that cannot be borrowed from a library
+          #    constant: to submit to mainnet a build has to know where it is.
+          if ! printf 'horizon.stellar.org' | grep -qE 'horizon\.stellar\.org|mainnet\.sorobanrpc\.com'; then
+            echo "::error::the mainnet endpoint pattern is broken, not passing"
+            exit 1
+          fi
+
+          if grep -rIlE 'horizon\.stellar\.org|mainnet\.sorobanrpc\.com' apps/web/.next/static; then
+            echo "::error::a mainnet endpoint reached the client bundle"
+            exit 1
+          fi
+          echo "no mainnet endpoint in the client bundle"
+
+      # A pasted secret key, caught without needing to know its value. The
+      # local key is generated in the page and never leaves it, so no `S…`
+      # StrKey should appear in shipped source at all; one that does is either
+      # a hardcoded secret or a test fixture that escaped, and both are worth a
+      # red build.
+      #
+      # This pattern can never match a correct bundle, which by the argument
+      # above makes it worthless unless the pattern itself is shown to work. So
+      # it is run against a known secret-shaped string first. That proves the
+      # regex is live rather than quietly broken by a shell-quoting change.
+      - name: Prove no secret key literal reached the client bundle
+        env:
+          # S + 55 base32 characters. Structurally a StrKey, deliberately not a
+          # usable one — it exists only to fire the pattern.
+          CANARY: SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$CANARY" | grep -qE '\bS[A-Z2-7]{55}\b'; then
+            echo "::error::the StrKey pattern does not match a known StrKey — this check is broken, not passing"
+            exit 1
+          fi
+          echo "StrKey pattern matches a known StrKey; the scan below is meaningful"
+
+          if grep -rIlE '\bS[A-Z2-7]{55}\b' apps/web/.next/static; then
+            echo "::error::something StrKey-shaped reached the client bundle"
+            exit 1
+          fi
+          echo "no secret key literal in the client bundle"
+
       # Runs last so build and test results are always visible even when this
-      # fails. Threshold is `moderate`, not `low`, because 23 low-severity
-      # advisories are currently unfixable: they all reduce to `elliptic`,
-      # whose advisory covers every published version, so there is no version
-      # to pin to. See "Dependency advisories" in the README.
+      # fails.
+      #
+      # Threshold is `low`, which is the strictest npm offers. It used to be
+      # `moderate`, held there by 23 low-severity advisories that all reduced to
+      # `elliptic` — an advisory covering every published version, so there was
+      # no version to pin to and no override that could clear it. All 23 arrived
+      # through `@creit.tech/stellar-wallets-kit`, which no source file ever
+      # imported; dropping it took the count to zero and let the threshold move
+      # down to where nothing has to be tolerated.
+      #
+      # The point of lowering it is that `moderate` silently permitted every
+      # future low-severity advisory in order to tolerate one specific set. That
+      # set is gone, so the permission should go with it.
       #
       # This gate exists so a future dependency bump cannot quietly reintroduce
-      # a high or critical. If it starts failing, fix the advisory or move the
-      # threshold deliberately — do not silence it.
+      # an advisory at any severity. If it starts failing, fix the advisory or
+      # move the threshold deliberately — do not silence it.
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=low

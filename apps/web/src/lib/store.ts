@@ -38,7 +38,19 @@ export interface StoredProvenance {
    *  on-chain counterpart and is therefore only ever local. */
   observedLedger: number;
   headroomBps: number;
+  /** The spending limit's rolling window, in ledgers. A span. */
   windowLedgers: number;
+  /**
+   * The rule's `valid_until`, as an **absolute ledger sequence** — not a span,
+   * despite the name, which is kept because records written by earlier builds
+   * carry it. `InstallControl` stores `PlannedContextRule.validUntilLedger`
+   * here verbatim, and that field is absolute by its own documentation.
+   *
+   * Anything wanting the *length* of the validity window has to subtract:
+   * `validityLedgers - observedLedger`. `ClosingWindow` does exactly that and
+   * says so, because reading this as a duration produces a denominator around
+   * four million and a bar that never visibly moves.
+   */
   validityLedgers: number;
   /** The install transaction, so the UI can link what it is describing. */
   installTxHash: string;

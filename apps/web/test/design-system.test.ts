@@ -126,9 +126,14 @@ describe('the grid is a token set, not a judgement call', () => {
 });
 
 describe('verdicts survive greyscale', () => {
-  it('has exactly three states', () => {
+  it('has exactly four states', () => {
+    // Four since PLAN-V4 F3. The count is asserted rather than left open
+    // because every addition here is a claim that some outcome is genuinely
+    // unlike the three already present — and the cost of getting that wrong is
+    // a table that looks more decisive than the evidence behind it. A fifth
+    // needs the same argument made again, in a diff someone reads.
     const states = [...verdict.matchAll(/^\s{2}(?:'[\w-]+'|\w+): \{$/gm)];
-    expect(states).toHaveLength(3);
+    expect(states).toHaveLength(4);
   });
 
   it('keeps REFUSED AT SIMULATION distinct from DENY', () => {
@@ -136,14 +141,29 @@ describe('verdicts survive greyscale', () => {
     expect(verdict).toContain('never reached a ledger');
   });
 
-  it('pairs every state with a glyph, so hue is never the only signal', () => {
-    // Colour-blind reviewers and greyscale printouts both depend on this.
-    for (const glyph of ['✓', '✕', '⊘']) expect(verdict).toContain(glyph);
+  it('keeps a revoked rule distinct from a boundary refusal', () => {
+    // The F3 distinction, and the reason it is a state rather than a footnote:
+    // after a revoke, the call that used to be permitted fails
+    // ContextRuleNotFound#3000, which `errors.ts` deliberately keeps out of
+    // BOUNDARY_REFUSAL_CODES. "The boundary refused you" and "the boundary is
+    // gone" are different claims, and only one of them is evidence the boundary
+    // works.
+    expect(verdict).toContain('rule-revoked');
+    expect(verdict).toMatch(/aria: 'the context rule was revoked/);
   });
 
-  it('distinguishes the third state by border treatment, not a fourth hue', () => {
+  it('pairs every state with a glyph, so hue is never the only signal', () => {
+    // Colour-blind reviewers and greyscale printouts both depend on this.
+    for (const glyph of ['✓', '✕', '⊘', '∅']) expect(verdict).toContain(glyph);
+  });
+
+  it('distinguishes the third and fourth states by treatment, not by new hues', () => {
     expect(verdict).toContain('border-dashed');
     expect(verdict).toContain('text-unproven');
+    // The fourth reuses the neutral ramp — `text-muted` and the default border
+    // — so it is visibly not a verdict rather than visibly a new kind of one.
+    expect(verdict).toContain('border-dotted');
+    expect(verdict).toMatch(/'rule-revoked': \{[^}]*text-muted/s);
   });
 
   it('does not claim on-chain provenance from the badge alone', () => {
@@ -265,6 +285,22 @@ describe('accessibility is a constraint, not a pass', () => {
   it('respects prefers-reduced-motion as the default rather than the exception', () => {
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\*,/);
+  });
+
+  it('has no keyframe animation, and is not allowed to grow one', () => {
+    // PLAN-V4 §8, and the one design rule step 7 could most easily have broken.
+    // Every motion this system permits is a transition on a data change: the
+    // ground's heartbeat and a policy's closing window both move because a
+    // ledger sequence arrived, and both stop when one stops arriving. A
+    // keyframe loop runs on its own authority — it would keep going with the
+    // network unreachable, which is this project's definition of decoration.
+    //
+    // Read with comments stripped, so the block in `globals.css` that explains
+    // this rule at length does not fail it.
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(withoutComments).not.toContain('@keyframes');
+    expect(withoutComments).not.toMatch(/animation-name\s*:/);
+    expect(withoutComments).not.toMatch(/\banimation\s*:(?!\s*none)/);
   });
 });
 

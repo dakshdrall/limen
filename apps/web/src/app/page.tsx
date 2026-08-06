@@ -284,12 +284,21 @@ export default function Home() {
         subtitle="Stated here rather than discovered three screens in. Each is a real limit with a reason, not a rough edge."
       >
         <ul className="flex flex-col gap-4">
-          <Limit title="Nothing installs from the browser">
-            Installing and revoking are writes that need an owner signature, and neither signer path
-            — passkey, or a keypair generated in the page — exists yet. Every install this
-            repository has recorded was signed by{' '}
-            <span className="value">packages/chain/scripts/testnet.mjs</span>. The screens that
-            derive a boundary stop short of installing it and say so in place of a button.
+          <Limit title="No wallet, and no key recovery">
+            Deploying, installing, and revoking are all built as browser code paths now, signed by a
+            disposable ed25519 key generated in the page. There is no connected-wallet path — a
+            wallet can only be a <span className="value">Delegated</span> signer, and that
+            requirement cannot be discovered from a simulation, so there is nothing to hand it to
+            sign. And there is no export and no backup: clearing site data destroys the key and
+            strands the account it owns.
+          </Limit>
+          <Limit title="The browser has signed, and no person has clicked">
+            The acceptance flow has been driven end to end in a real browser twice, and every hash it
+            produced is recorded and re-checked against public Horizon by a process that did not
+            produce it. It was driven by a test, not by a hand — so what is retired is the claim that
+            only a script had ever signed, and what is not claimed is that anyone has sat in front of
+            it. The hashes on <em>this</em> page are still the script&rsquo;s; the browser&rsquo;s are
+            in the deployments file.
           </Limit>
           <Limit title="One contract per boundary">
             A flow that touches a second contract cannot be installed, because no audited primitive

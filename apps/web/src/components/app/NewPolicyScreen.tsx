@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_SYNTHESIS_OPTIONS,
   SynthesisError,
@@ -8,6 +8,7 @@ import {
   type ObservedTransaction,
   type PolicyProposal,
 } from '@limen/core';
+import { InstallControl } from '@/components/app/InstallControl';
 import { InstallPlanTable } from '@/components/app/InstallPlanTable';
 import { Pending, ReadFailure } from '@/components/app/ScreenState';
 import { NotEnforceable } from '@/components/NotEnforceable';
@@ -41,12 +42,26 @@ export function NewPolicyScreen({
   fixtureKeys,
   refusingKeys,
   liveIngestEnabled,
+  observeHash = null,
+  accountId = null,
 }: {
   initialTransaction: ObservedTransaction;
   initialKey: string;
   fixtureKeys: string[];
   refusingKeys: string[];
   liveIngestEnabled: boolean;
+  /**
+   * A transaction to observe on arrival, from `?tx=`.
+   *
+   * How the account screen hands its observed transaction over: by hash, so it
+   * is read back from the network here rather than passed as a payload. A
+   * derived cap must come from what the ledger recorded, and shipping the
+   * amount across a URL would make it come from what the previous screen
+   * believed.
+   */
+  observeHash?: string | null;
+  /** The account to install onto, from `?account=`. */
+  accountId?: string | null;
 }) {
   const [observed, setObserved] = useState<ObservedTransaction>(initialTransaction);
   const [activeKey, setActiveKey] = useState(initialKey);
@@ -91,6 +106,20 @@ export function NewPolicyScreen({
       setLoading(false);
     }
   }, []);
+
+  // Observing the transaction the account screen just made, once.
+  //
+  // Keyed on the hash rather than run on mount, so arriving with a different
+  // `?tx=` observes the new one. The guard is a ref rather than state because
+  // nothing renders from it: it records that a fetch was already started, and
+  // writing it through `setState` would schedule a render whose only effect is
+  // to re-run this check.
+  const observeRequested = useRef<string | null>(null);
+  useEffect(() => {
+    if (observeHash === null || observeRequested.current === observeHash) return;
+    observeRequested.current = observeHash;
+    void observe(observeHash, 'testnet');
+  }, [observeHash, observe]);
 
   // Lowering follows the proposal automatically. Making it a button would imply
   // the user is choosing to lower, when in fact there is no version of this
@@ -157,7 +186,17 @@ export function NewPolicyScreen({
         title="Install"
         subtitle="Writing the plan above to a smart account, signed by its owner."
       >
-        <InstallStep installable={lowered.status === 'lowered'} />
+        {lowered.status === 'lowered' ? (
+          <InstallControl
+            plan={lowered.plan}
+            accountId={accountId}
+            observedTxHash={observed.hash}
+            observedLedger={observed.ledger}
+            headroomBps={DEFAULT_SYNTHESIS_OPTIONS.headroomBps}
+          />
+        ) : (
+          <NothingToInstall />
+        )}
       </Section>
     </div>
   );
@@ -180,39 +219,28 @@ function RefusedToDerive({ message }: { message: string }) {
 }
 
 /**
- * The install step, and the reason it does not complete.
+ * There is no plan, so there is nothing to install.
  *
- * Installing writes a context rule to a deployed smart account, and that write
- * has to be signed by an owner signer. This build has no signer a browser can
- * use: the passkey path and the browser-generated ed25519 keypair are both
- * unbuilt, and there is deliberately no code path here that would take a secret
- * key from a form.
+ * What used to stand here was the caveat explaining that *nothing* could be
+ * installed, from a build with no browser signer. `InstallControl` retires it
+ * by existing. This is the narrower, still-true statement: lowering refused or
+ * has not finished, so there is no plan for a button to write.
  *
- * So the button is absent rather than disabled-with-a-tooltip. A disabled
- * button is still a claim that the feature exists and something is temporarily
- * wrong; this is neither. The install transaction that produced the recorded
- * testnet runs was signed by `packages/chain/scripts/testnet.mjs`, and saying
- * so is more useful than a control that cannot work.
+ * It is not a disabled install button. A disabled control claims the action
+ * exists and something is temporarily wrong; when `lower` has *refused*, the
+ * honest reading is that this boundary cannot be installed at all, and
+ * `NotEnforceable` above has already said why.
  */
-function InstallStep({ installable }: { installable: boolean }) {
+function NothingToInstall() {
   return (
     <div className="panel" data-tone="pending">
-      <span className="eyebrow text-muted-dim">not built yet</span>
+      <span className="eyebrow text-muted-dim">nothing to install</span>
       <p className="measure text-[13px] leading-relaxed text-foreground/90">
-        {installable
-          ? 'The plan above is installable — it is a valid configuration of primitives already deployed on testnet. What this build cannot do is sign for it.'
-          : 'There is no plan to install yet.'}
+        There is no lowered plan to write. Either the boundary above was not derived, or lowering
+        refused it — in which case the reason is stated above rather than worked around here.
       </p>
       <p className="measure text-[12.5px] leading-relaxed text-muted">
-        Installing writes a context rule to a smart account, and that write must be signed by an
-        owner signer. Neither signer path exists in the browser yet: the passkey path is unbuilt, and
-        so is the local keypair that would stand in for it. There is no form here that accepts a
-        secret key, and there will not be one.
-      </p>
-      <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
-        The installs recorded in the README were signed by{' '}
-        <span className="value">packages/chain/scripts/testnet.mjs</span>, which reads its keys from
-        the environment and is not part of this application.
+        There is no form here that accepts a secret key, and there will not be one.
       </p>
     </div>
   );

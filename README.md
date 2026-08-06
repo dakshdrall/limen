@@ -221,16 +221,40 @@ would close the multi-contract gap tomorrow. It would also be unaudited code in
 the authorization path, which is the one place this project has said it will not
 put any.
 
-**3. Limen custodies nothing of yours.** No *user's* secret key reaches the
-server, an environment variable, or browser storage. Signing for install is
-client-side only, via `@creit.tech/stellar-wallets-kit`. There is no code path
-in this repository that can move a user's funds.
+**3. Limen custodies nothing of yours.** No *user's* secret key reaches a Limen
+server, an environment variable, or a log line. Signing is client-side only.
 
-There is exactly one code path that can move any funds at all:
-`apps/web/src/lib/demo-signer.ts`, which signs the guided demo's first step with
-a disposable testnet account this project owns. It is fenced four ways — see
-[The demo account](#the-demo-account) — and it can never touch a user's key,
-because it only ever holds its own.
+This rule was narrowed in v4, and the narrowing is stated rather than absorbed.
+It used to forbid a user secret reaching browser storage at all. It no longer
+can: creating and using an account from the browser means a key in the browser.
+So — a disposable testnet ed25519 keypair is generated in the page and kept in
+browser storage, labelled `TESTNET ONLY · LOCAL KEY` wherever it is created or
+used. It is not a wallet, it never leaves the browser, and clearing site data
+destroys it — along with the account it owns, which is stated at creation rather
+than discovered later.
+
+There is no export, no backup, and no import field, and there will not be one.
+Offering a backup would create the exact thing this rule exists to prevent — a
+user secret in transit through a form — in exchange for protecting an account
+holding testnet dust that friendbot replaces for free. `apps/web/test/local-key-label.test.ts`
+fails the build if any file that generates, stores, or imports a key stops
+carrying the label, and CI greps the built client bundle for a 56-character
+`S…` StrKey so that a pasted or serialized secret is caught without anyone
+needing to know its value.
+
+Two kinds of key can therefore move funds here, and **neither of them is
+Limen's to hold**:
+
+- **Yours**, the local key above. It can move the testnet funds in the account
+  it owns, because that is what it is for. It is generated in your browser and
+  exists nowhere else.
+- **This project's own**, `apps/web/src/lib/demo-signer.ts`, which signs the
+  guided demo's first step with a disposable testnet account we own. It is
+  fenced four ways — see [The demo account](#the-demo-account) — and it can
+  never touch a user's key, because it only ever holds its own.
+
+There is no code path in this repository that gives Limen custody of a user's
+key, and no server-side signer for a user's account.
 
 **4. `evaluate` is an independent implementation of `synthesize`.** The two
 share no code path and no helper — the outflow summation is deliberately written
@@ -286,6 +310,66 @@ the page shows what was attempted, why Limen refused, and what it specifically
 did *not* do — approximate, drop a constraint, or widen a cap to fit. The
 `over-limit` preset exists to demonstrate this on demand. A system that can only
 be seen succeeding gives you no evidence about when it declines.
+
+### Why there is no wallet button
+
+Connecting Freighter or xBull as the owner of a smart account was planned, and
+was dropped on a measurement rather than on effort. The finding is recorded here
+because "we did not get to it" and "we tried it and the platform does not
+support it" are different statements, and only one of them is true.
+
+A wallet cannot be an `External` signer: `External` verification hands raw bytes
+to a verifier contract, and wallets sign envelopes and auth entries, not
+arbitrary 32-byte digests. So a wallet can only be `Delegated`, which resolves
+inside `__check_auth` as:
+
+```rust
+// packages/accounts/src/smart_account/storage.rs:353
+Signer::Delegated(addr) => {
+    let args = (auth_digest.clone(),).into_val(e);
+    addr.require_auth_for_args(args)
+}
+```
+
+That raises a **nested** authorization requirement from inside `__check_auth`.
+Recording-mode simulation never runs `__check_auth`, so the requirement never
+appears in `simulateTransaction`'s `result.auth`. The remaining hope was the
+second, *enforcing* simulation, which does run it — and that was the experiment,
+run against a throwaway `Delegated`-owned account on testnet
+(`node packages/chain/scripts/acceptance.mjs f4`):
+
+```
+escalating error to VM trap from failed host function call: require_auth_for_args
+["Unauthorized function call for address", GBWSU5Z62RFSMLWHQYJPIB5XDHBN66FFH4TIOQZLWFP535GVA2EH2WOQ]
+HostError: Error(Auth, InvalidAction)   — no contract error code
+```
+
+`require_auth_for_args` is reached and the host refuses it for want of a
+matching entry. The simulation **fails** rather than reporting what it wanted:
+no `result.auth` comes back, and a failed simulation hands a wallet nothing to
+sign. Discovery-by-simulation is unavailable on *both* simulations.
+
+The script keeps a control case alongside it, because the first version of the
+experiment asked the wrong question and got a confident answer to it. A payload
+with an empty `signers` map fails `UnvalidatedContext#3002` — inside
+`__check_auth`, but *before* the `Delegated` branch runs. That looks identical
+at a glance to "nested auth cannot be discovered" and is nothing of the kind.
+It is kept so the real result cannot be misread the same way twice.
+
+What remains is hand-constructing the entry. It is not impossible — the failure
+names exactly what is missing, and `auth_digest` is already computed
+client-side. It is unverifiable: there is no simulation to check the invocation
+tree against, so a mistake is discovered only by spending a submission.
+
+The fallback — connect a wallet for identity and fees while the browser key
+stays the actual owner — was also declined. Someone who connects a wallet has
+told you what they believe is about to happen, and a caption correcting them is
+worse than never offering the button. So the owner is this browser's disposable
+key, the screen says which key owns the account at the moment it is created, and
+there is no wallet button to misread.
+
+The full finding, including what it costs, is in [`PLAN-V4.md`](./PLAN-V4.md)
+under F4.
 
 ---
 
@@ -407,15 +491,70 @@ rejected transaction above demonstrates.
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
 
-- **Nothing in the app can sign, so nothing in the app can install.** The
-  accounts, new-policy, refusal, and activity screens are built and read live
-  from testnet. Writing — deploy, install, revoke — needs an owner signature,
-  and no browser signer exists yet: the passkey path is unbuilt, and so is the
-  local ed25519 keypair that would stand in for it. The new-policy screen
-  derives a boundary, lowers it, and then says this in place of a button. Every
-  install recorded above was signed by
-  `packages/chain/scripts/testnet.mjs`, which is not part of the application.
-  See [`PLAN-V3.md`](./PLAN-V3.md) for what is built and what is not.
+- **Your account is stranded if you clear your browser.** The owner key is
+  generated in the page and stored there, and there is deliberately no export
+  and no recovery — see [design rule 3](#design-rules). Clearing site data
+  destroys the key and with it the ability to sign for the account it owns. The
+  account and everything installed on it stay on chain and stay readable by
+  anyone; nobody can act on them again. This is stated at creation rather than
+  discovered later, and it is an acceptable trade only because these are
+  disposable testnet accounts.
+
+  This replaces the caveat that stood here through v3 — *"nothing in the app can
+  sign, so nothing in the app can install"*. That is retired in v4: deploy,
+  install, the agent's permitted and refused calls, and revoke are all built as
+  browser code paths, signed client-side by a key that never leaves it. The
+  retirement is pinned in both directions by `apps/web/test/caveats.test.ts`,
+  because a caveat that outlives its reason understates the work and that is its
+  own kind of inaccuracy. See [`PLAN-V4.md`](./PLAN-V4.md) for what is built and
+  what is not.
+- **The browser write path has signed in a browser. Nobody has clicked it.**
+  Both halves are load-bearing, and the second is the reason this caveat still
+  exists rather than being deleted.
+
+  The §1 acceptance flow — create an account, fund it, make the transaction the
+  boundary is derived from, install the boundary, run the agent inside it and
+  outside it, watch the agent fail to revoke, revoke as the owner, and watch the
+  same call fail differently — has now run end to end in a real Chromium
+  **twice, the second cold**, against a production build. Every key was generated
+  in the page by `createLocalKeys` and never left it. Eighteen transactions,
+  recorded under `browserRun` in `packages/chain/deployments/testnet.json` and
+  re-checked by `scripts/verify-browser-run.mjs`, which is handed only the two
+  public keys and the contract address and reads everything else off public
+  Horizon and the public RPC. What it checks is listed in that file; the ones
+  worth naming here are that the agent's four transactions carry no owner
+  signature — verified cryptographically, not by looking at who paid — and that
+  the installed cap equals the observed outflow exactly.
+
+  What has **not** happened is a person doing it. The runs were driven by
+  `apps/web/e2e/account-lifecycle.spec.ts`, and a driver is not a hand.
+  [`PLAN-V4.md`](./PLAN-V4.md) §10 step 6 says *completes by hand*, and that
+  condition is still unmet and still recorded as unmet.
+
+  What that run would add is worth stating exactly, because it is not what the
+  runs above already cover. It would add a **usability** claim, not a
+  correctness one. Correctness is settled by the verifier: the transactions
+  exist, the agent's carry no owner signature, the cap is the observed outflow,
+  and none of that gets truer for having been clicked. What a driver cannot
+  answer is whether a person **finds the buttons, in order, without the click
+  path in front of them** — the spec is handed the selectors and the sequence,
+  so it proves the steps work and says nothing about whether they can be found.
+  Every defect above was of exactly that kind: each was invisible to a Node test
+  and each made the flow unusable rather than incorrect, which is the same class
+  of fault a by-hand run exists to catch and the reason the gap is a real
+  question rather than a formality.
+
+  Running it found three defects that no Node test could reach, all of which made
+  the flow unusable and none of which failed anything: both ownership checks
+  compared a `G…` StrKey against the hex a context rule stores, so the browser
+  never recognised an account it had just created; the write steps were mounted
+  inside the chain snapshot's success branch, so each hash vanished a second
+  after it landed and the ninth transaction became unreachable after the revoke;
+  and `extract.ts` set the observed transaction's `source` to the fee payer
+  rather than the account the policy installs on, so no cap was ever derived from
+  a smart account's own transfer and every boundary was refused at lowering.
+  That is what §11 meant when it insisted the browser half was *unrun* rather
+  than *fine*.
 - **On `/app/simulator`, the deny table proves refusal as adjudicated by this
   repository's evaluator, not as enforced on-chain.** That screen runs
   `evaluate` in the browser. `evaluate` is an independent implementation of the
@@ -476,9 +615,10 @@ pretend otherwise.
 - **No Rust policy codegen, no MCP server, no mainnet, no multi-account
   management, no wallet.** Each is marked with a `TODO(roadmap)` comment at the
   point where it will attach.
-- **`npm audit` is not clean** — 23 low-severity advisories remain, all of them
-  unfixable at the dependency level. See [Dependency
-  advisories](#dependency-advisories) for the full accounting.
+- ~~**`npm audit` is not clean**~~ — it is. The 23 low-severity advisories that
+  stood here all reduced to a package no source file imported, and it has been
+  removed. See [Dependency advisories](#dependency-advisories) for the
+  accounting, including what the count was before.
 
 ---
 
@@ -490,6 +630,10 @@ pretend otherwise.
 |---|---|---|---|---|---|
 | before overrides | 1 | 10 | 6 | 19 | **36** |
 | after overrides | 0 | 0 | 0 | 23 | **23** |
+| after dropping the wallet kit | 0 | 0 | 0 | 0 | **0** |
+
+The CI gate runs at `--audit-level=low`, which is the strictest npm offers. It
+sat at `moderate` for as long as the third row did not exist.
 
 ### What the overrides fix
 
@@ -505,67 +649,65 @@ The root `package.json` pins five transitive packages:
 }
 ```
 
-This clears every critical, high, and moderate advisory — including the critical
+This cleared every critical, high, and moderate advisory — including the critical
 one, arbitrary code execution in `protobufjs` (GHSA-xq3m-2v4x-88gg), which
 arrived via `@trezor/*`. All five resolve within a compatible range, so nothing
 is force-upgraded across a breaking major. `npm test`, `npm run lint`, and
 `npm run build` all pass with them applied, and the app was smoke-tested
 end-to-end afterwards.
 
+Three of the five still bind: `axios` (pulled up from the `1.18.0` the Stellar
+SDK pins), `postcss` and `sharp` (both up from what Next declares). The other
+two — `protobufjs` and `uuid` — no longer have anything to act on, because the
+packages that brought them in left the tree with the wallet kit. They are kept
+rather than deleted: an override on an absent package costs nothing, and each is
+a floor that a future dependency cannot silently drop back through.
+
 > **Reproducing this:** npm seeds resolution from an existing `node_modules`, so
-> adding an override to a populated tree appears to do nothing — the old version
-> stays pinned and the audit count does not move. Delete both `node_modules` and
-> `package-lock.json` before re-resolving, or you will conclude the overrides
-> are broken. They are not.
+> changing dependencies on a populated tree appears to do nothing — the old
+> version stays pinned and the audit count does not move.
+>
+> This is a workspace, so there are **four** `node_modules` directories, not one.
+> Deleting the root and `package-lock.json` is not enough: the copies under
+> `apps/web/`, `packages/chain/` and `packages/core/` survive and seed the
+> resolve from the layout they already had. That failure is quiet and it does not
+> look like a stale tree — it looks like a broken dependency. Removing the wallet
+> kit and clearing only the root produced a tree in which `@stellar/stellar-sdk`
+> kept its old nested position and its own declared dependency on
+> `@noble/ed25519` was never installed at all, so the chain suite failed on a
+> missing package that the lockfile correctly listed.
+>
+> ```
+> rm -rf node_modules */*/node_modules package-lock.json && npm install
+> ```
 
-### What cannot be fixed, and why
+### Where the last 23 went
 
-The 23 remaining advisories are all low severity and all reduce to a single
-root cause: **`elliptic`** (GHSA-848j-6mx2-7j84, "uses a cryptographic primitive
-with a risky implementation"). The advisory covers `*` — every published
-version, including the current 6.6.1 — so there is no version to pin to. An
-override cannot fix it; only removing the dependency can.
+Two sections stood here: one explaining that the 23 remaining advisories could
+not be fixed, and one explaining that nothing imported the package they came
+from. Both are **retired**, because the condition they described is gone rather
+than merely re-argued.
 
-It arrives through two independent paths, both inside the wallet kit:
+All 23 were low severity and all reduced to one root cause, **`elliptic`**
+(GHSA-848j-6mx2-7j84). Its advisory covers `*` — every published version — so
+there was no version to pin to and no override that could reach it. It arrived
+through two independent paths, both unconditional dependencies of
+`@creit.tech/stellar-wallets-kit`, and it was installed whether or not the HOT
+Wallet and Trezor modules were used.
 
-```
-@creit.tech/stellar-wallets-kit
-├─ @hot-wallet/sdk → @near-js/crypto → secp256k1 → elliptic
-└─ @trezor/connect-plugin-stellar → @trezor/connect
-     ├─ @trezor/blockchain-link → crypto-browserify → browserify-sign → elliptic
-     └─ @trezor/utxo-lib → tiny-secp256k1 → elliptic
-```
+That package was a declared dependency of `apps/web` that **no source file ever
+imported**, and once the wallet path was struck (see [Why there is no wallet
+button](#why-there-is-no-wallet-button)) none ever would. So it was removed. The
+count went to zero, and the audit gate's threshold moved from `moderate` to
+`low`.
 
-Both are unconditional dependencies of `@creit.tech/stellar-wallets-kit`. They
-are installed whether or not the HOT Wallet and Trezor modules are used, because
-npm installs a package's dependency tree regardless of which subpaths an
-application imports.
-
-### Subpath importing, and what it does not do
-
-The install flow imports only the two modules it uses:
-
-```ts
-import('@creit.tech/stellar-wallets-kit/modules/freighter')
-import('@creit.tech/stellar-wallets-kit/modules/xbull')
-```
-
-Neither pulls in `@hot-wallet/sdk` or `@trezor/*`, so `elliptic` is never
-bundled into the client and never executes at runtime.
-
-**This is a mitigation of runtime exposure, not of supply-chain exposure.** Be
-precise about the distinction:
-
-- ✅ `elliptic` is not in the shipped browser bundle and no code path reaches it.
-- ❌ It is still installed on every `npm ci`, in CI and on any developer machine.
-- ❌ It still runs its install scripts and still appears in `npm audit`, SBOMs,
-  and any supply-chain scan.
-
-So subpath importing is the *only* available mitigation for the `elliptic`
-advisories, and it is a partial one. Removing them entirely would require the
-wallet kit to move its wallet modules to optional peer dependencies, or
-replacing the kit with per-wallet integrations. Neither is in scope for this
-MVP, and neither is something this repository can fix on its own.
+The distinction the retired sections drew is worth keeping even though its
+occasion is gone, because it is the thing that made removal worth doing rather
+than optional. Not importing `elliptic` only ever mitigated *runtime* exposure:
+it was still installed on every `npm ci`, still ran its install scripts, and
+still appeared in `npm audit`, SBOMs, and any supply-chain scan. Removing the
+dependency is the only move that addresses the second kind, and an unimported
+dependency is the one case where it costs nothing.
 
 ---
 

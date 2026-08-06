@@ -14,11 +14,73 @@ export { lower, type LowerOptions } from './lower.js';
 export {
   BOUNDARY_REFUSAL_CODES,
   CONTRACT_ERRORS,
+  REVOKED_RULE_CODES,
   SMART_ACCOUNT_ERRORS,
   SPENDING_LIMIT_ERRORS,
   describeContractError,
   isBoundaryRefusal,
+  isRevokedRule,
 } from './errors.js';
+
+export {
+  DEFAULT_TESTNET_RPC_URL,
+  FRIENDBOT_URL,
+  TESTNET_PASSPHRASE,
+  type SupportedPassphrase,
+} from './network.js';
+
+export { concatBytes, fromHex, scvBytes, sha256, toHex } from './bytes.js';
+
+export {
+  deployAccountFunction,
+  deployAccountOperation,
+  deployedContractAddress,
+  ownerSignerScVal,
+  randomSalt,
+  type DeployAccountOptions,
+  type OwnerSigner,
+} from './deploy.js';
+
+export {
+  addContextRuleFunction,
+  contextRuleIdFrom,
+  installFunctions,
+  type InstallContext,
+} from './install.js';
+
+export { removeContextRuleFunction, removePolicyFunction } from './revoke.js';
+
+export {
+  invokeContract,
+  nativeTokenId,
+  transferFunction,
+  type TransferOptions,
+} from './token.js';
+
+export {
+  assertDistinctSigners,
+  assertTestnet,
+  signAs,
+  type Ed25519Signer,
+  type SignAuthEntryOptions,
+} from './sign.js';
+
+export {
+  contractErrorCodes,
+  enforcingFootprint,
+  opResultName,
+  reachedLedger,
+  recordAuthEntries,
+  simulationErrorCode,
+  submitAuthorized,
+  submitWithBorrowedFootprint,
+  waitForTransaction,
+  type AuthEntrySigner,
+  type BorrowedFootprintOptions,
+  type EnvelopeSigner,
+  type SubmitOptions,
+  type SubmitResult,
+} from './submit.js';
 
 export {
   ContractReadError,

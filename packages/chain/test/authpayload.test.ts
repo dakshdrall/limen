@@ -19,6 +19,7 @@ import {
   spendingLimitParams,
   structMap,
 } from '../src/authpayload.js';
+import { toHex } from '../src/bytes.js';
 
 const CONTRACT = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 const VERIFIER = 'CA3ZVES4QX6QQE7EUALSWFYHOHG6XZ3E65DCGCGODI6GRUSVJ75HPGZX';
@@ -91,23 +92,28 @@ describe('i128', () => {
 
 describe('authDigest binds the selected rules into the signature', () => {
   const payload = new Uint8Array(32).fill(9);
+  // Compared as hex rather than with `Buffer.equals`. The digest is a
+  // `Uint8Array` now — see `bytes.ts` — and a test reaching for a `Buffer`
+  // method would be a `Buffer` dependency inside the tree that is supposed
+  // not to have one.
+  const digest = (ids: number[]) => toHex(authDigest(payload, ids));
 
   it('is not the host payload itself — signing that would be the bug', () => {
-    expect(authDigest(payload, [0]).equals(Buffer.from(payload))).toBe(false);
+    expect(digest([0])).not.toBe(toHex(payload));
   });
 
   it('changes when the selected rule changes', () => {
     // This is the whole point of the digest. If these matched, a signature
     // collected under a strict rule could be replayed against a weaker one.
-    expect(authDigest(payload, [0]).equals(authDigest(payload, [1]))).toBe(false);
+    expect(digest([0])).not.toBe(digest([1]));
   });
 
   it('changes when the number of contexts changes', () => {
-    expect(authDigest(payload, [1]).equals(authDigest(payload, [1, 1]))).toBe(false);
+    expect(digest([1])).not.toBe(digest([1, 1]));
   });
 
   it('is stable for the same inputs', () => {
-    expect(authDigest(payload, [2, 3]).equals(authDigest(payload, [2, 3]))).toBe(true);
+    expect(digest([2, 3])).toBe(digest([2, 3]));
   });
 
   it('is 32 bytes, so it can be signed as an ed25519 message digest', () => {

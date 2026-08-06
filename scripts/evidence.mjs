@@ -54,6 +54,26 @@ const SUITES = [
 
 const checkOnly = process.argv.includes('--check');
 
+/**
+ * Regenerate the chain figures only, keeping the committed test counts.
+ *
+ * This exists because the pipeline has a genuine circularity, and the choice is
+ * between naming it and working around it by hand. `evidence.test.ts` re-derives
+ * the chain figures independently and fails when they drift — which is exactly
+ * what it is for. But a full regeneration runs the suites to count them, so the
+ * moment `deployments/testnet.json` gains a run, the web suite is red and the
+ * regeneration that would fix it refuses to record a count from a red suite.
+ *
+ * The bootstrap: `--chain-only` updates the derived chain block, the suites go
+ * green, and a normal `npm run evidence` then records the counts. Editing the
+ * generated file by hand would do the same thing while discarding the guarantee
+ * that nothing in it is typed.
+ *
+ * It cannot be used to fake a test count: it never touches `tests`, and
+ * `--check` still compares the whole file.
+ */
+const chainOnly = process.argv.includes('--chain-only');
+
 /** Runs one workspace's suite and returns its counts. Throws if it is red. */
 function runSuite({ workspace, directory, covers }, reportDirectory) {
   const report = join(reportDirectory, `${directory.replace('/', '-')}.json`);
@@ -111,6 +131,19 @@ function installTransactions(value, found = new Set()) {
   return found;
 }
 
+/** Every `smartAccount` value in the recording, wherever it is nested. */
+function smartAccountsIn(value, found = new Set()) {
+  if (Array.isArray(value)) {
+    for (const item of value) smartAccountsIn(item, found);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'smartAccount' && typeof item === 'string') found.add(item);
+      else smartAccountsIn(item, found);
+    }
+  }
+  return found;
+}
+
 /**
  * Rust source files tracked in this repository.
  *
@@ -152,8 +185,17 @@ function chainEvidence() {
     /** See `rustSourceFiles`. The composition-only claim, counted. */
     rustSourceFiles: rustSourceFiles(),
 
-    /** Smart accounts this repository has deployed and written to. */
-    smartAccounts: new Set([recorded.walkthrough.smartAccount]).size,
+    /**
+     * Smart accounts this repository has deployed and written to.
+     *
+     * Collected from every `smartAccount` key in the recording rather than read
+     * off the walkthrough. It used to be the latter, which was correct for
+     * exactly as long as there was one account: the V4 chain run deploys its
+     * own, and a count that names one field would have kept saying "1" with
+     * nothing to indicate it had stopped looking. Same argument as
+     * `installTransactions`, which learned it the same way.
+     */
+    smartAccounts: smartAccountsIn(recorded).size,
 
     /** Context rules installed on chain, counted by their install transactions. */
     contextRulesInstalled: installTransactions(recorded).size,
@@ -201,8 +243,15 @@ function build() {
  * guarantee comes from the check itself, not from a date the file states about
  * itself.
  */
-const evidence = build();
+const evidence = chainOnly
+  ? { ...JSON.parse(readFileSync(OUTPUT, 'utf8')), chain: chainEvidence() }
+  : build();
 const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
+
+if (chainOnly && checkOnly) {
+  console.error('evidence: --chain-only and --check together would check a file this run only half regenerated');
+  process.exit(2);
+}
 
 if (checkOnly) {
   let committed = '';

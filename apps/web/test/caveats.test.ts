@@ -137,18 +137,49 @@ describe('the install caveat survives', () => {
   });
 });
 
-describe('the custody claim stays accurate now that a signer exists', () => {
-  it('drops the unqualified claim and names the one signer that exists', () => {
-    // The unqualified sentence became false the moment the demo signer landed.
+describe('the custody claim stays accurate as signers are added', () => {
+  // This claim has now been narrowed twice, and each narrowing is pinned in
+  // both directions. First the demo signer made the unqualified sentence false;
+  // then the browser key made the qualified one false too, because that key can
+  // move the funds in the account it owns. What is asserted here is the claim
+  // that survives — Limen holds nothing — plus the absence of the two wordings
+  // that no longer hold.
+  it('drops both superseded wordings', () => {
     expect(README).not.toContain(
       'There is no code path in this repository that can move user funds.',
     );
-    expect(README).toContain("There is no code path in this repository that can move a user's funds.");
-    expect(README).toContain('There is exactly one code path that can move any funds at all');
+    // False since v4: the local key exists precisely so it can move funds.
+    expect(README).not.toContain(
+      "There is no code path in this repository that can move a user's funds.",
+    );
+    expect(README).not.toContain('There is exactly one code path that can move any funds at all');
+  });
+
+  it('states the claim that survives, about custody rather than capability', () => {
+    expect(README).toContain(
+      'There is no code path in this repository that gives Limen custody of a user',
+    );
+    expect(README).toContain('no server-side signer for a user');
+    expect(README).toContain("neither of them is Limen's to hold");
+  });
+
+  it('does not soften the browser key into something it is not', () => {
+    // The honest half of the narrowing. A key in browser storage is a user
+    // secret in browser storage, and the rule used to forbid exactly that.
+    expect(README).toContain('It used to forbid a user secret reaching browser storage at all');
+    expect(README).toContain('clearing site data destroys it');
+    expect(README).toContain('There is no export, no backup, and no import field');
   });
 
   it('still describes the demo account as disposable', () => {
     expect(README).toContain('disposable and holds trivial funds');
+  });
+
+  it('keeps the NO CUSTODY label a claim about custody, not about capability', () => {
+    const label = source('components/StatusLabel.tsx');
+    expect(label).not.toContain('There is no code path here that can move your funds');
+    expect(label).toContain('No key of yours reaches a Limen server');
+    expect(label).toContain('generated in your browser, stays in it');
   });
 });
 
@@ -241,15 +272,80 @@ describe('a boundary that could not be read is not shown as an absent one', () =
   });
 });
 
-describe('the install step does not pretend it can sign', () => {
-  it('says the signer paths do not exist yet, in place of a button', () => {
+describe('the install step, now that it can sign', () => {
+  // Retired in v4 step 6, and retired the way PLAN-V4 §9 requires: by the thing
+  // the caveat described becoming possible, not by deleting the sentence. Both
+  // directions are asserted, because a caveat that outlives its reason
+  // understates the work and that is its own kind of inaccuracy.
+  it('no longer claims neither signer path exists', () => {
     const screen = source('components/app/NewPolicyScreen.tsx');
-    expect(screen).toContain('Neither signer path exists in the browser yet');
+    expect(screen).not.toContain('Neither signer path exists in the browser yet');
+    expect(screen).not.toContain('not built yet');
   });
 
-  it('rules out ever taking a secret key from a form', () => {
-    expect(source('components/app/NewPolicyScreen.tsx')).toContain(
-      'There is no form here that accepts a secret key, and there will not be one',
+  it('rules out ever taking a secret key from a form — on both screens', () => {
+    // The survivor. It was true when nothing could sign and it is more
+    // load-bearing now that something can, so it is pinned in the component
+    // that replaced the caveat as well as in the one that still carries it.
+    const sentence = 'There is no form here that accepts a secret key, and there will not be one';
+    expect(source('components/app/NewPolicyScreen.tsx')).toContain(sentence);
+    expect(source('components/app/InstallControl.tsx')).toContain(sentence);
+  });
+
+  it('says which key signs the install, and which one the boundary binds', () => {
+    // The claim the product makes is that the agent's key cannot exceed a
+    // boundary the owner's key installed. A screen that signs without saying
+    // which of the two is acting has asked to be taken on trust.
+    const control = source('components/app/InstallControl.tsx');
+    expect(control).toContain('signs this install');
+    expect(control).toContain('bounded by it');
+    expect(control).toContain('it does not sign this');
+  });
+
+  it('says a boundary installed here can be taken back', () => {
+    expect(source('components/app/InstallControl.tsx')).toContain(
+      'A boundary installed here can be taken back',
+    );
+  });
+});
+
+describe('the agent run distinguishes a refusal from a missing rule', () => {
+  const steps = source('components/app/AgentRunSteps.tsx');
+
+  it('does not count a revoked rule as a boundary refusal', () => {
+    // PLAN-V4 F3. `ContextRuleNotFound#3000` is deliberately absent from
+    // BOUNDARY_REFUSAL_CODES, and the screen has to carry that distinction
+    // rather than flattening both into DENY.
+    expect(steps).toContain('isRevokedRule');
+    expect(steps).toContain('Not counted as a refusal');
+    expect(steps).toContain('there was no boundary left to consult');
+  });
+
+  it('says why the permitted step deliberately spends less than the cap', () => {
+    // If step 01 exhausted the cap, step 05 would fail for two reasons at once
+    // and demonstrate neither.
+    expect(steps).toContain('still inside the cap');
+    expect(steps).toContain('not because a limit was reached');
+  });
+
+  it('does not attribute an undecodable failure to the boundary', () => {
+    expect(steps).toContain('no code identifying a boundary refusal was decoded');
+    expect(source('components/app/WriteResult.tsx')).toContain(
+      'A failure is not a refusal until its error code says so',
+    );
+  });
+
+  it('reports a step that succeeded when it should not have, as it happened', () => {
+    // The one that matters most if the boundary ever fails to hold: a screen
+    // that rendered an unexpected success as anything other than a success
+    // would be hiding exactly the result a reviewer came for.
+    expect(steps).toContain('that means the boundary did not hold');
+  });
+
+  it('says an attempt with no hash is not evidence', () => {
+    expect(source('lib/chain-write.ts')).toContain('never reached a ledger');
+    expect(source('components/app/WriteResult.tsx')).toContain(
+      'did not reach a ledger, so there is no hash',
     );
   });
 });
@@ -338,9 +434,103 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
   });
 
   it('states what is not built, on the page most likely to be read first', () => {
-    expect(page).toContain('Nothing installs from the browser');
+    // Retired in v4: installing from the browser is what the app now does, so
+    // this limit is replaced rather than deleted. What took its place are the
+    // two limits that are true — no wallet, and no way back from a cleared
+    // browser — because a limits list that quietly shortens as features land
+    // reads as marketing.
+    expect(page).not.toContain('Nothing installs from the browser');
+    expect(page).toContain('No wallet, and no key recovery');
+    expect(page).toContain('strands the account it owns');
     expect(page).toContain('One contract per boundary');
     expect(page).toContain('Testnet, and not audited');
+  });
+});
+
+describe('a built write path is not a demonstrated one', () => {
+  const page = source('app/page.tsx');
+
+  // The narrowest and most tempting overstatement v4 has available, and the one
+  // this project would fall into by accident rather than by intent: the screens
+  // exist, the chain layer works, the hashes are real — and every one of those
+  // hashes was signed by a Node script. "Deploying, installing and revoking all
+  // run from the browser" was the wording that shipped with step 6, and it reads
+  // as a completed run to anyone who has not read PLAN-V4 §11.
+  //
+  // Pinned in both directions, as every other retirement here is. The negative
+  // half matters more than usual: the sentence this replaces is the one a future
+  // edit would restore without noticing, because it is shorter and sounds better.
+  it('does not claim on the landing that the browser has run the flow', () => {
+    expect(page).not.toContain('all run from the browser now');
+    expect(page).toContain('built as browser code paths now');
+  });
+
+  // Retired on 2026-08-06, by the run happening rather than by the sentence
+  // being deleted — §9's rule, applied to the caveat §11 was most careful about.
+  //
+  // What replaced it is narrower than "it works", and the narrowing is the
+  // point. Two things were true at once and had to stay distinguishable: the
+  // browser has now signed, and no person has clicked. A driver is not a hand.
+  // So the negative half below forbids the retired wording *and* the
+  // overstatement it would be tempting to replace it with.
+  it('states on the landing that the browser has signed and no person has clicked', () => {
+    expect(page).not.toContain('The browser has not signed anything yet');
+    expect(page).not.toContain('No hash on this page was signed in a browser');
+
+    expect(page).toContain('The browser has signed, and no person has clicked');
+    expect(page).toContain('driven by a test, not by a hand');
+    // The claim that must not creep back in as a shorter, better-sounding one.
+    expect(page).not.toContain('anyone can run it');
+  });
+
+  it('does not let the README describe the path as demonstrated', () => {
+    expect(README).not.toContain('and revoke all run from the browser');
+    expect(README).toContain('are all built as browser code paths');
+  });
+
+  it('says in the README that the browser has signed and nobody has clicked', () => {
+    // Both directions. The retired sentences must not survive alongside their
+    // replacement — a README carrying both would be contradicting itself in a
+    // way that reads as caution.
+    expect(README).not.toContain(
+      'The browser write path has never signed a transaction in a browser.',
+    );
+    expect(README).not.toContain('It is implemented and it is not yet demonstrated');
+    expect(README).not.toContain('**Those\n  runs have not happened**');
+
+    expect(README).toContain(
+      'The browser write path has signed in a browser. Nobody has clicked it.',
+    );
+    expect(README).toContain('a driver is not a hand');
+    // The unmet condition stays named. This is the half a later edit would drop.
+    expect(README).toContain('still unmet and still recorded as unmet');
+  });
+
+  it('records the browser run, and says what it was not', () => {
+    // This assertion used to read `not.toContain('browserRun')`, and it was the
+    // loudest check in the file: it existed to stop anyone "filling in" the
+    // block from the script run's hashes, because a block named for a browser
+    // run is a claim regardless of what is in it.
+    //
+    // The block is now there because the run happened. So the check inverts and
+    // gains the thing that keeps it honest — the record must carry its own
+    // limits with it. A `browserRun` block that did not say it was driven by a
+    // test would be exactly the overstatement the old assertion was guarding
+    // the empty file against.
+    const recorded = readFileSync(
+      fileURLToPath(new URL('../../../packages/chain/deployments/testnet.json', import.meta.url)),
+      'utf8',
+    );
+    const parsed = JSON.parse(recorded) as {
+      browserRun?: { notByHand?: string; runs?: unknown[]; verifiedBy?: string };
+    };
+
+    expect(parsed.browserRun, 'the browser run is not recorded').toBeDefined();
+    // §11 asks for two completions, the second cold. One is not two.
+    expect(parsed.browserRun?.runs).toHaveLength(2);
+    // The limit travels with the record or the record overstates itself.
+    expect(parsed.browserRun?.notByHand).toContain('a scripted driver is not a hand');
+    expect(parsed.browserRun?.verifiedBy).toContain('verify-browser-run');
   });
 });
 
@@ -370,9 +560,22 @@ describe('the docs page keeps the agent-key claim in its narrow form', () => {
   });
 
   it('states what is not built rather than leaving it to be discovered', () => {
-    expect(docs).toContain('No browser signer, so nothing installs from the interface');
-    expect(docs).toContain('No revoke button');
+    // Both v3 limits are retired by v4 building the thing they described.
+    // Asserted absent as well as present: the docs page is where someone
+    // deciding whether to trust this reads, and a stale limit there is a claim
+    // that the project is less far along than it is.
+    expect(docs).not.toContain('No browser signer, so nothing installs from the interface');
+    expect(docs).not.toContain('No revoke button');
+    expect(docs).toContain('No wallet, and no way back if you clear your browser');
+    expect(docs).toContain('No connected wallet as owner');
     expect(docs).toContain('One contract per boundary');
+  });
+
+  it('says the wallet path was measured and dropped, not merely skipped', () => {
+    // "We did not get to it" and "we tried it and the platform does not support
+    // it" are different claims, and only the second one is true here.
+    expect(docs).toContain('dropped on a measurement, not');
+    expect(docs).toContain('does not appear in either simulation');
   });
 });
 

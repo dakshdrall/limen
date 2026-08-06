@@ -216,6 +216,77 @@ body::before {
   }
 
   /* ---------------------------------------------------------------------------
+     Motion. PLAN-V4 §8.
+
+     Two rules govern everything in this block, and they are the reason there is
+     no `@keyframes` anywhere in this file — a design-system test asserts there
+     never will be. A keyframe loop runs on its own authority: it keeps going
+     with the network down, which makes it decoration by definition. Every
+     motion here is a *transition on a data change*, so when the data stops
+     arriving the motion stops with it.
+
+     Both are additive over a correct static state. Delete every declaration in
+     this block and the application is exactly what it was before step 7.
+  --------------------------------------------------------------------------- */
+
+  /* The ledger heartbeat. A second copy of the ground's minor rule, transparent
+     at phase 0 and opaque at phase 1, so alternate ledger closes lay the minor
+     pitch over itself and it reads one contrast step brighter. The major rule is
+     deliberately not here: it is where the layout's columns land, and structure
+     that breathes is decoration. */
+  .ground-beat {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-minor) 0 1px, transparent 1px var(--grid-pitch)),
+      repeating-linear-gradient(to bottom, var(--grid-minor) 0 1px, transparent 1px var(--grid-pitch));
+  }
+
+  .ground-beat[data-phase='1'] {
+    opacity: 1;
+  }
+
+  /* The window a context rule has left, as a hairline. `width` is set inline
+     from the fraction, because it is data — this rule owns how it is drawn and
+     not how long it is. */
+  .closing-window {
+    height: 1px;
+    width: 100%;
+    background: var(--border-subtle);
+  }
+
+  .closing-window > span {
+    display: block;
+    height: 100%;
+    background: var(--border-bright);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Long and eased, so the ground settles rather than blinking. A five-second
+       ledger cadence with a 900ms transition is visible if you look for it and
+       invisible if you are reading. */
+    .ground-beat { transition: opacity 900ms ease-out; }
+    .closing-window > span { transition: width 600ms linear; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* The heartbeat stops entirely rather than flipping instantly.
+       The global reduce rule near the top of this file collapses transition
+       durations to 0.01ms, which for a texture that changes every five seconds
+       would turn a slow fade into a hard blink — reduced motion made worse
+       rather than better. This is texture and carries no information, so the
+       honest reduced form is none of it.
+
+       `.closing-window` is deliberately not disabled here. Its length is a
+       quantity a reader is being shown, not an ornament; what the global rule
+       removes is the easing, which is all that should go. */
+    .ground-beat[data-phase='1'] { opacity: 0; }
+  }
+
+  /* ---------------------------------------------------------------------------
      The screen shell.
 
      Step 8 tokenised the things inside a screen — column widths, type, verdicts —
@@ -290,6 +361,10 @@ body::before {
 
   .panel[data-tone='refused'] { border-color: var(--deny-line); }
   .panel[data-tone='unproven'] { border-color: var(--unproven-line); }
+  /* For the panel that reports a write landing on a ledger. A border only —
+     the write screens end in a result that a reviewer should be able to find
+     without reading, and this is the existing permit line doing that job. */
+  .panel[data-tone='permitted'] { border-color: var(--permit-line); }
   .panel[data-tone='pending'] {
     border-color: var(--border);
     border-style: dashed;

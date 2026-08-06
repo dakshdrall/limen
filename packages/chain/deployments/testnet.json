@@ -1,16 +1,15 @@
 {
   "network": "testnet",
   "networkPassphrase": "Test SDF Network ; September 2015",
-  "recordedAt": "2026-08-02",
+  "recordedAt": "2026-08-06",
   "note": "Produced against live testnet by scripts/, except where a block names a different producer. Every hash here is checkable in an explorer. No secret key appears in this file or anywhere in the repository; the accounts below are disposable testnet accounts.",
-
+  "recordedAtNote": "The date of the most recent run in this file, which is what the landing page reads. Individual blocks carry their own dates where they were recorded on a different day; `walkthrough` and `denyAxisSurvey` are from 2026-08-02, `v4ChainRun` from 2026-08-05, and `browserRun` from 2026-08-06.",
   "uploads": {
     "account": "765c2f5d9ea414f18fbbfab77629d9609a9875dc31ee400b84e3031ff6446cf6",
     "ed25519Verifier": "dc3b862f2a16832f7815be0c232111bb04d6934cb9ee918b492d4a65267b664a",
     "webauthnVerifier": "268dc7fc327aa3764ca6e89019d5cdc55a5c1e6aed7cd87491da01f24f8e2177",
     "spendingLimitPolicy": "7703cb5dd53a89e75dffc59938fde4e0f96d506d39a69967d704926e16a25598"
   },
-
   "shared": {
     "ed25519Verifier": {
       "contract": "CA3ZVES4QX6QQE7EUALSWFYHOHG6XZ3E65DCGCGODI6GRUSVJ75HPGZX",
@@ -25,7 +24,6 @@
       "deployTx": "8935d56adb08fd0d2ff7a62e2d62fa2b6dadef77e931825cd31fd7e50d2b4fe4"
     }
   },
-
   "walkthrough": {
     "smartAccount": "CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V",
     "deployTx": "d9e735f3ac9d58f17c405d0cee2b21042592e947fe349651d8d5d76c6e76dc8a",
@@ -48,7 +46,6 @@
       "rejectedTx": "e763a8c499dc67bfedb7d135924822577972d61b01830f4622f987827e0a0737"
     }
   },
-
   "liveDerivation": {
     "note": "The other half of the claim, and the half the scripts do not cover: a boundary derived from a transaction that was observed on a live network rather than from a shipped fixture. Recorded here so the page that cites it reads the hash instead of restating it.",
     "producedBy": "step 1 of /app/simulator, driven by hand in a browser — not by scripts/ and not by the test suite",
@@ -61,7 +58,52 @@
     "derivedCapNote": "The derived cap equals the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
     "installedSeparately": "This transaction was not piped into the install below. The recorded install was built by scripts/testnet.mjs from the same parameters the lowering produces; ingest-to-install in one pass needs a browser signer, which does not exist yet. Both halves are real and they are recorded as two runs, because that is what they are."
   },
-
+  "v4ChainRun": {
+    "note": "PLAN-V4 steps 1-3, in one process. A smart account created from a code path that uses no Node API, a boundary derived from a transaction observed on that account and installed in the same pass, an agent run inside it and outside it, the agent's own attempt to revoke it, and the revoke. Eleven transactions, every one of them on a ledger.",
+    "producedBy": "node packages/chain/scripts/acceptance.mjs run",
+    "signedBy": "an ed25519 keypair generated in the process and never written anywhere. Not a browser, and this block does not claim to be one: the browser-signed reference run is PLAN-V4 step 6 and is not recorded yet.",
+    "ranAt": "2026-08-05",
+    "smartAccount": "CBYJPUD4Q2EPT6TYNIPLYSBOEMTK5JVQNNE5KYOAW243NDGL4VPO5GKW",
+    "ownerSigner": "GA5FAUHEJK5J4XNMWO4JXJ3FZ5WKLDHEYQROB6RFZSJD27S7IDYILONF",
+    "agentSigner": "GCH676JI3EGCUG7PUDIPEBI2BQGD7TJQBOJQYFHIZXOAHQNIZBHNRPFS",
+    "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "deployTx": "610f7e9a91020f1f8390bd21b5b0a5807784301197d6092b3d0714d7598da2d4",
+    "deployNote": "Operation.createCustomContract with the account wasm hash from wasm/manifest.json and two constructor arguments. The smart account signs nothing at deploy: the constructor runs as part of creation, so the only signature the network required was the fee source's on the envelope.",
+    "defaultRuleId": 0,
+    "defaultRuleNote": "The constructor's Default rule, read back off the account rather than assumed to be 0. It happened to be 0 here; the code does not rely on that.",
+    "seedTx": "3a58313326037f3fbc6cbcc3ac3310cfb4a060549fc086b210f5cfea85ae3c9a",
+    "observedTx": "c16e2ca2f58817c19647928260f7cb96220d5e1dd09fcd08196ad77496e03e39",
+    "observedLedger": 3976732,
+    "observedAmount": "1000000",
+    "observedNote": "The smart account moving its own funds, authorized by its owner through __check_auth under the Default rule. The boundary below is derived from this transaction, read back off the ledger — not from the constant the script sent.",
+    "derivedCap": "1000000",
+    "derivedCapNote": "Equal to the observed outflow exactly. That equality is the claim: the boundary is the flow that happened, not a round number near it.",
+    "windowLedgers": 120960,
+    "validUntilLedger": 4097692,
+    "installTx": "db6a52d7559b60b3c625e81e76f0234bea0e99b922adc28d14f95f2800144a68",
+    "contextRuleId": 1,
+    "installedInSamePass": "Derived and installed in one process from one observed transaction. The two halves of `liveDerivation` above were two runs; these are not.",
+    "permittedTx": "00eca33c38e107246fe6c34e9b84f4354273e3033233e86f4c74eb32edc23c8a",
+    "permittedAmount": "400000",
+    "permittedNote": "Signed by the agent's key and paid for by the agent's own account. No owner signature is anywhere near it.",
+    "refusedTx": "bbb0b66f8dc4f53eea9d815150ac93e6a02fe334a903f1aae31647d691e68353",
+    "refusedAmount": "2000000",
+    "refusedError": "SpendingLimitExceeded#3221",
+    "refusedIsBoundaryRefusal": true,
+    "agentRevokeTx": "fca28f06c92d42e10f82e1460670f3e0ae08089bd83968382cdf66457052ae4e",
+    "agentRevokeError": "UnvalidatedContext#3002",
+    "agentRevokeNote": "The agent attempting to remove its own boundary. Refused by the contract, not by this application declining to offer a button: remove_context_rule requires the account to authorize itself, and the agent's rule is CallContract(token), which does not match a call to the account. The owner's Default rule does.",
+    "revokeTx": "8bfb1cc52ffe287987c8b7dda5dd443fdac53e618955a5cea647340935b2781c",
+    "rulesAfterRevoke": [
+      0
+    ],
+    "rulesAfterRevokeNote": "Re-read from the chain after the write, not assumed. Rule 1 is gone; the owner's Default rule 0 remains.",
+    "postRevokeTx": "631f211bbb1a1a94c759e5ce754f9060fa94187c00d260d0f56ea6a2af639ef3",
+    "postRevokeError": "ContextRuleNotFound#3000",
+    "postRevokeIsBoundaryRefusal": false,
+    "postRevokeIsRevokedRule": true,
+    "postRevokeNote": "The agent repeating the call that worked at permittedTx, for an amount still inside the cap. It fails because the rule is gone, not because the limit was reached — which is why the permitted transfer deliberately spent less than the cap. 3000 is not in BOUNDARY_REFUSAL_CODES and is not counted as a refusal: 'the boundary refused you' and 'the boundary is gone' are different claims."
+  },
   "denyAxisSurvey": {
     "note": "One rule (id 2) with a 5,000,000 cap on the native SAC, plus a short-lived rule (id 3) for the expiry axis. Every attempt reached a ledger and failed there; none is simulation-only. `sim` is the error simulation reported, `ledger` the error decoded from the submitted transaction's diagnostic events.",
     "liveRuleInstallTx": "d5b835b2edc654694daff1084cce75561a8e1eed062d648cd7eb877a09e1a5f0",
@@ -111,5 +153,61 @@
         "hash": "f5ebce5170494ddd40eb73096cceaa32de4b287ec9b08bb9d1e53b7e1a848405"
       }
     ]
+  },
+  "browserRun": {
+    "note": "PLAN-V4 step 6, and the block §11 said must stay absent until there was something true to put in it. The §1 acceptance test, run start to finish in a real browser: an account created from a key generated in the page, a boundary derived from that account's own transaction and installed on it, an agent operating inside the boundary and refused outside it, the agent's own attempt to revoke refused, the owner's revoke, and the same call failing afterwards for a different reason. Nine hashes per run, all on ledgers.",
+    "producedBy": "apps/web/e2e/account-lifecycle.spec.ts, driving a real Chromium against a production `next start`. Playwright drives it; the signing is the page's. Every key was generated by `createLocalKeys` inside the browser and never left it.",
+    "notByHand": "Stated because §10 step 6's condition says *by hand* and a scripted driver is not a hand. What this retires is the narrower claim that mattered: that every hash in this file had been signed by a Node process. These were not. A human clicking through the same five screens remains unperformed.",
+    "signedBy": "ed25519 keypairs generated in the browser by `createLocalKeys`, held in `localStorage`, never exported and never sent anywhere. Two distinct keys per run, enforced by `assertDistinctSigners` before any host function is built.",
+    "ranAt": "2026-08-06",
+    "runs": [
+      {
+        "which": "first",
+        "smartAccount": "CALB5N4ZMEEX4FUHWGDHGEWXUNB3DWOD6CNJ6O3ZCFPPQFEAYAKXK6ED",
+        "ownerSigner": "GAJQCVPGQTM5DWT52HFBTTU2LGHYEV2SEV6EBUZ7XNQFFEPCQS3TDXS3",
+        "agentSigner": "GCVZU4FFHTAJXTH7QWDXX3EMSNZY6SYQ4XPG45JJA3JWISRSJVSXCNGX",
+        "deployTx": "0326d86d2ffe25cdc39097ea9ee9e4c37c600bfea8abbe51261cb4e7468b6a75",
+        "seedTx": "1fdcd85385c3c676967028cb17dcfd838ac690a5abc739de14f255b2ec4e1dfb",
+        "observedTx": "8991daec91c73cbfd193f734f820ffdab32975feae703e0225ee4b5b7e014901",
+        "observedAmount": "1000000",
+        "derivedCap": "1000000",
+        "installTx": "9cd8d3d97bbe5d21f7ad5015806ef43835ff295268aea3044d806d73c775479f",
+        "contextRuleId": 1,
+        "permittedTx": "78063519c85a7623b4581911f31b400fca2f56cd19b47203eedad5795167128a",
+        "refusedTx": "92284cd03386d44850ff9feb2875d197ae871ad78a39b6478219f43357cc29b6",
+        "refusedError": "SpendingLimitExceeded#3221",
+        "agentRevokeTx": "5d3b34657b99180b8c11f372c3a5b7f365f9207972dc35513474d9abc515d0d8",
+        "agentRevokeError": "UnvalidatedContext#3002",
+        "revokeTx": "bf86aa4dd32c8b951d7ea3b50e71987289ae9c6e3110ba3bf890fdcfafafc54c",
+        "postRevokeTx": "e6ac2f794850330cbe5be22a4c24d64e7756b6c893ac747c3a1f54f39044c819",
+        "postRevokeError": "ContextRuleNotFound#3000"
+      },
+      {
+        "which": "second, cold",
+        "smartAccount": "CD7FNANQ33MDSZW26MSJJCU3LMSBERPA3GEBJYMO5STOHJTPQMI2AAUK",
+        "ownerSigner": "GDQEGZFTMVZ7HMWZKBSCPNBEUBPSM4OT6KKETHDEIMCVQSVVHEBAENAG",
+        "agentSigner": "GATQWSS45NN5R7SOYWTR5IUVKWA2XRMCBKAIAOATSZUUAZBVAN24HY3W",
+        "deployTx": "d554875b87f5fc46f277026717a52070ac2271434a58a91b09711c06d966f381",
+        "seedTx": "4eecd203c7913152b1769b71032700551f10b3de36220133a827d98182cf18ba",
+        "observedTx": "3c2d09428e7b43a6231a348e031e0c1103e3f43c0a4a8974a7069336853349dc",
+        "observedAmount": "1000000",
+        "derivedCap": "1000000",
+        "installTx": "c44ae9ab7b51f91e824f8660fbedd9209bba922392dc167dc7880cf52026be89",
+        "contextRuleId": 1,
+        "permittedTx": "5d57bfe502faccd17f889e4bf1fdcf937200af670eeba45c64a6523b54399fb7",
+        "refusedTx": "a44f8753294d8ecd6cf41ccfccc7274f737cdf348707872ac1997c87978b9cc6",
+        "refusedError": "SpendingLimitExceeded#3221",
+        "agentRevokeTx": "51625c73dbd78ea26276fb9cd0ef8da59474e2ceb7a49419a78cd14414180c61",
+        "agentRevokeError": "UnvalidatedContext#3002",
+        "revokeTx": "b62947f70275136a0da0d840baaff43fed7e3f898b2a340b9a4a5d68532a4fcc",
+        "postRevokeTx": "30cdbffc21aab1a1f5812f7ec1c244ff47ef74febc450c4fdf6436925a520806",
+        "postRevokeError": "ContextRuleNotFound#3000"
+      }
+    ],
+    "twiceNote": "Two completions from a clean browser profile, the second cold — §11's condition, met the way the config already guarantees: Playwright gives each test a fresh context, so no key, no `localStorage` and no `sessionStorage` crossed between them, and `reuseExistingServer: false` means the second run started its own `next start`. The two runs share no key, no account, and no server process. That is why both are recorded rather than one.",
+    "verifiedBy": "node scripts/verify-browser-run.mjs",
+    "verificationNote": "Every hash confirmed from outside the process that produced it, given only the two public keys and the contract address. Existence, success or failure, the fee source read off each transaction's own `fee_account`, the ledger ordering, and the equality of the installed cap with the observed outflow come from public Horizon. The contract error codes and the address the deploy returned come from the public Soroban RPC, because this Horizon no longer serves transaction meta at all — measured against these hashes, not assumed. Both runs pass every check.",
+    "ownerSignatureNote": "For each of the agent's four transactions the verifier checks cryptographically that no envelope signature verifies against the owner's key and that no auth entry names the owner, and that the agent's own signature does. The agent transfers *to* the owner, so the owner's key does appear in those envelopes as a payee argument — being the recipient and having authorized it are different facts, and only the second is checked.",
+    "foundByThisRun": "Three defects, none of which any Node test could reach, all fixed before the runs above. (1) Both ownership checks compared a `G…` StrKey against the hex a context rule stores, which can never be equal, so every account the browser created rendered as somebody else's and the flow after deploy was unreachable. (2) The write screens were mounted inside the snapshot's `ok` branch, and every write ends by re-reading the chain — so each transaction's hash vanished about a second after it landed, and after the revoke the steps never returned, making the tenth transaction unperformable. (3) `extract.ts` set `source` — documented in `@limen/core` as *the account the policy installs on* — to the envelope's fee source, which for this flow is the owner's classic account rather than the smart account that spent; `synthesize` counts a movement toward the cap only when it comes from `source`, so no cap was derived, and every boundary derived from a smart account's own transaction was refused at lowering. This is what §11 meant by the browser half being unrun."
   }
 }

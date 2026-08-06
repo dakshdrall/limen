@@ -336,18 +336,21 @@ export default function DocsPage() {
         subtitle="Stated here rather than discovered later. Each of these is a real limit, not a rough edge."
       >
         <ul className="flex flex-col gap-4">
-          <Limit title="No browser signer, so nothing installs from the interface">
-            Installing and revoking are writes that need an owner signature. The passkey path is
-            unbuilt, and so is the browser-generated keypair that would stand in for it. Every
-            install this repository has recorded was signed by{' '}
-            <span className="value">packages/chain/scripts/testnet.mjs</span>, which reads
-            disposable testnet keys from the environment and is not part of this application.
+          <Limit title="No wallet, and no way back if you clear your browser">
+            The owner key is generated in the page and kept in browser storage. There is no export,
+            no backup, and no import field — offering one would put a user secret through a form,
+            which is the thing that rule exists to prevent. Clearing site data destroys the key and
+            strands the account it owns: it stays on chain and stays readable, and nobody can sign
+            for it again.
           </Limit>
-          <Limit title="No revoke button">
-            Removing a context rule is the same kind of write, and blocked on the same missing
-            signer. The rule above expires on its own at its{' '}
-            <span className="value">valid_until</span> ledger, which is the only revocation
-            currently demonstrated.
+          <Limit title="No connected wallet as owner">
+            Freighter and xBull were planned as a second owner path and dropped on a measurement, not
+            on effort. A wallet can only be a <span className="value">Delegated</span> signer, whose
+            nested authorization requirement is raised inside{' '}
+            <span className="value">__check_auth</span> and does not appear in either simulation — so
+            there is nothing to hand a wallet to sign. Connecting one for identity while the browser
+            key stayed the real owner was declined too: a wallet button that leaves a different key
+            in charge is worse than no wallet button. The measurement is in the README.
           </Limit>
           <Limit title="One contract per boundary">
             A flow that touches a second contract cannot be installed, because no audited primitive

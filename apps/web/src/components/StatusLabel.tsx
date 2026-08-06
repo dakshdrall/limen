@@ -18,7 +18,14 @@ export const STATUS_LABELS = {
   'IN DEVELOPMENT': 'Actively changing. Interfaces and data may not survive the next deploy.',
   'NOT AUDITED': 'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
   'COMPOSITION ONLY': 'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
-  'NO CUSTODY': 'No key of yours reaches a Limen server. There is no code path here that can move your funds.',
+  // The second sentence used to read "There is no code path here that can move
+  // your funds." It stopped being true the moment a screen could generate a
+  // signing key: that key exists precisely so it can move testnet funds, and on
+  // the screens that use it the old wording would have been reassurance rather
+  // than a limit. What survives is the claim that holds on every screen — Limen
+  // holds nothing, and the key is yours and stays in your browser.
+  'NO CUSTODY':
+    'No key of yours reaches a Limen server, an environment variable, or a log line. Any key that can move funds here was generated in your browser, stays in it, and is destroyed when you clear site data.',
   'ON-CHAIN':
     'Read from the ledger at the stated sequence number. Not restored from browser storage, and not this application’s opinion.',
   'COMPUTED LOCALLY':

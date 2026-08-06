@@ -90,7 +90,14 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
           <span className="col-head text-muted-dim">how it lowered</span>
           <ul className="flex flex-col gap-1.5">
             {plan.notes.map((note) => (
-              <li key={note} className="measure text-[12.5px] leading-relaxed text-muted">
+              // `break-words`: a lowering note is a machine string —
+              // `rule:C…:CallContract(C…)` — with no spaces in it, so at a phone
+              // width it is one unbreakable 950px token. It has `overflow:
+              // visible`, so it does not scroll inside anything; it pushes the
+              // document sideways and takes every screen that renders a plan
+              // with it. Measured at 390px, where it was the whole of the
+              // overflow on `/app/policies/new`.
+              <li key={note} className="measure text-[12.5px] leading-relaxed break-words text-muted">
                 {note}
               </li>
             ))}
