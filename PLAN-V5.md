@@ -1,10 +1,11 @@
 # PLAN-V5 — the product people see
 
 Status: **§1 released without an intake — see §1, and read it before crediting
-this project with having fixed anything. §2 in progress.** Written against the
-repository at `1156fa4`, after reading `globals.css`, `app/page.tsx`,
-`caveats.test.ts`, `design-system.test.ts`, `TopBar.tsx`,
-`e2e/viewports.spec.ts` and `ci.yml`.
+this project with having fixed anything. §2 complete: the palette is light,
+measured and pinned, and every screen and state has been looked at in a browser.
+§3 next.** Written against the repository at `1156fa4`, after reading
+`globals.css`, `app/page.tsx`, `caveats.test.ts`, `design-system.test.ts`,
+`TopBar.tsx`, `e2e/viewports.spec.ts` and `ci.yml`.
 
 V4 left the machinery correct. What is wrong is the presentation, and the fact
 that someone outside this repository has hit bugs using it. This plan was
@@ -302,6 +303,27 @@ Specifically checked, because they are the ones an inversion silently breaks:
   earns its weight from `--foreground` against `--border-bright`.
 
 Commit per screen group, not one commit at the end.
+
+**Done.** All nine routes at 2x, zero document overflow. The stepper was driven
+to beat 6 on the shipped-fixture path — the only way to reach the four
+`--surface-raised` header bands, which is the token whose *direction* the
+inversion changed and therefore the one most able to look wrong. They render
+`#f6f3ec`: a warm grey band over white rows with a stronger bottom rule, which
+is what a light table header should be. Hover was rendered live rather than
+checked numerically, and is clearly visible against white rows. The mid-write
+state was reached by holding the RPC open so a submission stays in flight
+without anything being sent — three controls disabled, `WriteResult` showing its
+accent in-flight row. Read-failed renders as a `refused`-toned panel.
+`LocalKeyBadge` checked with keys present. Greyscale re-checked on the rendered
+badges: DENY paints 22 levels darker than PERMIT on top of the distinct glyphs.
+
+One observation, not a palette matter and not acted on: the friendbot fund
+control never disables while it is calling, because funding goes through
+`use-write`'s `note()` rather than `run()` and only `run()` sets `busy`. That is
+the deliberate submission/not-a-submission split in `use-write.ts`, and a double
+click costs a second friendbot call that returns "already exists" and is
+reported as success — harmless. Recorded because the pass found it, not because
+it needs fixing.
 
 ---
 
