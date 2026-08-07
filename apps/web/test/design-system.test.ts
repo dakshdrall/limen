@@ -14,6 +14,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { THEME } from '../src/lib/theme';
 
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(src(relative), 'utf8');
@@ -257,6 +258,63 @@ describe('controls are a closed set', () => {
     // controls for things it cannot do.
     expect(css).toMatch(/\.btn:disabled\s*\{[^}]*\}/);
     expect(/\.btn:disabled\s*\{([^}]*)\}/.exec(css)?.[1]).not.toContain('opacity');
+  });
+});
+
+describe('the palette has one definition, and every consumer reads it', () => {
+  // PLAN-V5 F4. Step 11 centralised every colour into custom properties, and it
+  // reached every consumer but one: `opengraph-image.tsx` renders through satori
+  // with inline styles and no cascade, so `var(--permit)` resolves to nothing
+  // and its eleven colours were literals.
+  //
+  // All eleven had drifted from the tokens they were copied from — `#0a0b0d`
+  // against `--background: #060a11`, `#4ac95e` against `--permit: #45c86a`, and
+  // so on through the file — while its docstring said "same palette as the
+  // page". Close enough to survive review, far enough that the share card was a
+  // picture of a slightly different product.
+  //
+  // `lib/theme.ts` is now the palette and both are consumers. These three cases
+  // are what make that true rather than aspirational: without the second one in
+  // particular, a token added to the stylesheet alone would never be pinned, and
+  // the module would decay back into a partial copy.
+
+  /** `--name: value;` declarations whose value is a colour, from `:root` blocks. */
+  const declared = new Map(
+    [...css.matchAll(/^\s*(--[\w-]+):\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]*\));/gm)].map(
+      ([, name, value]) => [name, value],
+    ),
+  );
+
+  it('agrees with globals.css on every token it defines', () => {
+    for (const [name, value] of Object.entries(THEME)) {
+      expect(declared.get(name), `${name} is in lib/theme.ts but not in globals.css`).toBeDefined();
+      expect(declared.get(name), `${name} disagrees between lib/theme.ts and globals.css`).toBe(
+        value,
+      );
+    }
+  });
+
+  it('carries every colour token globals.css defines, so none escapes the pin', () => {
+    // The direction that keeps the module honest as the system grows. A new
+    // `--warning` added to the stylesheet alone is unpinned, and unpinned is
+    // exactly the state the OG card's eleven literals were in.
+    for (const name of declared.keys()) {
+      expect(name in THEME, `${name} is in globals.css but not in lib/theme.ts`).toBe(true);
+    }
+  });
+
+  it('leaves no colour literal in the card that cannot read a custom property', () => {
+    // The specific escape, closed. Comments are stripped first: the docstring
+    // lists the eleven values that had drifted, and a test forbidding a file from
+    // naming what it forbids also forbids documenting the decision.
+    const card = read('app/opengraph-image.tsx').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(card).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(card).not.toMatch(/\brgba?\(/);
+    expect(card).toContain("from '@/lib/theme'");
+  });
+
+  it('keeps the X card a re-export rather than a second card to keep correct', () => {
+    expect(read('app/twitter-image.tsx')).toContain("from './opengraph-image'");
   });
 });
 
