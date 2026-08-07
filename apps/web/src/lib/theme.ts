@@ -8,7 +8,8 @@
  * literals, and its own docstring claimed they were "the same palette as the
  * page".
  *
- * They were not. Every single one had drifted:
+ * They were not. Every single one had drifted, against the dark palette that
+ * stood here until §2.1 replaced it:
  *
  *     ground      #0a0b0d  vs  --background     #060a11
  *     eyebrow     #6c747e  vs  --muted-dim      #68758a
@@ -43,9 +44,16 @@
  * ground is blue-black and why the ramp has four steps — behind a build step,
  * and that reasoning is the most valuable thing in the file.
  *
- * PLAN-V5 F4. Values here are still the dark palette; §2.1 replaces them, and
- * the pin above is what makes that replacement a single edit that cannot land
- * halfway.
+ * PLAN-V5 F4 built this module; §2.1 then used it to invert the palette to light
+ * in a single edit, which is what it was extracted first in order to make
+ * possible. Every value below is measured — against the ground, against the
+ * surface a thing actually sits on, and in greyscale — and `contrast.test.ts`
+ * pins the measurements so that the next edit to a colour has to re-measure or
+ * go red.
+ *
+ * The register did not change with the palette. This is still an instrument:
+ * ink on paper rather than light on glass, the same ruled grid, the same four
+ * steps, no shadow, no gradient, no glass, and every caveat exactly where it was.
  */
 
 /**
@@ -60,41 +68,88 @@ export type Hex = `#${string}`;
  * The ground, and the surfaces that sit on it.
  *
  * Depth is a value step plus a rule, never a shadow. `sunken` is opaque and one
- * step below `surface` rather than `surface` at reduced alpha — alpha lets the
+ * step from `surface` rather than `surface` at reduced alpha — alpha lets the
  * ground's grid through, and a card the floor shows through does not read as
  * sitting on anything.
+ *
+ * ## The one place the inversion changed a direction rather than a value
+ *
+ * On dark, all four non-ground surfaces sat *above* the ground, and "distinguish
+ * this band from the surface it is on" and "lift this above the floor" were the
+ * same operation: lighten. Light has a ceiling. The ground is at L=0.956 and
+ * white is at 1.0, so there are four steps to fit into five percent of the
+ * luminance range, and a table header lighter than the white card it sits on is
+ * not a table header.
+ *
+ * So the two jobs split, which they were always doing and dark let us ignore:
+ *
+ *   - `surface` and `sunken` sit **above** the ground, toward white, exactly as
+ *     before. A card is brighter paper. An unreached step is paper that has not
+ *     brightened yet — still above the ground, not yet at the surface, which is
+ *     the same position it held on dark.
+ *   - `raised` and `hover` are **tints**, below the ground. On light a header
+ *     band and a row under the cursor are grey, because that is the only
+ *     direction with room in it and because it is what ink on paper does.
+ *
+ * The names still mean what they meant — `raised` is the band that stands out,
+ * `sunken` is the panel that recedes — but `raised` now achieves it by darkening.
+ * Written down here because it is invisible in a diff of hex values and it is the
+ * first thing that will confuse someone adding a sixth surface.
+ *
+ * Magnitudes are matched to the dark theme's own separations rather than picked:
+ * raised 1.11:1 against the surface where dark was 1.06, hover 1.08 where dark
+ * was 1.03, sunken 1.03 where dark was 1.03, ground 1.04 where dark was 1.05.
+ * The two tints run slightly stronger than their dark counterparts because each
+ * has to stay visible against two backgrounds — a white card and the ground —
+ * where on dark every surface only ever sat on one.
  */
 export const GROUND = {
-  background: '#060a11',
-  surface: '#0b111b',
-  surfaceRaised: '#101826',
-  surfaceHover: '#0e1521',
-  surfaceSunken: '#080d15',
+  background: '#fbfaf7',
+  surface: '#ffffff',
+  surfaceRaised: '#f6f3ec',
+  surfaceHover: '#f8f6f1',
+  surfaceSunken: '#fdfcfa',
 } as const satisfies Record<string, Hex>;
 
-/** Three rule weights, all thin. Depth comes from which one you use. */
+/**
+ * Three rule weights, all thin. Depth comes from which one you use.
+ *
+ * Measured against the ground at 1.22:1, 1.42:1 and 1.80:1, which is the dark
+ * theme's 1.21 / 1.41 / 1.75 held to within a rounding step. Faintly warm rather
+ * than neutral, so a hairline on warm paper reads as ink and not as a grey line
+ * laid over it.
+ */
 export const RULES = {
-  borderSubtle: '#16202f',
-  border: '#1f2c3f',
-  borderBright: '#2b3b52',
+  borderSubtle: '#e7e4dd',
+  border: '#d8d4ca',
+  borderBright: '#c2bdb1',
 } as const satisfies Record<string, Hex>;
 
 /**
  * Four deliberate contrast steps against the ground.
  *
- * Currently ~16.2:1, ~7.9:1, ~4.3:1 and ~2.3:1 against `GROUND.background`.
+ *     foreground  16.37:1   primary data and headings   (dark was 16.24)
+ *     muted        7.85:1   supporting prose, table headers        (7.85)
+ *     muted-dim    4.62:1   secondary annotations, captions        (4.25)
+ *     faint        2.60:1   decorative only — numerals, rule marks (2.32)
  *
- * PLAN-V5 F1: this ramp does not survive being inverted arithmetically —
- * `mutedDim` lands at 3.11:1, under AA, from an operation that looks lossless.
- * §2.1 replaces these by measurement and pins the measured ratios in a test, so
- * that a value edited without re-measuring becomes a red build rather than a
- * comment that has quietly stopped being true.
+ * Solved for these targets and then measured, not inverted. PLAN-V5 F1 is the
+ * reason: inverting the dark values channel-wise and re-measuring gives 16.52 /
+ * 6.08 / **3.11** / 1.92 — `mutedDim` under AA for body text, from an operation
+ * that looks lossless, and the four steps no longer evenly spaced, which is the
+ * part that makes hierarchy read at all.
+ *
+ * `contrast.test.ts` pins every ratio here, so a value edited without
+ * re-measuring is a red build rather than a comment that has quietly stopped
+ * being true. Both of the steps the dark theme was loosest at — `mutedDim` at
+ * 4.25 and `faint` at 2.32, each short of its target — are now on target, so
+ * this ramp is the better of the two rather than a faithful copy of the worse.
  */
 export const TEXT = {
-  foreground: '#e3e9f2',
-  muted: '#97a4b8',
-  mutedDim: '#68758a',
-  faint: '#414d60',
+  foreground: '#191c21',
+  muted: '#45505e',
+  mutedDim: '#69737f',
+  faint: '#9b9e99',
 } as const satisfies Record<string, Hex>;
 
 /**
@@ -104,25 +159,66 @@ export const TEXT = {
  * boundary refusal that never reached a ledger is a weaker claim than one that
  * did, and it is drawn as visibly-a-weaker-refusal rather than as a new kind of
  * one.
+ *
+ * ## Why PERMIT and DENY are not the same weight as each other
+ *
+ * PLAN-V5 F2, and the check the brief called most likely to silently break in an
+ * inversion. It was right, and the failure is sharper than "check it afterwards"
+ * suggests.
+ *
+ * Reduced to greyscale — a monochrome printout, a colour-blind reviewer's
+ * simulation — the dark theme's PERMIT and DENY sit 25 apart out of 255. Not
+ * much, and it works only because hue is never the sole carrier here.
+ *
+ * The obvious light pair, a dark green and a dark red both around 5:1, sits
+ * **5 apart**. Effectively identical. A greyscale print of the refusal table
+ * would distinguish its two verdicts by glyph alone.
+ *
+ * A search over both hue families, constrained to AA against the white surface
+ * and the ground, says no comfortable symmetric pair exists: separation is only
+ * bought by making one verdict markedly darker than the other. So the asymmetry
+ * is taken deliberately rather than compromised into. DENY is 9.11:1 and PERMIT
+ * 5.41:1, giving 32 of 255 — better than the dark theme it replaces. A refusal
+ * reading heavier than a permission is correct on its own terms; it is the
+ * verdict a reader must not miss.
+ *
+ * The glyph and the border treatment remain the primary carriers, exactly as
+ * before. The hue separation is a second line, not the first, and
+ * `design-system.test.ts` still pins the glyphs.
+ *
+ * Fills and rules are matched to the dark theme's own separations: a fill about
+ * 1.1:1 from the surface it sits on, a rule about 1.9:1 from its fill.
  */
 export const VERDICT = {
-  permit: '#45c86a',
-  permitDim: '#08210f',
-  permitLine: '#1c5730',
+  permit: '#0f7a43',
+  permitDim: '#e9f6ed',
+  permitLine: '#86bd99',
 
-  deny: '#f9695f',
-  denyDim: '#250c0c',
-  denyLine: '#762824',
+  deny: '#8c1d18',
+  denyDim: '#fbf1f0',
+  denyLine: '#dda9a3',
 
-  unproven: '#97a4b8',
-  unprovenDim: '#0e1521',
-  unprovenLine: '#3b4859',
+  unproven: '#45505e',
+  unprovenDim: '#f7f6f3',
+  unprovenLine: '#bab4a3',
 } as const satisfies Record<string, Hex>;
 
-/** One accent. Active navigation, focus, and the copy affordance. */
+/**
+ * One accent. Active navigation, focus, and the copy affordance.
+ *
+ * Reconsidered rather than darkened, as §2 requires: `#58b0e8` is a light blue
+ * that reads as active against near-black and disappears against off-white. This
+ * is a mid ink blue at 6.83:1 on the surface and 6.55:1 on the ground, close to
+ * the 7.92:1 the dark accent held.
+ *
+ * Checked in all three of its jobs rather than only as text, because they are
+ * judged against different things: the focus ring is judged against the rule it
+ * replaces (3.65:1 against `--border-bright`, so it visibly is not a border), and
+ * the active-nav fill against the ground (1.10:1, where dark was 1.12).
+ */
 export const ACCENT = {
-  accent: '#58b0e8',
-  accentDim: '#08192a',
+  accent: '#155e96',
+  accentDim: '#e9f0f7',
 } as const satisfies Record<string, Hex>;
 
 /**
@@ -135,10 +231,21 @@ export const ACCENT = {
  *
  * The pitches themselves (`--grid-pitch`, `--grid-pitch-major`) are lengths, not
  * colours, and stay in `globals.css` alone.
+ *
+ * The alphas roughly **halve** in the inversion — 0.026 and 0.048 become 0.014
+ * and 0.027 — and that is the whole point of measuring rather than swapping the
+ * ink colour and leaving the numbers. Dark ink on light paper reads far stronger
+ * than light ink on dark at the same alpha; carrying the dark alphas across would
+ * have doubled the grid's contrast and produced exactly the failure the original
+ * comment warns about, where you notice the grid instead of the depth.
+ *
+ * Solved by compositing each line over its ground and matching the resulting
+ * contrast: dark's minor rule sits at 1.0262:1 against its ground and this one
+ * at 1.0267:1; dark's major at 1.0526 and this one at 1.0504.
  */
 export const GRID = {
-  gridMinor: 'rgb(120 170 220 / 0.026)',
-  gridMajor: 'rgb(120 170 220 / 0.048)',
+  gridMinor: 'rgb(26 34 48 / 0.014)',
+  gridMajor: 'rgb(26 34 48 / 0.027)',
 } as const satisfies Record<string, string>;
 
 /**
