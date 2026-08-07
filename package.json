@@ -14,6 +14,9 @@
     "lint": "npm run lint -w @limen/web",
     "evidence": "node scripts/evidence.mjs",
     "evidence:check": "node scripts/evidence.mjs --check",
+    "shots": "node scripts/screenshots.mjs",
+    "shots:check": "node scripts/screenshots.mjs --check",
+    "shots:twice": "node scripts/screenshots.mjs --twice",
     "dev": "npm run build -w @limen/core && npm run dev -w @limen/web"
   },
   "overrides": {
