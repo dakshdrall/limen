@@ -146,6 +146,14 @@ vite.config.ts.timestamp-*
 test-results/
 playwright-report/
 
+# Where `scripts/screenshots.mjs` renders before comparing. The committed images
+# live in apps/web/public/shots and are deliberately NOT ignored — they are the
+# landing's product screenshots, and the whole point is that a stale one is a red
+# build rather than a picture nobody re-checks.
+.shots-a/
+.shots-b/
+.shots-check/
+
 # Throwaway probes. Scripts written to ask the network or the SDK one question
 # and then keep as a record of the answer for an hour. Anything worth keeping
 # graduates to packages/chain/scripts/ with a comment explaining what it

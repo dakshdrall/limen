@@ -1,12 +1,31 @@
 @import "tailwindcss";
 
 /* ===========================================================================
-   BLUEPRINT
+   BLUEPRINT, PRINTED
 
-   The frame of reference is a technical drawing: deep blue-black ground, thin
+   The frame of reference is a technical drawing: warm off-white ground, thin ink
    rules on a visible grid, one accent, nothing that glows. The user is reading
    state and making a consequential decision, so density beats air and
    legibility beats atmosphere.
+
+   This was a deep blue-black ground until PLAN-V5 §2. The register did not
+   change with it — technical drawings were ink on paper long before they were
+   light on glass, and the argument for the change is that a product asking to be
+   trusted with the authority to move money should read as institutional rather
+   than as crypto-native. Light throughout, landing and app both: a light landing
+   over a dark app makes entering the product feel like leaving the site.
+
+   Every value in `:root` below is measured rather than inverted, and every
+   measurement is pinned by `test/contrast.test.ts`. The palette itself lives in
+   `src/lib/theme.ts`, because one consumer — the OG card, rendered through
+   satori with no stylesheet — cannot read a custom property; a test asserts this
+   file and that module agree token for token, in both directions.
+
+   Three things the inversion changed that a diff of hex values does not show,
+   all three written up where they live: the surface ladder split into two
+   directions (see `--surface-raised`), the grid alphas roughly halved (see
+   `--grid-minor`), and PERMIT and DENY stopped being the same weight as each
+   other (see `--permit`).
 
    Rules this file holds itself to, because they are the difference between a
    system and a set of decorations:
@@ -24,68 +43,143 @@
 
 :root {
   /* --- ground ----------------------------------------------------------- */
-  /* Deep blue-black rather than neutral black: the whole palette is cool, so
-     the single warm signal (DENY) has somewhere to stand out from. */
-  --background: #060a11;
-  --surface: #0b111b;
-  --surface-raised: #101826;
-  --surface-hover: #0e1521;
+  /* Warm off-white rather than pure #fff: paper, not a screen with the lights
+     off. The whole palette is warm, so the two cool signals — the accent and
+     the ink rules — have somewhere to stand out from. */
+  --background: #fbfaf7;
+  --surface: #ffffff;
+
+  /* THE ONE DIRECTION THE INVERSION CHANGED.
+
+     On dark, all four of these sat *above* the ground, and "distinguish this
+     band from the surface it is on" and "lift this above the floor" were the
+     same operation: lighten. Light has a ceiling. The ground is at L=0.956 and
+     white is at 1.0, so there are four steps to fit into five percent of the
+     luminance range — and a table header lighter than the white card it sits on
+     is not a table header.
+
+     So the two jobs split, which they were always doing and dark let us ignore.
+     `--surface` and `--surface-sunken` sit above the ground, toward white, as
+     before. These two are tints, *below* the ground, because on light a header
+     band and a row under the cursor are grey — the only direction with room in
+     it, and what ink on paper actually does.
+
+     The names still mean what they meant. `raised` is the band that stands out;
+     it now achieves that by darkening. See `lib/theme.ts` for the full argument.
+
+     Both run slightly stronger than their dark counterparts (1.11:1 and 1.08:1
+     against the surface, where dark was 1.06 and 1.03) because each has to stay
+     visible against two backgrounds — a white card and the ground — where on
+     dark every surface only ever sat on one. */
+  --surface-raised: #f6f3ec;
+  --surface-hover: #f8f6f1;
+
   /* A surface that is present but not yet active — an unreached step, a
-     disabled panel. Opaque, and one value step *below* `--surface` rather than
+     disabled panel. Opaque, and one value step from `--surface` rather than
      `--surface` at reduced alpha: alpha lets the ground's grid through, and a
-     card the floor shows through does not read as sitting on anything. */
-  --surface-sunken: #080d15;
+     card the floor shows through does not read as sitting on anything.
+
+     Still between the ground and the surface, which is exactly where it sat on
+     dark. Paper that has not brightened yet. */
+  --surface-sunken: #fdfcfa;
 
   /* --- rules ------------------------------------------------------------ */
   /* Three weights, all thin. Depth comes from which rule you use, never from
-     a shadow — against #060a11 a shadow is invisible and costs a repaint. */
-  --border-subtle: #16202f;
-  --border: #1f2c3f;
-  --border-bright: #2b3b52;
+     a shadow — a shadow here would be the one decoration this system has always
+     refused, and it costs a repaint.
+
+     1.22:1, 1.42:1 and 1.80:1 against the ground, holding the dark theme's
+     1.21 / 1.41 / 1.75 to within a rounding step. Faintly warm rather than
+     neutral, so a hairline on warm paper reads as ink and not as a grey line
+     laid over it. */
+  --border-subtle: #e7e4dd;
+  --border: #d8d4ca;
+  --border-bright: #c2bdb1;
 
   /* --- text ramp -------------------------------------------------------- */
   /* Four deliberate contrast steps against the ground, so hierarchy is carried
-     by weight and value rather than by size alone:
-         foreground  ~14:1   primary data and headings
-         muted        ~7:1   supporting prose, table headers
-         muted-dim  ~4.5:1   secondary annotations, captions
-         faint      ~2.6:1   decorative only — numerals, rule marks */
-  --foreground: #e3e9f2;
-  --muted: #97a4b8;
-  --muted-dim: #68758a;
-  --faint: #414d60;
+     by weight and value rather than by size alone. Measured, not inverted:
+
+         foreground  16.37:1   primary data and headings   (dark was 16.24)
+         muted        7.85:1   supporting prose, table headers        (7.85)
+         muted-dim    4.62:1   secondary annotations, captions        (4.25)
+         faint        2.60:1   decorative only — numerals, rule marks (2.32)
+
+     PLAN-V5 F1 is why those are measurements and not arithmetic. Inverting the
+     dark values channel-wise and re-measuring gives 16.52 / 6.08 / 3.11 / 1.92:
+     `--muted-dim` under AA for body text, from an operation that looks lossless,
+     and the four steps no longer evenly spaced — which is the part that makes
+     hierarchy read at all.
+
+     Both steps the dark ramp was loosest at are now on target, so this is the
+     better of the two ramps rather than a faithful copy of the worse one. */
+  --foreground: #191c21;
+  --muted: #45505e;
+  --muted-dim: #69737f;
+  --faint: #9b9e99;
 
   /* --- state ------------------------------------------------------------ */
-  /* PERMIT and DENY carry hue AND glyph AND border. Never hue alone. */
-  --permit: #45c86a;
-  --permit-dim: #08210f;
-  --permit-line: #1c5730;
+  /* PERMIT and DENY carry hue AND glyph AND border. Never hue alone.
 
-  --deny: #f9695f;
-  --deny-dim: #250c0c;
-  --deny-line: #762824;
+     AND THEY ARE NOT THE SAME WEIGHT AS EACH OTHER. That is deliberate, and it
+     is the single most important thing in this block.
+
+     Reduced to greyscale — a monochrome printout, a colour-blind reviewer's
+     simulation — the dark theme's pair sat 25 apart out of 255. The obvious
+     light pair, a dark green and a dark red both around 5:1, sits 5 apart:
+     effectively identical, leaving the glyph doing all the work alone. A search
+     over both hue families, constrained to AA against the surface and the
+     ground, says no comfortable symmetric pair exists — separation is only
+     bought by making one verdict markedly darker.
+
+     So DENY is 9.11:1 and PERMIT is 5.41:1, giving 32 of 255, better than the
+     theme this replaces. A refusal reading heavier than a permission is correct
+     on its own terms: it is the verdict a reader must not miss. */
+  --permit: #0f7a43;
+  --permit-dim: #e9f6ed;
+  --permit-line: #86bd99;
+
+  --deny: #8c1d18;
+  --deny-dim: #fbf1f0;
+  --deny-line: #dda9a3;
 
   /* The third verdict. A boundary refusal that never reached a ledger is not
      the same claim as one that did, so it must not borrow DENY's red — but it
      must not become a fourth hue either, or the palette stops meaning
      anything. It is drawn in the neutral ramp with a dashed border: visibly
      a refusal, visibly a weaker one. */
-  --unproven: #97a4b8;
-  --unproven-dim: #0e1521;
-  --unproven-line: #3b4859;
+  --unproven: #45505e;
+  --unproven-dim: #f7f6f3;
+  --unproven-line: #bab4a3;
 
   /* One accent. Active navigation, focus, and the copy affordance. Nothing
-     else earns it. */
-  --accent: #58b0e8;
-  --accent-dim: #08192a;
+     else earns it.
+
+     Reconsidered rather than darkened: a light blue that reads as active
+     against near-black disappears against off-white. Checked in all three jobs,
+     because they are judged against different things — the focus ring against
+     the rule it replaces (3.65:1 on `--border-bright`, so it visibly is not a
+     border), the active-nav fill against the ground (1.10:1, dark was 1.12). */
+  --accent: #155e96;
+  --accent-dim: #e9f0f7;
 
   /* --- grid ------------------------------------------------------------- */
   /* Two pitches, like drafting paper: a minor rule you read as texture and a
      major rule you read as structure. Both sit below the threshold of
      distraction — if you notice the grid rather than the depth, it is too
-     strong. */
-  --grid-minor: rgb(120 170 220 / 0.026);
-  --grid-major: rgb(120 170 220 / 0.048);
+     strong.
+
+     THE ALPHAS ROUGHLY HALVE IN THE INVERSION, and that is the whole reason
+     this was measured rather than recoloured. Dark ink on light paper reads far
+     stronger than light ink on dark at the same alpha; carrying 0.026 and 0.048
+     across would have doubled the grid's contrast and produced exactly the
+     failure the paragraph above warns about.
+
+     Solved by compositing each line over its ground and matching the result:
+     dark's minor rule sat at 1.0262:1 against its ground and this one is at
+     1.0267:1; dark's major at 1.0526 and this one at 1.0504. */
+  --grid-minor: rgb(26 34 48 / 0.014);
+  --grid-major: rgb(26 34 48 / 0.027);
   --grid-pitch: 32px;
   --grid-pitch-major: 160px;
   --grid-image:
@@ -306,6 +400,17 @@ body::before {
     --screen-max: 74rem;
     --screen-gap: 3rem;
 
+    /* The page gutter, named because `.bleed` below has to do arithmetic with
+       it. It was written twice as a padding value before; now it is the same
+       number in both places by construction. */
+    --screen-pad: 1.5rem;
+
+    /* How wide a full-bleed band is allowed to get. The band spans the viewport;
+       its contents stop here. A refusal table stretched across a 2560px monitor
+       is not evidence presented at scale, it is seven columns with a metre of
+       air between them. */
+    --bleed-max: 96rem;
+
     /* One measure for running prose. There were five — 74, 76, 78, 80 and 86ch —
        across pages that all just wanted "a paragraph". Nothing distinguished
        them; they were matched by eye at different times. Genuine layout
@@ -314,19 +419,56 @@ body::before {
     --measure: 78ch;
   }
 
+  /* A three-column grid rather than a centred max-width box, so that one section
+     can span the viewport while every other stays in the measure.
+
+     The content column computes to exactly what the old `max-width: 74rem` plus
+     padding produced, so no existing screen moved: at 1280 it is 1104px, at 800
+     it is 720, at 390 it is 342.
+
+     PLAN-V5 F5 warns off the usual break-out, and the warning is the reason this
+     is a grid at all. `margin-inline: calc(50% - 50vw)` is the technique
+     everybody reaches for, and `100vw` includes the scrollbar — so on any page
+     long enough to scroll, a "full-bleed" section is about 15px wider than the
+     viewport and the document scrolls sideways. That is the exact regression
+     `e2e/viewports.spec.ts` exists to catch and that `f91d854` fixed at 390px.
+     The other habit — hiding it with `overflow-x` on the body — is worse: it
+     stops the test being able to fail while leaving the page broken.
+
+     Percentages resolve against this element's own width, which is the viewport
+     minus the scrollbar. No viewport units appear anywhere below, so there is
+     nothing to get wrong. */
   .screen {
-    display: flex;
-    flex-direction: column;
-    gap: var(--screen-gap);
+    display: grid;
+    grid-template-columns:
+      [full-start] minmax(var(--screen-pad), 1fr)
+      [content-start] calc(min(var(--screen-max), 100%) - var(--screen-pad) * 2) [content-end]
+      minmax(var(--screen-pad), 1fr) [full-end];
+    /* Rows only. A `gap` shorthand here would put three rem between the gutter
+       columns and the content, which is a page 6rem narrower than it looks. */
+    row-gap: var(--screen-gap);
     width: 100%;
-    max-width: var(--screen-max);
+    padding-block: 3.5rem;
+  }
+
+  .screen > * {
+    grid-column: content;
+  }
+
+  /* Full-bleed, and only as a direct child of `.screen` — a grid line cannot be
+     addressed from further down the tree, so the selector says out loud where
+     this works rather than failing quietly two levels in. */
+  .screen > .bleed {
+    grid-column: full;
+    width: 100%;
+    max-width: var(--bleed-max);
     margin-inline: auto;
-    padding: 3.5rem 1.5rem;
+    padding-inline: var(--screen-pad);
   }
 
   @media (min-width: 640px) {
-    .screen {
-      padding-inline: 2.5rem;
+    :root {
+      --screen-pad: 2.5rem;
     }
   }
 
@@ -648,6 +790,24 @@ body::before {
        this application can decode, on one line, at every width. */
     --col-error: 35ch;
 
+    /* The refusal table's two prose columns, which had no tokens and were the
+       reason that table stretched. Under `table-layout: fixed` a column with no
+       width does not size to its content: the table's leftover width is shared
+       out, so on a full-bleed band at 1440 these two absorbed ~300px and opened
+       a gap between `attempt` and `refused by` — while the extra also inflated
+       the verdict column well past the 100px badge it was sized for.
+       See `.tbl-fit`.
+
+       Both are read off the recording rather than guessed. The longest axis is
+       `invocation` at 10 characters and the longest attempt is `approve on the
+       permitted token contract` at 39, so these hold the widest row the survey
+       has, on one line, with a character or two of room. Unlike the tokens above
+       these cells are set in the sans face, where `ch` is the width of a `0` and
+       so runs a little wider than the glyphs it measures — headroom in the safe
+       direction, since the wrap rule below is the backstop either way. */
+    --col-axis: 12ch;
+    --col-attempt: 40ch;
+
     /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
        how much *content* a column holds — `--col-hash: 18ch` is eighteen
        characters — so the padding is added by the classes below rather than
@@ -669,6 +829,8 @@ body::before {
   .col-label { width: calc(var(--col-label) + var(--col-pad)); }
   .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
+  .col-axis { width: calc(var(--col-axis) + var(--col-pad)); }
+  .col-attempt { width: calc(var(--col-attempt) + var(--col-pad)); }
 
   /* ---------------------------------------------------------------------------
      Tables.
@@ -682,6 +844,29 @@ body::before {
     border-collapse: collapse;
     font-size: 12.5px;
     table-layout: fixed;
+  }
+
+  /* A table that is as wide as its columns say, rather than as wide as whatever
+     it was put inside.
+
+     `width: 100%` is right for a table in the content column, where the measure
+     is doing the constraining. It is wrong in a full-bleed band: fixed layout
+     shares the leftover width out across the columns, so every token above
+     silently stops being the width it states — the verdict column grew well past
+     its badge and a gap opened mid-row. The band got wider and the table got
+     looser, which is the opposite of what the band is for.
+
+     So a table that has a token on every column can opt out and be the sum of
+     them. It is left where it is rather than centred, so the heading, the prose
+     and the table keep one left edge and the section travels together; the slack
+     collects on the right, which reads as a deliberately dense table in a wide
+     band rather than as a table that failed to fill it.
+
+     Only for tables where every column is tokenised. One `auto` column left in
+     the row and that column absorbs the difference between the sum and the
+     container — the same stretch, moved into a single cell. */
+  .tbl-fit {
+    width: max-content;
   }
 
   .tbl thead th {
@@ -800,16 +985,35 @@ body::before {
     color: var(--foreground);
   }
 
+  /* The scrim stays dark — it does not invert with the rest of the palette. A
+     modal is made prominent by the page behind it receding, and on paper things
+     recede by being shaded, not by being bleached; a white scrim over a white
+     page dims nothing.
+
+     What changes is the weight. 0.86 over a near-black ground was barely darker
+     than the ground itself and cost nothing; the same value over paper blacks
+     the page out and turns a dialog into a full-screen takeover. 0.42 is enough
+     to push the page back and still let a reader see what they were working on,
+     which for a dialog that asks a question about the thing behind it is the
+     point. Warm rather than neutral, to match the ground it is shading. */
   .modal::backdrop {
-    background: rgb(2 4 8 / 0.86);
+    background: rgb(24 22 18 / 0.42);
   }
 
   .modal:focus-visible {
     outline: none;
   }
 
-  /* Native form controls default to the UA's light palette; these have to be
-     restated or the modal renders white-on-white. */
+  /* This used to say that native controls default to the UA's light palette and
+     had to be restated or the modal rendered white-on-white. That reason died
+     with the inversion — the UA's default is now roughly right — and a rule
+     kept for a reason that has stopped being true is a rule nobody dares touch.
+
+     The reason it survives is different and smaller: a field has to read as a
+     place to type rather than as a gap in the card, and on light that means it
+     sits one step *below* the surface it is cut into. `--background` on a
+     `--surface` modal does exactly that. The mono face and the focus treatment
+     are the other half, and neither is a UA default. */
   .field {
     width: 100%;
     padding: 0.55rem 0.7rem;

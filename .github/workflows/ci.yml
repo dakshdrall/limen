@@ -77,6 +77,43 @@ jobs:
       - name: Build @limen/web
         run: npm run build -w @limen/web
 
+      # The landing's product screenshots are the one claim on the page that
+      # `caveats.test.ts` cannot read. Every hash inside them comes from
+      # `deployments/testnet.json`; when that file moves, the text updates itself
+      # and the images quietly become pictures of transactions that are no longer
+      # this project's. Images are also the one artefact nobody reviews line by
+      # line, so this is precisely the drift a human check will miss.
+      #
+      # A check that only runs when somebody remembers is not a check, which is
+      # the same argument that put `evidence:check` above. So it runs here, and
+      # it is allowed to fail on its own.
+      #
+      # After the build on purpose: the script serves the app with `next start`,
+      # so it needs `.next` to exist. It starts and stops that server itself.
+      #
+      # The browser is cached by lockfile hash — a Playwright bump changes the
+      # key and pays for one cold download. Warm, the restore plus the install's
+      # own no-op check is seconds; cold it is a download of about 650MB.
+      - name: Cache the Playwright browser
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      # Deliberately not `--with-deps`. That flag runs `apt-get update` and an
+      # install on every run, cached browser or not, which is the one part of
+      # this that would cost real minutes. The runner image ships Chrome, so
+      # Chromium's shared libraries are already present. If that ever stops
+      # being true this does not fail silently: Playwright's launch error names
+      # the missing libraries and the command that installs them.
+      - name: Install Chromium
+        run: npx playwright install chromium
+
+      - name: Prove the landing's screenshots still show the product
+        run: npm run shots:check
+
       # The demo signer is the only code in the repo that can move funds. It is
       # fenced by `import 'server-only'` and by a hard testnet throw, but both
       # of those are assertions about intent. This step is the proof.

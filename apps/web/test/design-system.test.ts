@@ -14,6 +14,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LANDING_ANCHORS } from '../src/components/landing/SectionNav';
+import { MARK_RECTS } from '../src/lib/mark';
+import { THEME } from '../src/lib/theme';
 
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(src(relative), 'utf8');
@@ -260,6 +263,175 @@ describe('controls are a closed set', () => {
   });
 });
 
+describe('the palette has one definition, and every consumer reads it', () => {
+  // PLAN-V5 F4. Step 11 centralised every colour into custom properties, and it
+  // reached every consumer but one: `opengraph-image.tsx` renders through satori
+  // with inline styles and no cascade, so `var(--permit)` resolves to nothing
+  // and its eleven colours were literals.
+  //
+  // All eleven had drifted from the tokens they were copied from — `#0a0b0d`
+  // against `--background: #060a11`, `#4ac95e` against `--permit: #45c86a`, and
+  // so on through the file — while its docstring said "same palette as the
+  // page". Close enough to survive review, far enough that the share card was a
+  // picture of a slightly different product.
+  //
+  // `lib/theme.ts` is now the palette and both are consumers. These three cases
+  // are what make that true rather than aspirational: without the second one in
+  // particular, a token added to the stylesheet alone would never be pinned, and
+  // the module would decay back into a partial copy.
+
+  /** `--name: value;` declarations whose value is a colour, from `:root` blocks. */
+  const declared = new Map(
+    [...css.matchAll(/^\s*(--[\w-]+):\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]*\));/gm)].map(
+      ([, name, value]) => [name, value],
+    ),
+  );
+
+  it('agrees with globals.css on every token it defines', () => {
+    for (const [name, value] of Object.entries(THEME)) {
+      expect(declared.get(name), `${name} is in lib/theme.ts but not in globals.css`).toBeDefined();
+      expect(declared.get(name), `${name} disagrees between lib/theme.ts and globals.css`).toBe(
+        value,
+      );
+    }
+  });
+
+  it('carries every colour token globals.css defines, so none escapes the pin', () => {
+    // The direction that keeps the module honest as the system grows. A new
+    // `--warning` added to the stylesheet alone is unpinned, and unpinned is
+    // exactly the state the OG card's eleven literals were in.
+    for (const name of declared.keys()) {
+      expect(name in THEME, `${name} is in globals.css but not in lib/theme.ts`).toBe(true);
+    }
+  });
+
+  it('leaves no colour literal in the card that cannot read a custom property', () => {
+    // The specific escape, closed. Comments are stripped first: the docstring
+    // lists the eleven values that had drifted, and a test forbidding a file from
+    // naming what it forbids also forbids documenting the decision.
+    const card = read('app/opengraph-image.tsx').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(card).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(card).not.toMatch(/\brgba?\(/);
+    expect(card).toContain("from '@/lib/theme'");
+  });
+
+  it('keeps the X card a re-export rather than a second card to keep correct', () => {
+    expect(read('app/twitter-image.tsx')).toContain("from './opengraph-image'");
+  });
+});
+
+describe('the full-bleed band', () => {
+  // PLAN-V5 F5. One section spans the viewport and every other stays in the
+  // measure, which is a break-out — and the usual break-out is the bug.
+  //
+  // `margin-inline: calc(50% - 50vw)` is what everyone reaches for, and `100vw`
+  // includes the scrollbar: on any page long enough to scroll, the "full-bleed"
+  // section ends up about 15px wider than the viewport and the document scrolls
+  // sideways. That is the regression `f91d854` fixed at 390px and the reason
+  // `e2e/viewports.spec.ts` exists. The grid in `globals.css` resolves its
+  // percentages against the element's own width instead, which already excludes
+  // the scrollbar.
+  //
+  // The e2e suite catches the symptom at four widths. This catches the cause, in
+  // the suite that runs on every commit, because the fix is easy to undo by
+  // someone adding a second full-width thing in a hurry.
+  const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('never breaks out with a viewport unit in a margin', () => {
+    // Scoped to margins on purpose. `vw` is fine for a font size and fine for a
+    // width that subtracts more than a scrollbar; it is breaking *out* with one
+    // that reintroduces the overflow.
+    expect(declarations).not.toMatch(/margin[a-z-]*:[^;}]*\bvw\b/);
+  });
+
+  it('is scoped to where a grid line can actually be addressed', () => {
+    // `grid-column: full` means nothing except on a direct child of the element
+    // that defines the tracks. The selector says so, rather than letting it fail
+    // silently two levels down.
+    expect(declarations).toMatch(/\.screen\s*>\s*\.bleed\s*\{/);
+    expect(declarations).toMatch(/\[full-start\]/);
+    expect(declarations).toMatch(/\[content-start\]/);
+  });
+
+  it('caps how wide a band may get', () => {
+    // A band that spans a 2560px monitor stretches seven columns across two
+    // metres of paper. The cap is what keeps "wider than the page" from becoming
+    // "as wide as the desk".
+    expect(declarations).toMatch(/--bleed-max:/);
+    expect(declarations).toMatch(/max-width:\s*var\(--bleed-max\)/);
+  });
+});
+
+describe('the mark has one definition, and every consumer reads it', () => {
+  // PLAN-V5 §3.2. The mark appears in four places — the component, `icon.svg`,
+  // `favicon.ico` and the share card — and three of them are files or formats
+  // that cannot import a React component. That is the same shape of problem the
+  // palette had, and it ends the same way if left alone: four drawings of the
+  // mark, drifting apart one edit at a time, with nobody able to see it because
+  // an icon is not read in review.
+  //
+  // So `lib/mark.ts` holds the geometry and `scripts/mark.mjs` builds the two
+  // artefacts from it. These cases are what make the committed files output
+  // rather than input — they rebuild both and compare bytes, so an edit to the
+  // mark that is not regenerated is a red suite rather than a favicon quietly
+  // showing last month's glyph.
+  //
+  // It costs nothing in CI, which is only true because the build is exact: the
+  // geometry sits on a grid that lands on whole pixels at every icon size, and
+  // the PNGs are written with stored deflate blocks so no zlib version can
+  // change a byte. See the script's own docstring.
+
+  it('regenerates the committed icon.svg exactly', async () => {
+    const { iconSvg } = await import('../../../scripts/mark.mjs');
+    expect(readFileSync(src('app/icon.svg'), 'utf8')).toBe(iconSvg());
+  });
+
+  it('regenerates the committed favicon.ico exactly', async () => {
+    const { iconIco } = await import('../../../scripts/mark.mjs');
+    const committed = readFileSync(src('app/favicon.ico'));
+    // Also the assertion that the Next.js default is gone. That file is 25,931
+    // bytes of someone else's icon, and shipping it is the clearest possible
+    // signal that nobody looked at the tab.
+    expect(committed.equals(iconIco())).toBe(true);
+  });
+
+  it('keeps the geometry on the grid that makes every icon size crisp', () => {
+    // Multiples of 1.5 on a 24 grid land on whole pixels at 16, 32 and 48px —
+    // the three sizes packed into the `.ico`. Break this and the favicon starts
+    // being anti-aliased at exactly the size where it can least afford it.
+    for (const rect of MARK_RECTS) {
+      for (const value of [rect.x, rect.y, rect.width, rect.height]) {
+        expect((value * 2) % 3, `${value} is not a multiple of 1.5`).toBe(0);
+      }
+    }
+  });
+
+  it('keeps the rectangles from overlapping, which the rasteriser assumes', () => {
+    // `scripts/mark.mjs` sums per-pixel coverage instead of unioning it, which
+    // is only correct while no two rectangles share area. An overlap would
+    // over-cover the pixels along the seam — invisible at these sizes, wrong at
+    // any other, and the kind of bug that surfaces years later as "the icon
+    // looks slightly bold at 20px".
+    for (const [i, a] of MARK_RECTS.entries()) {
+      for (const b of MARK_RECTS.slice(i + 1)) {
+        const overlaps =
+          a.x < b.x + b.width &&
+          b.x < a.x + a.width &&
+          a.y < b.y + b.height &&
+          b.y < a.y + a.height;
+        expect(overlaps, `${JSON.stringify(a)} overlaps ${JSON.stringify(b)}`).toBe(false);
+      }
+    }
+  });
+
+  it('names no colour in the component, so the mark is whatever the text is', () => {
+    const mark = read('components/Mark.tsx');
+    expect(mark).toContain('currentColor');
+    expect(mark).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(mark).not.toMatch(/\brgba?\(/);
+  });
+});
+
 describe('colour is restrained', () => {
   it('defines one accent', () => {
     const accents = [...css.matchAll(/^\s*--accent:/gm)];
@@ -344,5 +516,56 @@ describe('the network indicator cannot disagree with the network', () => {
       const page = fileURLToPath(new URL(`../src/app/${[...segments, 'page.tsx'].join('/')}`, import.meta.url));
       expect(existsSync(page), `${href} is linked as built but ${page} does not exist`).toBe(true);
     }
+  });
+});
+
+describe('the landing does not link to anchors it does not have', () => {
+  // The same fault as the `built: true` check above, one level down. An in-page
+  // link whose target `id` was renamed or never existed does not 404 and does
+  // not throw — it does nothing at all, silently, which is why review never
+  // catches it and why the section nav is the component most likely to have it:
+  // every one of its entries is that kind of link, and it has no other purpose.
+  //
+  // `TopBar` cannot hold these entries. Its own test resolves every `built: true`
+  // href to a `page.tsx`, so `/#evidence` would be looked up as
+  // `src/app/#evidence/page.tsx` and fail — correctly, because an in-page anchor
+  // means nothing on `/app/activity`. Two navs with two rules need two checks,
+  // and this is the second one.
+  const page = read('app/page.tsx');
+
+  /** Every `id` the landing actually renders, from the `Section` props it passes. */
+  const ids = new Set([...page.matchAll(/^\s*id="([^"]+)"/gm)].map(([, id]) => id));
+
+  it('renders an id for every entry in the section nav', () => {
+    expect(LANDING_ANCHORS.length).toBeGreaterThan(0);
+
+    for (const { href, label } of LANDING_ANCHORS) {
+      expect(href.startsWith('#'), `${label} is in the section nav but is not an anchor`).toBe(true);
+      const id = href.slice(1);
+      expect(ids.has(id), `the section nav links ${href} (${label}) but nothing on the landing has id="${id}"`).toBe(true);
+    }
+  });
+
+  it('renders an id for every in-page link in the footer', () => {
+    // The footer's Evidence column points back into the page too, and it was
+    // written after the nav — so it is the more likely of the two to drift.
+    const footer = read('components/landing/SiteFooter.tsx');
+    const hrefs = [...footer.matchAll(/href="(#[^"]+)"/g)].map(([, href]) => href);
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      const id = href.slice(1);
+      expect(ids.has(id), `the footer links ${href} but nothing on the landing has id="${id}"`).toBe(true);
+    }
+  });
+
+  it('gives every anchored section a scroll margin that clears both sticky bars', () => {
+    // An `id` without one lands the heading under the top bar and the section
+    // nav, which reads as the link having jumped to the wrong place. `Section`
+    // ties the two together so a caller cannot set one and forget the other;
+    // this is what stops that from being untied later.
+    const section = read('components/Section.tsx');
+    expect(section).toContain('scroll-mt-24');
+    expect(section).toContain("id === undefined ? '' : 'scroll-mt-24 '");
   });
 });

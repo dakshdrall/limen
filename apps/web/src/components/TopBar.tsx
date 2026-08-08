@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LedgerCounter } from '@/components/LedgerCounter';
+import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
 import { NETWORK } from '@/lib/network';
+import { REPOSITORY } from '@/lib/repository';
 
 /**
  * The chrome that is on every screen, marketing and app alike.
@@ -40,8 +42,22 @@ interface Section {
   built: boolean;
 }
 
+/*
+ * Only app destinations. There is deliberately no entry for `/`.
+ *
+ * There was one, labelled MECHANISM, and it was wrong twice over. It pointed at
+ * the landing rather than at a mechanism, so it was really "the landing" sitting
+ * in a list of app routes wearing another section's name — and Mechanism is a
+ * section of that page, owned by `landing/SectionNav.tsx`, which points at the
+ * heading itself rather than at the top of the document.
+ *
+ * Renaming it HOME would have fixed the label and left the worse half: the
+ * wordmark immediately to its left is already a link to `/`, so the bar would
+ * open with two adjacent controls going to the same place. The wordmark is the
+ * way home on every screen in this application, which is the convention, and one
+ * affordance is better than two competing for the same job.
+ */
 const SECTIONS: readonly Section[] = [
-  { label: 'MECHANISM', href: '/', built: true },
   { label: 'INTERFACE', href: '/app/accounts', built: true },
   { label: 'ACTIVITY', href: '/app/activity', built: true },
   { label: 'SIMULATOR', href: '/app/simulator', built: true },
@@ -50,14 +66,17 @@ const SECTIONS: readonly Section[] = [
 
 const NOT_BUILT = 'Not built yet. The chain layer behind this screen is implemented and proven on testnet; the screen is not.';
 
-const GITHUB = 'https://github.com/dakshdrall/limen';
-
 /**
  * The active section.
  *
- * `/` matches only itself; everything else matches its own subtree, so
- * `/app/accounts/CBNP…` still lights INTERFACE. Prefix-matching `/` would light
- * every section at once.
+ * Everything matches its own subtree, so `/app/accounts/CBNP…` still lights
+ * INTERFACE. On the landing nothing here lights at all, which is correct: the
+ * bar lists app destinations and the reader is not in one — the section nav is
+ * what marks position on that page.
+ *
+ * The `/` case is kept although no entry uses it any more. It is one line, and
+ * it is the line that stops a re-added home entry from prefix-matching every
+ * route and lighting the whole bar at once.
  */
 function isActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
@@ -79,8 +98,12 @@ export function TopBar() {
       >
         <Link
           href="/"
-          className="font-mono text-[13px] font-semibold tracking-[0.22em] text-foreground"
+          className="flex shrink-0 items-center gap-2 font-mono text-[13px] font-semibold tracking-[0.22em] text-foreground"
         >
+          {/* Decorative: the wordmark beside it already says the name, and the
+              mark inherits `text-foreground` from this link rather than naming a
+              colour of its own. */}
+          <Mark size={18} />
           LIMEN
         </Link>
 
@@ -124,7 +147,7 @@ export function TopBar() {
           })}
           <li>
             <a
-              href={GITHUB}
+              href={REPOSITORY}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-block rounded-[2px] px-2 py-1 font-mono text-[10.5px] font-medium tracking-[0.13em] whitespace-nowrap text-muted-dim transition-colors hover:text-muted"

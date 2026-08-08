@@ -1,17 +1,25 @@
 import { ImageResponse } from 'next/og';
+import { MARK_INSET, markSvg } from '@/lib/mark';
+import { GROUND, TEXT, VERDICT } from '@/lib/theme';
 
 /**
  * The share card.
  *
- * Same palette and same restraint as the page: the fixed dark background, the
- * wordmark, one line of description, and the four-step contrast ramp. No
- * gradient, no illustration, no screenshot — a link to a security tool should
- * look like the tool.
+ * Same palette and same restraint as the page: the ground, the wordmark, one
+ * line of description, and the four-step contrast ramp. No gradient, no
+ * illustration, no screenshot — a link to a security tool should look like the
+ * tool.
  *
  * `ImageResponse` renders through satori, which supports flexbox and a subset
- * of CSS only; `display: grid` and most shorthand properties do not apply
- * here. Colours are literals rather than custom properties for the same
- * reason.
+ * of CSS only; `display: grid` and most shorthand properties do not apply here.
+ * Custom properties do not resolve either: there is no stylesheet and no
+ * cascade, only inline styles.
+ *
+ * That is why the colours were literals, and why "same palette as the page" had
+ * quietly stopped being true — all eleven had drifted from the tokens they were
+ * copied from, by one or two steps each. `lib/theme.ts` is the fix and carries
+ * the full list of what they had become. This file now holds no colour of its
+ * own, and `design-system.test.ts` asserts it never will again.
  *
  * The text is ASCII throughout. Satori resolves glyphs against a font it
  * fetches at build time, and anything outside the default subset — the ✓ and ✕
@@ -20,6 +28,9 @@ import { ImageResponse } from 'next/og';
  */
 export const alt = 'Limen — the permission layer for agentic money on Stellar';
 export const size = { width: 1200, height: 630 };
+
+/** The mark's box on the card. Sized against the 108px wordmark beneath it. */
+const MARK = 84;
 export const contentType = 'image/png';
 
 export default function OpenGraphImage() {
@@ -32,7 +43,7 @@ export default function OpenGraphImage() {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          backgroundColor: '#0a0b0d',
+          backgroundColor: GROUND.background,
           padding: '84px 88px',
         }}
       >
@@ -42,20 +53,33 @@ export default function OpenGraphImage() {
             fontSize: 21,
             letterSpacing: 4,
             textTransform: 'uppercase',
-            color: '#6c747e',
+            color: TEXT.mutedDim,
           }}
         >
           smart-account policy synthesis · stellar · soroban
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* The mark, through a data URI rather than as inline SVG: satori has
+              no stylesheet, so `currentColor` has nothing to inherit from and the
+              ink is passed in from `lib/theme.ts` instead. Same geometry as the
+              component and the favicon — `lib/mark.ts` is the only definition. */}
+          <img
+            src={`data:image/svg+xml;base64,${btoa(markSvg({ ink: TEXT.foreground, size: MARK }))}`}
+            width={MARK}
+            height={MARK}
+            alt=""
+            // Pulled left by the margin the mark carries inside its own box, so
+            // the sill begins on the same vertical as the wordmark's L.
+            style={{ marginLeft: -(MARK_INSET.x * MARK), marginBottom: 26 }}
+          />
           <div
             style={{
               display: 'flex',
               fontSize: 108,
               fontWeight: 700,
               letterSpacing: 24,
-              color: '#e7eaee',
+              color: TEXT.foreground,
             }}
           >
             LIMEN
@@ -67,7 +91,7 @@ export default function OpenGraphImage() {
               maxWidth: 880,
               fontSize: 36,
               lineHeight: 1.35,
-              color: '#9aa2ac',
+              color: TEXT.muted,
             }}
           >
             A boundary an agent can spend inside, derived from a transaction that already happened.
@@ -79,10 +103,10 @@ export default function OpenGraphImage() {
             style={{
               display: 'flex',
               padding: '8px 18px',
-              border: '1px solid #1f5c2c',
-              backgroundColor: '#0d2413',
+              border: `1px solid ${VERDICT.permitLine}`,
+              backgroundColor: VERDICT.permitDim,
               borderRadius: 4,
-              color: '#4ac95e',
+              color: VERDICT.permit,
               fontWeight: 700,
               letterSpacing: 3,
             }}
@@ -93,17 +117,17 @@ export default function OpenGraphImage() {
             style={{
               display: 'flex',
               padding: '8px 18px',
-              border: '1px solid #7a2b27',
-              backgroundColor: '#2a0f0f',
+              border: `1px solid ${VERDICT.denyLine}`,
+              backgroundColor: VERDICT.denyDim,
               borderRadius: 4,
-              color: '#ff6b62',
+              color: VERDICT.deny,
               fontWeight: 700,
               letterSpacing: 3,
             }}
           >
             DENY
           </div>
-          <div style={{ display: 'flex', marginLeft: 8, color: '#464d56' }}>
+          <div style={{ display: 'flex', marginLeft: 8, color: TEXT.faint }}>
             the observed flow, and nothing adjacent to it
           </div>
         </div>

@@ -71,15 +71,34 @@ export function RefusedTable({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-        <table className="tbl w-full min-w-[54rem]">
+      {/* `w-max max-w-full` so the panel is the table's width, not the band's.
+          Sizing the table alone leaves the surface it sits on stretched, and a
+          1072px table inside a 1360px bordered box is a table that looks like it
+          failed to fill its container — exactly the impression this is fixing.
+          The cap is what keeps `.scroll-x` able to scroll: below the sum the
+          panel is bounded by the band and the table scrolls inside it. */}
+      <div className="scroll-x w-max max-w-full rounded-[5px] border border-border-default bg-surface">
+        {/* `tbl-fit`, so the table is the sum of its columns rather than the
+            width of whatever holds it. Every column below carries a token, which
+            is the condition that class states — the two prose columns had none
+            until this, and were where a full-bleed band's leftover width went.
+
+            `min-w` is gone with the stretch. It existed to stop a 100%-width
+            table from crushing its own columns on a narrow screen; a table sized
+            to its columns cannot do that, and `.scroll-x` above still scrolls it
+            when the viewport is narrower than the sum. */}
+        <table className="tbl tbl-fit">
           <thead>
             <tr>
               <th scope="col" className="col-verdict">
                 verdict
               </th>
-              <th scope="col">axis</th>
-              <th scope="col">attempt</th>
+              <th scope="col" className="col-axis">
+                axis
+              </th>
+              <th scope="col" className="col-attempt">
+                attempt
+              </th>
               <th scope="col" className="col-error">
                 refused by
               </th>
@@ -99,8 +118,8 @@ export function RefusedTable({
                   <td className="col-verdict">
                     <Verdict state="denied" />
                   </td>
-                  <td className="value">{row.axis}</td>
-                  <td className="text-[12.5px] text-muted">{row.attempt}</td>
+                  <td className="col-axis value">{row.axis}</td>
+                  <td className="col-attempt text-[12.5px] text-muted">{row.attempt}</td>
                   <td className="col-error text-[12.5px]">
                     <span className="value text-deny">{decoded ? row.ledger : row.sim}</span>
                     {!decoded && (
