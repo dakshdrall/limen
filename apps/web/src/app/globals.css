@@ -790,6 +790,24 @@ body::before {
        this application can decode, on one line, at every width. */
     --col-error: 35ch;
 
+    /* The refusal table's two prose columns, which had no tokens and were the
+       reason that table stretched. Under `table-layout: fixed` a column with no
+       width does not size to its content: the table's leftover width is shared
+       out, so on a full-bleed band at 1440 these two absorbed ~300px and opened
+       a gap between `attempt` and `refused by` — while the extra also inflated
+       the verdict column well past the 100px badge it was sized for.
+       See `.tbl-fit`.
+
+       Both are read off the recording rather than guessed. The longest axis is
+       `invocation` at 10 characters and the longest attempt is `approve on the
+       permitted token contract` at 39, so these hold the widest row the survey
+       has, on one line, with a character or two of room. Unlike the tokens above
+       these cells are set in the sans face, where `ch` is the width of a `0` and
+       so runs a little wider than the glyphs it measures — headroom in the safe
+       direction, since the wrap rule below is the backstop either way. */
+    --col-axis: 12ch;
+    --col-attempt: 40ch;
+
     /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
        how much *content* a column holds — `--col-hash: 18ch` is eighteen
        characters — so the padding is added by the classes below rather than
@@ -811,6 +829,8 @@ body::before {
   .col-label { width: calc(var(--col-label) + var(--col-pad)); }
   .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
+  .col-axis { width: calc(var(--col-axis) + var(--col-pad)); }
+  .col-attempt { width: calc(var(--col-attempt) + var(--col-pad)); }
 
   /* ---------------------------------------------------------------------------
      Tables.
@@ -824,6 +844,29 @@ body::before {
     border-collapse: collapse;
     font-size: 12.5px;
     table-layout: fixed;
+  }
+
+  /* A table that is as wide as its columns say, rather than as wide as whatever
+     it was put inside.
+
+     `width: 100%` is right for a table in the content column, where the measure
+     is doing the constraining. It is wrong in a full-bleed band: fixed layout
+     shares the leftover width out across the columns, so every token above
+     silently stops being the width it states — the verdict column grew well past
+     its badge and a gap opened mid-row. The band got wider and the table got
+     looser, which is the opposite of what the band is for.
+
+     So a table that has a token on every column can opt out and be the sum of
+     them. It is left where it is rather than centred, so the heading, the prose
+     and the table keep one left edge and the section travels together; the slack
+     collects on the right, which reads as a deliberately dense table in a wide
+     band rather than as a table that failed to fill it.
+
+     Only for tables where every column is tokenised. One `auto` column left in
+     the row and that column absorbs the difference between the sum and the
+     container — the same stretch, moved into a single cell. */
+  .tbl-fit {
+    width: max-content;
   }
 
   .tbl thead th {
