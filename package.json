@@ -14,6 +14,8 @@
     "lint": "npm run lint -w @limen/web",
     "evidence": "node scripts/evidence.mjs",
     "evidence:check": "node scripts/evidence.mjs --check",
+    "mark": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/mark.mjs",
+    "mark:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/mark.mjs --check",
     "shots": "node scripts/screenshots.mjs",
     "shots:check": "node scripts/screenshots.mjs --check",
     "shots:twice": "node scripts/screenshots.mjs --twice",

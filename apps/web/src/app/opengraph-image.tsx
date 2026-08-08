@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { MARK_INSET, markSvg } from '@/lib/mark';
 import { GROUND, TEXT, VERDICT } from '@/lib/theme';
 
 /**
@@ -27,6 +28,9 @@ import { GROUND, TEXT, VERDICT } from '@/lib/theme';
  */
 export const alt = 'Limen — the permission layer for agentic money on Stellar';
 export const size = { width: 1200, height: 630 };
+
+/** The mark's box on the card. Sized against the 108px wordmark beneath it. */
+const MARK = 84;
 export const contentType = 'image/png';
 
 export default function OpenGraphImage() {
@@ -56,6 +60,19 @@ export default function OpenGraphImage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* The mark, through a data URI rather than as inline SVG: satori has
+              no stylesheet, so `currentColor` has nothing to inherit from and the
+              ink is passed in from `lib/theme.ts` instead. Same geometry as the
+              component and the favicon — `lib/mark.ts` is the only definition. */}
+          <img
+            src={`data:image/svg+xml;base64,${btoa(markSvg({ ink: TEXT.foreground, size: MARK }))}`}
+            width={MARK}
+            height={MARK}
+            alt=""
+            // Pulled left by the margin the mark carries inside its own box, so
+            // the sill begins on the same vertical as the wordmark's L.
+            style={{ marginLeft: -(MARK_INSET.x * MARK), marginBottom: 26 }}
+          />
           <div
             style={{
               display: 'flex',

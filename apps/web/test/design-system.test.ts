@@ -14,6 +14,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { MARK_RECTS } from '../src/lib/mark';
 import { THEME } from '../src/lib/theme';
 
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
@@ -315,6 +316,76 @@ describe('the palette has one definition, and every consumer reads it', () => {
 
   it('keeps the X card a re-export rather than a second card to keep correct', () => {
     expect(read('app/twitter-image.tsx')).toContain("from './opengraph-image'");
+  });
+});
+
+describe('the mark has one definition, and every consumer reads it', () => {
+  // PLAN-V5 §3.2. The mark appears in four places — the component, `icon.svg`,
+  // `favicon.ico` and the share card — and three of them are files or formats
+  // that cannot import a React component. That is the same shape of problem the
+  // palette had, and it ends the same way if left alone: four drawings of the
+  // mark, drifting apart one edit at a time, with nobody able to see it because
+  // an icon is not read in review.
+  //
+  // So `lib/mark.ts` holds the geometry and `scripts/mark.mjs` builds the two
+  // artefacts from it. These cases are what make the committed files output
+  // rather than input — they rebuild both and compare bytes, so an edit to the
+  // mark that is not regenerated is a red suite rather than a favicon quietly
+  // showing last month's glyph.
+  //
+  // It costs nothing in CI, which is only true because the build is exact: the
+  // geometry sits on a grid that lands on whole pixels at every icon size, and
+  // the PNGs are written with stored deflate blocks so no zlib version can
+  // change a byte. See the script's own docstring.
+
+  it('regenerates the committed icon.svg exactly', async () => {
+    const { iconSvg } = await import('../../../scripts/mark.mjs');
+    expect(readFileSync(src('app/icon.svg'), 'utf8')).toBe(iconSvg());
+  });
+
+  it('regenerates the committed favicon.ico exactly', async () => {
+    const { iconIco } = await import('../../../scripts/mark.mjs');
+    const committed = readFileSync(src('app/favicon.ico'));
+    // Also the assertion that the Next.js default is gone. That file is 25,931
+    // bytes of someone else's icon, and shipping it is the clearest possible
+    // signal that nobody looked at the tab.
+    expect(committed.equals(iconIco())).toBe(true);
+  });
+
+  it('keeps the geometry on the grid that makes every icon size crisp', () => {
+    // Multiples of 1.5 on a 24 grid land on whole pixels at 16, 32 and 48px —
+    // the three sizes packed into the `.ico`. Break this and the favicon starts
+    // being anti-aliased at exactly the size where it can least afford it.
+    for (const rect of MARK_RECTS) {
+      for (const value of [rect.x, rect.y, rect.width, rect.height]) {
+        expect((value * 2) % 3, `${value} is not a multiple of 1.5`).toBe(0);
+      }
+    }
+  });
+
+  it('keeps the rectangles from overlapping, which the rasteriser assumes', () => {
+    // `scripts/mark.mjs` sums per-pixel coverage instead of unioning it, which
+    // is only correct while no two rectangles share area. An overlap would
+    // over-cover the pixels along the seam — invisible at these sizes, wrong at
+    // any other, and the kind of bug that surfaces years later as "the icon
+    // looks slightly bold at 20px".
+    for (const [i, a] of MARK_RECTS.entries()) {
+      for (const b of MARK_RECTS.slice(i + 1)) {
+        const overlaps =
+          a.x < b.x + b.width &&
+          b.x < a.x + a.width &&
+          a.y < b.y + b.height &&
+          b.y < a.y + a.height;
+        expect(overlaps, `${JSON.stringify(a)} overlaps ${JSON.stringify(b)}`).toBe(false);
+      }
+    }
+  });
+
+  it('names no colour in the component, so the mark is whatever the text is', () => {
+    const mark = read('components/Mark.tsx');
+    expect(mark).toContain('currentColor');
+    expect(mark).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(mark).not.toMatch(/\brgba?\(/);
   });
 });
 

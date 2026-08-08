@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LedgerCounter } from '@/components/LedgerCounter';
+import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
 import { NETWORK } from '@/lib/network';
 
@@ -79,8 +80,12 @@ export function TopBar() {
       >
         <Link
           href="/"
-          className="font-mono text-[13px] font-semibold tracking-[0.22em] text-foreground"
+          className="flex shrink-0 items-center gap-2 font-mono text-[13px] font-semibold tracking-[0.22em] text-foreground"
         >
+          {/* Decorative: the wordmark beside it already says the name, and the
+              mark inherits `text-foreground` from this link rather than naming a
+              colour of its own. */}
+          <Mark size={18} />
           LIMEN
         </Link>
 

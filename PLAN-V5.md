@@ -400,6 +400,34 @@ palette. Shipped as: the component, `src/app/icon.svg`, and the OG card's mark.
 
 `favicon.ico` is currently the Next.js default and gets replaced.
 
+**Built.** A doorway standing on its threshold stone — *limen* is that stone, so
+the mark is the name rendered literally rather than an abstraction of it. Six
+candidates were drawn and rendered at 16, 20, 24, 32 and 64px on light and dark
+before this one was chosen; the ones that lost, lost at 16px, where they read as
+a dot in a box or as a typographic accident.
+
+The geometry lives in `lib/mark.ts` as four non-overlapping rectangles and
+nothing else draws it: `components/Mark.tsx` renders them with `currentColor`,
+and `scripts/mark.mjs` builds `app/icon.svg` and `app/favicon.ico` from the same
+module plus `lib/theme.ts`. Node strips the types on import, so the script reads
+the real source rather than a transcription of it.
+
+Two properties make that pin cheap enough to run in the ordinary suite rather
+than as a check of its own: every coordinate is a multiple of 1.5 on a 24 grid,
+so every edge lands on a whole pixel at 16, 32 and 48px and the rasteriser is
+arithmetic rather than a rendering engine; and the PNGs inside the `.ico` are
+written with stored deflate blocks, so no zlib version can change a byte.
+`design-system.test.ts` rebuilds both files and compares bytes.
+
+Two things the build taught rather than the plan predicting them. Next decodes
+`favicon.ico` at build time and rejects PNG-in-ICO that is not RGBA, so the
+icons carry a fourth channel of nothing but 255. And the `.ico` is the one
+drawing of the mark that is ink *on paper* rather than ink on transparency: an
+`.ico` cannot ask what colour the tab strip is, and near-black on a dark strip is
+an invisible mark. `icon.svg` can ask, and does — a `prefers-color-scheme` rule
+that is not the second theme F3 rules out, because a favicon is drawn on the
+browser's chrome rather than on one of this product's surfaces.
+
 ### 3.3 The SVG diagram
 
 Observed transaction → derived boundary → agent operating inside it → the
