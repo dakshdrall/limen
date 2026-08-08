@@ -4,6 +4,7 @@
  * and colour, not from size alone.
  */
 export function Section({
+  id,
   index,
   title,
   subtitle,
@@ -11,6 +12,15 @@ export function Section({
   emphasis = false,
   bleed = false,
 }: {
+  /**
+   * The anchor a landing-local nav points at — see `landing/SectionNav.tsx`.
+   *
+   * Setting it also sets a scroll margin, because the two are the same decision:
+   * an anchor that lands under the sticky chrome has scrolled to the wrong
+   * place, and a caller who remembered the `id` and forgot the margin would ship
+   * a nav whose every entry hides its own heading.
+   */
+  id?: string;
   index: number;
   title: string;
   subtitle?: string;
@@ -29,7 +39,12 @@ export function Section({
 }) {
   return (
     <section
-      className={`${bleed ? 'bleed ' : ''}${emphasis ? 'flex flex-col gap-6' : 'flex flex-col gap-4'}`}
+      id={id}
+      // 6rem clears both sticky bars — the global top bar at 2.75rem and the
+      // landing's section nav at 2.5rem below it — with a little air over the
+      // eyebrow, so an anchored section arrives with its numeral visible rather
+      // than tucked behind the chrome.
+      className={`${id === undefined ? '' : 'scroll-mt-24 '}${bleed ? 'bleed ' : ''}${emphasis ? 'flex flex-col gap-6' : 'flex flex-col gap-4'}`}
     >
       <header className="flex flex-col gap-1.5">
         <span className="eyebrow text-faint">{String(index).padStart(2, '0')}</span>

@@ -6,6 +6,7 @@ import { LedgerCounter } from '@/components/LedgerCounter';
 import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
 import { NETWORK } from '@/lib/network';
+import { REPOSITORY } from '@/lib/repository';
 
 /**
  * The chrome that is on every screen, marketing and app alike.
@@ -50,8 +51,6 @@ const SECTIONS: readonly Section[] = [
 ];
 
 const NOT_BUILT = 'Not built yet. The chain layer behind this screen is implemented and proven on testnet; the screen is not.';
-
-const GITHUB = 'https://github.com/dakshdrall/limen';
 
 /**
  * The active section.
@@ -129,7 +128,7 @@ export function TopBar() {
           })}
           <li>
             <a
-              href={GITHUB}
+              href={REPOSITORY}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-block rounded-[2px] px-2 py-1 font-mono text-[10.5px] font-medium tracking-[0.13em] whitespace-nowrap text-muted-dim transition-colors hover:text-muted"

@@ -89,6 +89,61 @@ export interface RecordedDerivation {
   installedSeparately: string;
 }
 
+/**
+ * The revoke sequence, from the acceptance run.
+ *
+ * PLAN-V5 §3.1. The landing's fourth step is the only one with no screenshot,
+ * and that is a decision rather than a gap: the sole screen that shows revoke
+ * reads a live chain, so photographing it would commit a picture of one
+ * account's rule at one ledger — a second, unverifiable copy of chain state in
+ * the repository, which is the exact failure `scripts/screenshots.mjs` exists to
+ * prevent. So the step is drawn from this block instead, and goes stale-proof by
+ * the same route every other number on the page does.
+ *
+ * Two things this type is careful about.
+ *
+ * It is a *subset*. `v4ChainRun` records eleven transactions — the deploy, the
+ * seed, the observed transfer, the install — and the four below are the ones the
+ * revoke sequence needs. Typing the whole block here would say the landing reads
+ * it all; typing these four says which four.
+ *
+ * It is a different run from `RECORDED_RUN`, on a different account, and any
+ * component rendering it has to say so. That is why `smartAccount`, `producedBy`
+ * and `ranAt` are required rather than optional: the walkthrough's refusal table
+ * sits a few hundred pixels above this on the same page, and two accounts' hashes
+ * in one column read as one account's unless the page states otherwise.
+ */
+export interface RecordedRevocation {
+  producedBy: string;
+  ranAt: string;
+  smartAccount: string;
+  contextRuleId: number;
+  derivedCap: string;
+  windowLedgers: number;
+  /** The agent spending inside the cap. The call step 04 below repeats. */
+  permittedTx: string;
+  permittedAmount: string;
+  /** The agent's own attempt to remove its boundary, refused by the contract. */
+  agentRevokeTx: string;
+  agentRevokeError: string;
+  /** The owner removing it, which the contract does permit. */
+  revokeTx: string;
+  /** Re-read from the chain after the write. See `rulesAfterRevokeNote`. */
+  rulesAfterRevoke: number[];
+  rulesAfterRevokeNote: string;
+  /** The permitted call, repeated. It now fails, and fails differently. */
+  postRevokeTx: string;
+  postRevokeError: string;
+  /**
+   * Both recorded, and both rendered. `ContextRuleNotFound#3000` is deliberately
+   * absent from `BOUNDARY_REFUSAL_CODES` — "the boundary refused you" and "the
+   * boundary is gone" are different claims — so the panel reads these rather
+   * than deciding for itself which verdict the last row gets.
+   */
+  postRevokeIsBoundaryRefusal: boolean;
+  postRevokeIsRevokedRule: boolean;
+}
+
 /** The verifier and policy contracts every account in this repository shares. */
 export interface SharedContracts {
   ed25519Verifier: { contract: string; deployTx: string };
@@ -123,6 +178,16 @@ export const RECORDED_RUN: RecordedWalkthrough = walkthrough;
  * pass. See `RecordedDerivation`.
  */
 export const RECORDED_DERIVATION = recorded.liveDerivation as RecordedDerivation;
+
+/**
+ * The revoke sequence, for the landing's fourth step.
+ *
+ * Kept apart from `RECORDED_RUN` for the same reason `RECORDED_DERIVATION` is:
+ * it is a third run, on a third account, and merging any two of them into one
+ * object is the first step towards a page that describes them as one pass. See
+ * `RecordedRevocation`.
+ */
+export const RECORDED_REVOCATION = recorded.v4ChainRun as RecordedRevocation;
 
 /**
  * The deployed verifier and policy contracts.
