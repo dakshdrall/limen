@@ -357,27 +357,34 @@ rather than letting them rot.
 No device frames, no perspective, no drop shadows. Cropped to the region that
 matters, on the surface step, with a hairline border.
 
-**Open, and it blocks the hero: the crops are too wide for the slots they go
-in.** Every shot is taken at a 1280 viewport and comes out about 1144 CSS px
-wide. §3.5 puts them in half-width slots — the hero's right column, and the
-alternating band through `How it works` — which is roughly 500px, so they render
-at 0.44 scale and the app's 13px body text lands near 6px. That is not a
-screenshot, it is a texture of a screenshot, and a picture nobody can read is
+**Resolved: shot at 900, not 1280.** The crops were about 1144 CSS px wide and
+§3.5's slots are roughly half a 74rem page, which rendered them near 0.44 scale
+and put the application's 13px body text under 6px. A picture nobody can read is
 decoration however real its data is.
 
-Three ways out, and the choice is the first piece of work in the hero:
+The width is bounded from both sides, and both bounds were measured against the
+running application rather than argued about:
 
-1. **Shoot narrower.** A second viewport width in the manifest — capture at
-   ~720px so the crop is ~680 wide and renders near 0.73 in a half-width slot.
-   Keeps the whole subject, costs a manifest field, and the app's own responsive
-   layout at 720 is a real layout rather than a contrivance.
-2. **Crop tighter.** Point `select` at the payload rather than the whole beat, so
-   the image is a smaller region shown larger. Best legibility, least context.
-3. **Show them full width.** Abandon the alternating half-width band for a
-   single column of wide images. Legible, but it is the composition §3.5 was
-   written to get away from.
+- **Not below 768**, Tailwind's `md`, or the shot shows a layout nobody on a
+  laptop sees. These subjects turn out to use only `sm:`, and their structure at
+  900 is identical to 1280 — same grids, same crop heights, only text wrapping
+  differs — but the floor stands for whatever gets photographed next.
+- **Not below ~872.** At 860 the simulator's policy tables are 728px wide around
+  736px of content and a column is cut off. This was not hypothetical: 800 was
+  the first candidate and it cut `step-derive` and `step-install` silently, in
+  the one artefact nobody reviews column by column.
 
-Not decided here. It wants the page in front of it.
+So 900, and crops of 860. `assertNothingScrolls` now fails any run where
+anything inside a crop scrolls horizontally, naming the element and computing
+the width that would fix it — a cut-off column can no longer ship quietly,
+which is what makes the number above a condition rather than an afternoon's
+measurement. It was proved able to fail before it was trusted: at 860 it stops
+the run and says to widen past 868.
+
+At 860 wide the images want an image column of about 640px, where they render at
+0.74 and the app's body text lands near 9.6px — checked by rendering, not by
+arithmetic. That is a constraint on §3.5's composition: **the alternating band
+gives the image ~640 and the text the rest**, rather than an even split.
 
 ~~Screenshots needed: the refusal table with real hashes (hero), and the four
 `How it works` steps — create, derive, install, revoke.~~

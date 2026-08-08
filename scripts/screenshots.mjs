@@ -48,6 +48,29 @@
  *   - crops taken from a locator's own box, so a reflow moves the crop with the
  *     content instead of slicing it.
  *
+ * ## The viewport, and why it is not 1280
+ *
+ * These images are displayed at roughly half the width of a 74rem page, so a
+ * crop taken at 1280 arrives about 1144px wide and renders near 0.44 scale,
+ * putting the application's 13px body text under 6px. A picture nobody can read
+ * is decoration however real the data inside it is. So the shots are taken
+ * narrow and displayed close to their own size.
+ *
+ * How narrow is bounded from both sides, and both bounds were measured against
+ * the running application rather than reasoned about:
+ *
+ *   - **Not below 768**, Tailwind's `md`. Under it the `md:` rules stop applying
+ *     and the shot shows a layout no one on a laptop sees. (The subjects here
+ *     happen to use only `sm:`, and their structure at 900 is identical to 1280
+ *     — same grids, same crop heights, only text wrapping differs — but the
+ *     floor stands for whatever gets photographed next.)
+ *   - **Not below ~872**, which is where the policy tables inside the simulator
+ *     beats stop fitting: at 860 the `.scroll-x` box is 728 wide around 736 of
+ *     content and a column is cut off. A screenshot of a table with a column
+ *     missing is worse than a small one, so 900 it is, and `assertNothingScrolls`
+ *     below makes that a condition of every run rather than a fact measured once
+ *     on one afternoon.
+ *
  * ## Usage
  *
  *     npm run shots           regenerate and write
@@ -67,6 +90,9 @@ import { chromium } from '@playwright/test';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const web = join(root, 'apps', 'web');
 const OUT = join(web, 'public', 'shots');
+
+/** See the note above: above `md`, above the widest table, and no wider. */
+const VIEWPORT = { width: 900, height: 1100 };
 
 const PORT = Number(process.env.SHOTS_PORT ?? 3121);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -191,6 +217,44 @@ const SHOTS = [
    */
 ];
 
+/**
+ * Fails the run if anything inside the crop is scrolling horizontally.
+ *
+ * A scroll box on a live screen is a working control: the reader drags it and
+ * sees the rest of the table. In a screenshot it is a column that has been cut
+ * off, silently, in an artefact nobody reviews pixel by pixel — and the cut is
+ * invisible in the image itself, because a clipped table looks exactly like a
+ * narrow one.
+ *
+ * This is what keeps the viewport honest. The 900 above was chosen because the
+ * simulator's policy tables need 736px and stop fitting at 860; if a column is
+ * added, or a value grows, the run fails and names the element instead of
+ * quietly shipping a picture with something missing.
+ *
+ * `sr-only` is excluded by construction: the visually-hidden idiom is a 1px box
+ * clipped around real text, so it always overflows and always should.
+ */
+async function assertNothingScrolls(page, shot) {
+  const cut = await page.locator(shot.select).first().evaluate((root) =>
+    [root, ...root.querySelectorAll('*')]
+      .filter((el) => el.clientWidth > 8 && el.scrollWidth > el.clientWidth + 1)
+      .map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        cls: String(el.className?.baseVal ?? el.className ?? '').slice(0, 48),
+        visible: el.clientWidth,
+        actual: el.scrollWidth,
+      })),
+  );
+  if (cut.length > 0) {
+    const worst = cut.reduce((a, b) => (b.actual - b.visible > a.actual - a.visible ? b : a));
+    throw new Error(
+      `${shot.name}: a column is cut off — <${worst.tag} class="${worst.cls}"> shows ${worst.visible}px ` +
+        `of ${worst.actual}px. Widen VIEWPORT past ${VIEWPORT.width + (worst.actual - worst.visible)} ` +
+        'or crop to a subject that fits.',
+    );
+  }
+}
+
 /** Clicks the button in a beat and waits for the stepper to settle. */
 async function beatButton(page, index, name) {
   const button = page.locator('ol').first().locator('> li').nth(index - 1).getByRole('button', { name });
@@ -251,7 +315,7 @@ async function capture(dir) {
   mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch();
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 1100 },
+    viewport: VIEWPORT,
     deviceScaleFactor: 2,
     // The ground's heartbeat is a transition on a ledger read, and it is inside
     // these crops. Reduced motion parks it at phase 0 — see `globals.css`.
@@ -292,6 +356,8 @@ async function capture(dir) {
     if ((await page.locator(shot.select).count()) === 0) {
       throw new Error(`${shot.name}: \`${shot.select}\` matched nothing on ${shot.route}`);
     }
+    await assertNothingScrolls(page, shot);
+
     // Scroll clear of the sticky top bar, then clip in viewport space — a
     // full-page clip would paint the sticky chrome across the subject.
     await target.evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -308,7 +374,7 @@ async function capture(dir) {
       x: Math.max(0, Math.round(box.x - pad)),
       y: top,
       width: Math.round(box.width + pad * 2),
-      height: Math.round(Math.min(box.y - top + box.height + pad, 1100 - top)),
+      height: Math.round(Math.min(box.y - top + box.height + pad, VIEWPORT.height - top)),
     };
     if (clip.width <= 0 || clip.height <= 40) {
       throw new Error(`${shot.name}: the crop came out empty (${JSON.stringify(clip)})`);
