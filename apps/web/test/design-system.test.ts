@@ -14,6 +14,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LANDING_ANCHORS } from '../src/components/landing/SectionNav';
 import { MARK_RECTS } from '../src/lib/mark';
 import { THEME } from '../src/lib/theme';
 
@@ -515,5 +516,56 @@ describe('the network indicator cannot disagree with the network', () => {
       const page = fileURLToPath(new URL(`../src/app/${[...segments, 'page.tsx'].join('/')}`, import.meta.url));
       expect(existsSync(page), `${href} is linked as built but ${page} does not exist`).toBe(true);
     }
+  });
+});
+
+describe('the landing does not link to anchors it does not have', () => {
+  // The same fault as the `built: true` check above, one level down. An in-page
+  // link whose target `id` was renamed or never existed does not 404 and does
+  // not throw — it does nothing at all, silently, which is why review never
+  // catches it and why the section nav is the component most likely to have it:
+  // every one of its entries is that kind of link, and it has no other purpose.
+  //
+  // `TopBar` cannot hold these entries. Its own test resolves every `built: true`
+  // href to a `page.tsx`, so `/#evidence` would be looked up as
+  // `src/app/#evidence/page.tsx` and fail — correctly, because an in-page anchor
+  // means nothing on `/app/activity`. Two navs with two rules need two checks,
+  // and this is the second one.
+  const page = read('app/page.tsx');
+
+  /** Every `id` the landing actually renders, from the `Section` props it passes. */
+  const ids = new Set([...page.matchAll(/^\s*id="([^"]+)"/gm)].map(([, id]) => id));
+
+  it('renders an id for every entry in the section nav', () => {
+    expect(LANDING_ANCHORS.length).toBeGreaterThan(0);
+
+    for (const { href, label } of LANDING_ANCHORS) {
+      expect(href.startsWith('#'), `${label} is in the section nav but is not an anchor`).toBe(true);
+      const id = href.slice(1);
+      expect(ids.has(id), `the section nav links ${href} (${label}) but nothing on the landing has id="${id}"`).toBe(true);
+    }
+  });
+
+  it('renders an id for every in-page link in the footer', () => {
+    // The footer's Evidence column points back into the page too, and it was
+    // written after the nav — so it is the more likely of the two to drift.
+    const footer = read('components/landing/SiteFooter.tsx');
+    const hrefs = [...footer.matchAll(/href="(#[^"]+)"/g)].map(([, href]) => href);
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      const id = href.slice(1);
+      expect(ids.has(id), `the footer links ${href} but nothing on the landing has id="${id}"`).toBe(true);
+    }
+  });
+
+  it('gives every anchored section a scroll margin that clears both sticky bars', () => {
+    // An `id` without one lands the heading under the top bar and the section
+    // nav, which reads as the link having jumped to the wrong place. `Section`
+    // ties the two together so a caller cannot set one and forget the other;
+    // this is what stops that from being untied later.
+    const section = read('components/Section.tsx');
+    expect(section).toContain('scroll-mt-24');
+    expect(section).toContain("id === undefined ? '' : 'scroll-mt-24 '");
   });
 });
