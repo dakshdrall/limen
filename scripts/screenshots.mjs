@@ -136,6 +136,45 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const CHAIN = /soroban-testnet\.stellar\.org|horizon-testnet\.stellar\.org|friendbot/i;
 
 /**
+ * The deployment state these shots photograph, declared rather than inherited.
+ *
+ * This was found the hard way. `/app/policies/new` picks its copy from whether
+ * the deployment has an RPC endpoint — `liveIngestEnabled` — and this repository
+ * has an untracked `apps/web/.env.local` that sets one. So `step-observe` was a
+ * photograph of *this machine's configuration*: it said "Resolved live through
+ * Soroban RPC on testnet" locally and "Live ingest is unavailable" on a runner
+ * that has no `.env.local`. The image was never a property of the application.
+ *
+ * The byte check could not have told anyone that. It failed on the same shot for
+ * what looked like the same reason as the two beside it, and the honest-looking
+ * answer — "CI renders fonts differently" — was true of those two and wrong here.
+ * Comparing text is what turned a rasterization complaint into a named sentence.
+ *
+ * So the environment is pinned here, next to the viewport and the locale and for
+ * the same reason: a screenshot is not the place to discover what the machine
+ * happened to have. `next start` inherits these, and `@next/env` leaves a value
+ * already in `process.env` alone, so `.env.local` cannot reach back in.
+ *
+ * `SOROBAN_RPC_URL` is set because a configured endpoint is the state a deployed
+ * Limen is in, and it is set to somewhere unroutable because nothing may reach
+ * it. Only its emptiness is ever read — the value is server-side and never
+ * rendered — and the discard port keeps the hermetic promise above literal: a
+ * shot that started depending on a live read would fail here rather than bake
+ * the answer into a PNG.
+ *
+ * The optional secrets are blanked rather than left alone, so a photographer who
+ * has them in `.env.local` takes the same picture as a runner that does not.
+ */
+const SHOT_ENV = {
+  SOROBAN_RPC_URL: 'http://127.0.0.1:9/rpc-is-never-called-during-shots',
+  LIMEN_DEMO_SECRET: '',
+  LIMEN_DEMO_DESTINATION: '',
+  LIMEN_SIMULATION_SOURCE: '',
+  ANTHROPIC_API_KEY: '',
+  AGENT_SECRET: '',
+};
+
+/**
  * The account seeded into `localStorage`, so screens that list remembered
  * accounts render their populated state rather than their empty one.
  *
@@ -361,7 +400,10 @@ function firstTextDifference(committed, rendered) {
 /** Starts `next start` unless something already answers on the port. */
 async function serve() {
   if (await reachable()) {
-    log(`reusing the server already answering on ${PORT}`);
+    // Said out loud, because a reused server was started by someone else and
+    // `SHOT_ENV` never reached it — so it may be serving a different deployment
+    // state, and a `--check` failure against it is not the application's fault.
+    log(`reusing the server already answering on ${PORT} — its environment is not pinned by SHOT_ENV`);
     return null;
   }
   log(`starting next start on ${PORT}`);
@@ -374,6 +416,7 @@ async function serve() {
   const child = spawn(next, ['start', '--port', String(PORT)], {
     cwd: web,
     stdio: ['ignore', 'ignore', 'inherit'],
+    env: { ...process.env, ...SHOT_ENV },
   });
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 1000));
