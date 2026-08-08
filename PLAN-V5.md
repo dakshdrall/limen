@@ -357,6 +357,28 @@ rather than letting them rot.
 No device frames, no perspective, no drop shadows. Cropped to the region that
 matters, on the surface step, with a hairline border.
 
+**Open, and it blocks the hero: the crops are too wide for the slots they go
+in.** Every shot is taken at a 1280 viewport and comes out about 1144 CSS px
+wide. §3.5 puts them in half-width slots — the hero's right column, and the
+alternating band through `How it works` — which is roughly 500px, so they render
+at 0.44 scale and the app's 13px body text lands near 6px. That is not a
+screenshot, it is a texture of a screenshot, and a picture nobody can read is
+decoration however real its data is.
+
+Three ways out, and the choice is the first piece of work in the hero:
+
+1. **Shoot narrower.** A second viewport width in the manifest — capture at
+   ~720px so the crop is ~680 wide and renders near 0.73 in a half-width slot.
+   Keeps the whole subject, costs a manifest field, and the app's own responsive
+   layout at 720 is a real layout rather than a contrivance.
+2. **Crop tighter.** Point `select` at the payload rather than the whole beat, so
+   the image is a smaller region shown larger. Best legibility, least context.
+3. **Show them full width.** Abandon the alternating half-width band for a
+   single column of wide images. Legible, but it is the composition §3.5 was
+   written to get away from.
+
+Not decided here. It wants the page in front of it.
+
 ~~Screenshots needed: the refusal table with real hashes (hero), and the four
 `How it works` steps — create, derive, install, revoke.~~
 
