@@ -34,12 +34,47 @@
  * fixture-driven path and the app's own arrival states — the flow as a stranger
  * first meets it — rather than from a populated account read over RPC.
  *
+ * ## What `--check` compares, and why it is not the image
+ *
+ * Each PNG is written with a JSON sidecar holding the `innerText` of the cropped
+ * subtree, and `--check` compares the sidecar. The image itself is not compared.
+ *
+ * It used to be, byte for byte, and that check could not survive a second
+ * machine. The committed PNGs are rendered in this repository's devcontainer;
+ * CI renders on `ubuntu-latest`, and different font rasterization moved
+ * `step-derive` by a whole pixel of height and changed the bytes of two more
+ * shots whose dimensions were identical. Three of four failed the first time CI
+ * ever ran the check, on a commit that had changed nothing they photograph.
+ *
+ * A pixel-difference threshold was the obvious repair and it does not work. A
+ * changed transaction hash is roughly 300 pixels of a 640,000-pixel crop — under
+ * 0.05% — while rasterization noise is spread across the whole image and
+ * comfortably exceeds that. Any threshold loose enough to absorb the noise
+ * absorbs the drift, and the check becomes a green light that means nothing.
+ *
+ * Text has neither problem. It is identical on every machine, so CI and a laptop
+ * agree; and it changes precisely when the thing this script was built to catch
+ * changes, because every hash, address and cap in these crops is rendered from
+ * `deployments/testnet.json`. Re-record a run and the sidecar moves with it.
+ *
+ * ## What this no longer catches
+ *
+ * Pure layout drift with unchanged text: a broken grid, a collapsed gap, a
+ * control that moved — anything that rearranges the same words. The sidecar
+ * cannot see it, and this is a real reduction in coverage rather than a wash.
+ *
+ * Two things make it an acceptable one. `assertNothingScrolls` below still fails
+ * the run on the worst version of it, a table with a column cut off, which is
+ * the layout fault that actually damages one of these images. And the byte
+ * check never caught any of it either: it was added on the branch that also
+ * added the CI step, and it failed on the first CI run it ever saw, so it never
+ * survived long enough to catch a single regression of any kind.
+ *
  * ## Determinism
  *
- * `--check` compares bytes, so a shot that renders differently twice would be
- * permanently stale and the check would cry wolf until someone stopped believing
- * it. Four things make a run reproducible, and `--twice` proves it rather than
- * assuming it:
+ * A shot whose text rendered differently twice would be permanently stale and
+ * the check would cry wolf until someone stopped believing it. Four things make
+ * a run reproducible, and `--twice` proves it rather than assuming it:
  *
  *   - a fixed viewport and `deviceScaleFactor: 2`;
  *   - `reducedMotion: 'reduce'`, which parks the ground's heartbeat at phase 0
@@ -73,8 +108,8 @@
  *
  * ## Usage
  *
- *     npm run shots           regenerate and write
- *     npm run shots:check     fail if any committed image has drifted
+ *     npm run shots           regenerate the images and their sidecars
+ *     npm run shots:check     fail if any committed sidecar has drifted
  *     node scripts/screenshots.mjs --twice    prove each shot is reproducible
  *
  * The server is started and stopped by this script unless one is already
@@ -269,6 +304,60 @@ function log(...parts) {
   console.log('shots:', ...parts);
 }
 
+/** Where a shot's sidecar lives: beside its PNG, same stem. */
+const sidecarPath = (dir, name) => join(dir, `${name}.json`);
+
+/**
+ * The text a shot is checked on.
+ *
+ * `innerText` is already close to what a reader sees — it honours `display:
+ * none`, and it does not insert a break for a soft wrap, so a line that wraps
+ * differently at the same viewport does not register as a change. What is left
+ * to normalise is incidental: runs of spaces, the non-breaking spaces the value
+ * formatters emit, and the blank lines that fall out of an empty inline element.
+ *
+ * Deliberately light. Every additional rule here is a class of drift the check
+ * stops seeing, and the point of comparing text at all is that a changed hash
+ * cannot hide in it.
+ */
+function subjectText(raw) {
+  return raw
+    .split('\n')
+    .map((line) => line.replace(/[ \t ]+/g, ' ').trim())
+    .filter((line) => line.length > 0)
+    .join('\n');
+}
+
+/**
+ * What a shot's sidecar records.
+ *
+ * `text` is the assertion. `route` and `select` are recorded with it because a
+ * shot re-pointed at a different screen is the near-miss this manifest has
+ * already had once — see the `step-revoke` note above — and a sidecar that names
+ * its subject makes that visible in the diff rather than only in the image.
+ */
+function sidecar(shot, text) {
+  return `${JSON.stringify({ name: shot.name, route: shot.route, select: shot.select, text }, null, 2)}\n`;
+}
+
+/**
+ * The first line that differs, for an error message that says what moved.
+ *
+ * A changed transaction hash is one line out of forty, and "step-install no
+ * longer matches" without it sends someone to a diff of a PNG they cannot read.
+ */
+function firstTextDifference(committed, rendered) {
+  const a = committed.split('\n');
+  const b = rendered.split('\n');
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] !== b[i]) {
+      const clip = (line) => (line === undefined ? '(end of text)' : `"${line.slice(0, 72)}"`);
+      return `line ${i + 1}: committed ${clip(a[i])}, now ${clip(b[i])}`;
+    }
+  }
+  return null;
+}
+
 /** Starts `next start` unless something already answers on the port. */
 async function serve() {
   if (await reachable()) {
@@ -382,6 +471,16 @@ async function capture(dir) {
 
     const file = join(dir, `${shot.name}.png`);
     await page.screenshot({ path: file, clip });
+
+    // Read from the same locator, in the same settled state the shutter caught,
+    // so the sidecar is a description of this image rather than of a second
+    // render of the page.
+    const text = subjectText(await target.evaluate((el) => el.innerText));
+    if (text.length === 0) {
+      throw new Error(`${shot.name}: the crop has no text, so there is nothing for --check to compare`);
+    }
+    writeFileSync(sidecarPath(dir, shot.name), sidecar(shot, text));
+
     written.push(shot.name);
     log(
       `${shot.name.padEnd(16)} ${String(clip.width).padStart(4)}×${String(clip.height).padEnd(4)} ` +
@@ -416,8 +515,13 @@ try {
     const b = join(root, '.shots-b');
     await capture(a);
     await capture(b);
+    // The sidecar, not the image: that is what `--check` compares, so that is
+    // what has to be stable for `--check` to be believable. Two runs on this
+    // machine would agree on the bytes too; two machines would not, which is
+    // the whole reason the check moved to text.
     const unstable = SHOTS.filter(
-      ({ name }) => !readFileSync(join(a, `${name}.png`)).equals(readFileSync(join(b, `${name}.png`))),
+      ({ name }) =>
+        readFileSync(sidecarPath(a, name), 'utf8') !== readFileSync(sidecarPath(b, name), 'utf8'),
     ).map(({ name }) => name);
     rmSync(a, { recursive: true, force: true });
     rmSync(b, { recursive: true, force: true });
@@ -436,18 +540,37 @@ try {
     await capture(tmp);
 
     const drifted = [];
-    for (const { name } of SHOTS) {
-      const committed = join(OUT, `${name}.png`);
-      if (!existsSync(committed)) {
-        drifted.push(`${name} (never committed)`);
+    const why = [];
+    for (const shot of SHOTS) {
+      const { name } = shot;
+      // The image is still required to be present, even though it is no longer
+      // compared: the landing imports it, and a sidecar with no PNG beside it
+      // would pass this check and fail the build.
+      if (!existsSync(join(OUT, `${name}.png`))) {
+        drifted.push(`${name} (image never committed)`);
         continue;
       }
-      if (!readFileSync(committed).equals(readFileSync(join(tmp, `${name}.png`)))) {
-        drifted.push(name);
+      if (!existsSync(sidecarPath(OUT, name))) {
+        drifted.push(`${name} (no sidecar — regenerate to record its text)`);
+        continue;
       }
+
+      const committed = readFileSync(sidecarPath(OUT, name), 'utf8');
+      const rendered = readFileSync(sidecarPath(tmp, name), 'utf8');
+      if (committed === rendered) continue;
+
+      drifted.push(name);
+      const difference = firstTextDifference(JSON.parse(committed).text, JSON.parse(rendered).text);
+      why.push(
+        difference === null
+          ? `shots: ${name}: the text is unchanged, but the manifest now photographs a different subject.`
+          : `shots: ${name}: ${difference}`,
+      );
     }
+
+    const produced = new Set(SHOTS.flatMap(({ name }) => [`${name}.png`, `${name}.json`]));
     const extra = existsSync(OUT)
-      ? readdirSync(OUT).filter((f) => f.endsWith('.png') && !SHOTS.some((s) => `${s.name}.png` === f))
+      ? readdirSync(OUT).filter((f) => (f.endsWith('.png') || f.endsWith('.json')) && !produced.has(f))
       : [];
     rmSync(tmp, { recursive: true, force: true });
 
@@ -458,7 +581,7 @@ try {
           `shots: ${drifted.join(', ')} no longer ${one ? 'matches' : 'match'} what the application renders.\n` +
             `shots: the page ${one ? 'it illustrates' : 'these illustrate'} has changed, or the data underneath ` +
             `${one ? 'it' : 'them'} has.\n` +
-            'shots: run `npm run shots` and commit the result.',
+            [...why, 'shots: run `npm run shots` and commit the result.'].join('\n'),
         );
       }
       if (extra.length > 0) {
