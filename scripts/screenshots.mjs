@@ -104,32 +104,33 @@ const SEEDED_STORE = {
  * needs a click belongs there rather than in a coordinate, so the manifest stays
  * a statement about *what* is being shown.
  *
- * `through` extends the crop from `select`'s top edge to that element's bottom
- * edge. Some of what is worth photographing is a run of siblings with no wrapper
- * around it — the permitted row and the refusal table under it are two children
- * of a `Section` and nothing else — and the alternative is either a pixel height
- * or a wrapper `div` added to the page for the benefit of a screenshot tool.
- * Both are worse: one goes stale silently, the other lets this script dictate
- * the markup.
+ * There used to be a `through`, extending a crop from one element's top edge to
+ * another's bottom, for subjects that are a run of siblings with no wrapper
+ * around them. The only shot that needed it was the refusal table on `/`, and
+ * that shot is gone for the reason below. Twenty lines of crop arithmetic that
+ * no manifest entry exercises is twenty lines that rot unnoticed and are wrong
+ * by the time something needs them, so it went with its only caller. The git
+ * history has it if a subject ever wants it back.
+ */
+/*
+ * Nothing here is shot from `/`, and that is a rule rather than an accident.
+ *
+ * Two entries were: `refusal-table` cropped the permitted row and the refusals
+ * under it, and `worked-example` cropped the Mechanism section. Both were shot
+ * from the landing page, and both were destined *for* the landing page — which
+ * renders each of them live, in HTML, a few hundred pixels below where the
+ * image would have sat. A page illustrated with photographs of itself.
+ *
+ * The live markup beats the picture on every axis that matters here: its hashes
+ * are read at build time so they cannot go stale, its text is selectable and
+ * reaches a screen reader, and it needs no check to stay honest because there is
+ * nothing to keep in step. The screenshot was strictly the worse copy, and it
+ * carried a maintenance cost for the privilege.
+ *
+ * So a shot has to earn its place by showing something the page cannot show
+ * itself: an application screen. All four below are from `/app`.
  */
 const SHOTS = [
-  {
-    name: 'refusal-table',
-    what: 'the permitted row and the six refusals under it, with real hashes',
-    route: '/',
-    // Anchored on the permit line, which only `PermittedRow` draws, and carried
-    // down through the refusal table's own scroll box. The section heading and
-    // the prose after it are deliberately outside the crop: this is meant to be
-    // a picture of the instrument, not of the page it sits on.
-    select: 'main div.border-permit-line',
-    through: 'main div.scroll-x',
-  },
-  {
-    name: 'worked-example',
-    what: 'observed, derived and installed, each beside the hash that proves it',
-    route: '/',
-    select: 'section:has(h2:has-text("Mechanism"))',
-  },
   {
     name: 'step-create',
     what: 'create — the two keys, before anything is generated',
@@ -291,10 +292,6 @@ async function capture(dir) {
     if ((await page.locator(shot.select).count()) === 0) {
       throw new Error(`${shot.name}: \`${shot.select}\` matched nothing on ${shot.route}`);
     }
-    if (shot.through && (await page.locator(shot.through).count()) === 0) {
-      throw new Error(`${shot.name}: \`${shot.through}\` matched nothing on ${shot.route}`);
-    }
-
     // Scroll clear of the sticky top bar, then clip in viewport space — a
     // full-page clip would paint the sticky chrome across the subject.
     await target.evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -305,31 +302,13 @@ async function capture(dir) {
       const r = el.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     });
-    if (shot.through) {
-      const end = await page.locator(shot.through).first().evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        return { bottom: r.bottom, right: r.right };
-      });
-      box.height = end.bottom - box.y;
-      box.width = Math.max(box.width, end.right - box.x);
-      if (box.height <= 0) {
-        throw new Error(
-          `${shot.name}: \`${shot.through}\` ends above \`${shot.select}\` starts — the two are in the wrong order`,
-        );
-      }
-    }
     const pad = 20;
-    // A `through` crop ends exactly where the named element ends. Its container
-    // is usually a flex column with a gap, so a symmetric pad reaches past the
-    // gap and clips the top of whatever comes next — a caption sliced in half
-    // reads as a broken image rather than as a deliberate crop.
-    const padBottom = shot.through ? 8 : pad;
     const top = Math.max(56, Math.round(box.y - pad));
     const clip = {
       x: Math.max(0, Math.round(box.x - pad)),
       y: top,
       width: Math.round(box.width + pad * 2),
-      height: Math.round(Math.min(box.y - top + box.height + padBottom, 1100 - top)),
+      height: Math.round(Math.min(box.y - top + box.height + pad, 1100 - top)),
     };
     if (clip.width <= 0 || clip.height <= 40) {
       throw new Error(`${shot.name}: the crop came out empty (${JSON.stringify(clip)})`);

@@ -357,11 +357,30 @@ rather than letting them rot.
 No device frames, no perspective, no drop shadows. Cropped to the region that
 matters, on the surface step, with a hairline border.
 
-Screenshots needed: the refusal table with real hashes (hero), and the four
-`How it works` steps — create, derive, install, revoke.
+~~Screenshots needed: the refusal table with real hashes (hero), and the four
+`How it works` steps — create, derive, install, revoke.~~
 
-**Built, and gated.** Six shots: `refusal-table`, `worked-example`,
-`step-create`, `step-derive`, `step-install`, `step-observe`. The run is
+**Amended: nothing is shot from `/`.** The hero screenshot named above was a crop
+of the landing page itself — the permitted row and the refusals under it, which
+this page renders live, in HTML, a few hundred pixels below where the image would
+have sat. So was `worked-example`, which cropped the Mechanism section. A page
+illustrated with photographs of itself.
+
+The live markup wins on every axis: its hashes are read at build time and cannot
+go stale, its text is selectable and reaches a screen reader, and it needs no
+check to stay honest because there is nothing to keep in step. The screenshot was
+the strictly worse copy of content already on the page, and it charged
+maintenance for the privilege. Both are dropped, and the rule that replaces the
+list is: **a shot has to show something the page cannot show itself.** In
+practice that means every shot comes from `/app`.
+
+The hero therefore carries an application screen instead — `step-install`, the
+exact policy set beside its unsigned payload — and the refusal table gets the
+full-bleed treatment §3.5 already wanted for it, as live markup rather than as an
+image of live markup.
+
+**Built, and gated.** Four shots: `step-create`, `step-derive`, `step-install`,
+`step-observe`. The run is
 hermetic — every chain request is aborted — so only screens rendering from
 committed data can be photographed at all, which is the rule enforced by the
 mechanism rather than by discipline. `--twice` proves each shot reproducible
