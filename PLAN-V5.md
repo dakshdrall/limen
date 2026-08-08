@@ -3,7 +3,8 @@
 Status: **§1 released without an intake — see §1, and read it before crediting
 this project with having fixed anything. §2 complete: the palette is light,
 measured and pinned, and every screen and state has been looked at in a browser.
-§3 next.** Written against the repository at `1156fa4`, after reading
+§3 in progress: the screenshot script is built, gated in CI, and the revoke step
+is decided (3.1).** Written against the repository at `1156fa4`, after reading
 `globals.css`, `app/page.tsx`, `caveats.test.ts`, `design-system.test.ts`,
 `TopBar.tsx`, `e2e/viewports.spec.ts` and `ci.yml`.
 
@@ -323,7 +324,8 @@ control never disables while it is calling, because funding goes through
 the deliberate submission/not-a-submission split in `use-write.ts`, and a double
 click costs a second friendbot call that returns "already exists" and is
 reported as success — harmless. Recorded because the pass found it, not because
-it needs fixing.
+it needs fixing. **Now queued as work in §4** — it is observed rather than
+guessed at, and one line, so it is scheduled rather than left as a note.
 
 ---
 
@@ -357,6 +359,37 @@ matters, on the surface step, with a hairline border.
 
 Screenshots needed: the refusal table with real hashes (hero), and the four
 `How it works` steps — create, derive, install, revoke.
+
+**Built, and gated.** Six shots: `refusal-table`, `worked-example`,
+`step-create`, `step-derive`, `step-install`, `step-observe`. The run is
+hermetic — every chain request is aborted — so only screens rendering from
+committed data can be photographed at all, which is the rule enforced by the
+mechanism rather than by discipline. `--twice` proves each shot reproducible
+before `--check` is allowed to mean anything. `shots:check` runs in CI after the
+build, on the `evidence:check` argument: a check that only runs when somebody
+remembers is not a check, and a stale image is the one claim on this page that
+`caveats.test.ts` cannot read and no reviewer reads either. The browser is
+cached on the lockfile hash; the install measures 1.3s warm and the whole check
+46s locally, most of it waiting on `next start`.
+
+**The revoke step gets no screenshot, and this is decided rather than skipped.**
+The only screen that shows revoke is `/app/policies/[id]`, which writes to and
+reads from a live chain. Photographing it would commit a picture of one
+account's rule at one ledger — a second, unverifiable copy of chain state in the
+repository, which is the exact failure this script exists to prevent. It was
+nearly missed: a `step-revoke` entry pointed at `/app/policies/new` produced a
+perfectly good image *of the observe step*, a name claiming a capability the
+picture did not demonstrate. Renamed, not re-pointed.
+
+So step 04 is **a panel built from committed data rather than an image**:
+`revokeTx`, `postRevokeTx` and the measured `postRevokeError`
+(`ContextRuleNotFound#3000`) read at build time from
+`deployments/testnet.json`, drawn in the product's own components as a sibling
+of the refusal table. It is the strongest of the four steps, not a fallback —
+it is the only one that can show the boundary being taken back *and* the call
+that stopped working afterwards, and it goes stale-proof by the same route
+every other number on the page does. Three photographs and one panel, each
+honest about what it is.
 
 ### 3.2 The mark
 
@@ -432,6 +465,19 @@ These are open and stay open until closed properly.
 - **`horizon-run.mjs` and `horizon-confirm.mjs`.** Confirmed lost — not on disk,
   not in history, not in any surviving scratchpad. `scripts/verify-browser-run.mjs`
   occupies that role. Superseded; stop looking.
+- **The friendbot control never disables while it is calling.** Queued work, not
+  an observation. Funding goes through `use-write`'s `note()` rather than
+  `run()`, and only `run()` sets `busy`, so the button stays live through its own
+  call. §2.3 recorded this as a finding rather than a fix, on the grounds that
+  §1's no-guessing rule applies to faults stumbled on mid-pass. That rule is
+  about faults that are *guessed at* — this one was observed, its mechanism is
+  understood, and the change is one line. It belongs in the plan.
+
+  It still gets §1's protocol, which is the part that does not bend: a test that
+  fails without the fix, in `e2e/` rather than the Node suite, because a control
+  that fails to disable is invisible to a suite that reads source. Landed after
+  §3, so the landing is not interrupted mid-page.
+
 - **Session fragility.** Commit at every completed step, not at the end of a work
   block. This project has lost sessions to usage limits, a dead battery and a
   laptop restart, and uncommitted work has twice been destroyed by `git checkout`
