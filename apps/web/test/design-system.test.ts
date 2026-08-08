@@ -319,6 +319,48 @@ describe('the palette has one definition, and every consumer reads it', () => {
   });
 });
 
+describe('the full-bleed band', () => {
+  // PLAN-V5 F5. One section spans the viewport and every other stays in the
+  // measure, which is a break-out — and the usual break-out is the bug.
+  //
+  // `margin-inline: calc(50% - 50vw)` is what everyone reaches for, and `100vw`
+  // includes the scrollbar: on any page long enough to scroll, the "full-bleed"
+  // section ends up about 15px wider than the viewport and the document scrolls
+  // sideways. That is the regression `f91d854` fixed at 390px and the reason
+  // `e2e/viewports.spec.ts` exists. The grid in `globals.css` resolves its
+  // percentages against the element's own width instead, which already excludes
+  // the scrollbar.
+  //
+  // The e2e suite catches the symptom at four widths. This catches the cause, in
+  // the suite that runs on every commit, because the fix is easy to undo by
+  // someone adding a second full-width thing in a hurry.
+  const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('never breaks out with a viewport unit in a margin', () => {
+    // Scoped to margins on purpose. `vw` is fine for a font size and fine for a
+    // width that subtracts more than a scrollbar; it is breaking *out* with one
+    // that reintroduces the overflow.
+    expect(declarations).not.toMatch(/margin[a-z-]*:[^;}]*\bvw\b/);
+  });
+
+  it('is scoped to where a grid line can actually be addressed', () => {
+    // `grid-column: full` means nothing except on a direct child of the element
+    // that defines the tracks. The selector says so, rather than letting it fail
+    // silently two levels down.
+    expect(declarations).toMatch(/\.screen\s*>\s*\.bleed\s*\{/);
+    expect(declarations).toMatch(/\[full-start\]/);
+    expect(declarations).toMatch(/\[content-start\]/);
+  });
+
+  it('caps how wide a band may get', () => {
+    // A band that spans a 2560px monitor stretches seven columns across two
+    // metres of paper. The cap is what keeps "wider than the page" from becoming
+    // "as wide as the desk".
+    expect(declarations).toMatch(/--bleed-max:/);
+    expect(declarations).toMatch(/max-width:\s*var\(--bleed-max\)/);
+  });
+});
+
 describe('the mark has one definition, and every consumer reads it', () => {
   // PLAN-V5 §3.2. The mark appears in four places — the component, `icon.svg`,
   // `favicon.ico` and the share card — and three of them are files or formats

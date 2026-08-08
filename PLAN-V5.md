@@ -515,6 +515,32 @@ Two-column hero, full-bleed evidence table (via F5's `.bleed`), card grid,
 alternating screenshot-and-text through `How it works`. The page should have a
 shape when you squint at it.
 
+**Hero and band built.** From `xl` up the hero is 416 for the argument and 640
+for `step-install`; below it the image goes under the text at full width, which
+is more legible still. 640 is the width the screenshot was measured legible at,
+not a round number. The image is a static import, so Next reads its intrinsic
+size at build time — a hand-written width and height is the version that goes
+wrong as layout shift the next time a crop changes — and it carries `preload`
+rather than the `priority` this Next deprecated in 16.
+
+`.bleed` turned out to want `.screen` to become a three-column grid rather than a
+centred max-width box. The content column computes to exactly what the old
+`max-width` plus padding produced, so no existing screen moved: 1104 at 1280, 720
+at 800, 342 at 390 — checked. The reason it is a grid at all is F5's warning:
+`margin-inline: calc(50% - 50vw)` is the technique everybody reaches for, and
+`100vw` includes the scrollbar, so a "full-bleed" section on a scrolling page is
+about 15px wider than the viewport. Percentages against the element's own width
+have no such problem. `design-system.test.ts` now forbids a viewport unit in any
+margin, which catches the cause on every commit, next to the e2e suite that
+catches the symptom at four widths. Both were run: zero document overflow at
+1440, 1280, 1024, 768 and 390.
+
+The band's heading sits at the page gutter rather than the content column, which
+is what full-bleed means and reads as deliberate because the whole section moves
+together. Its prose still stops at `.measure`, and `--bleed-max` stops the table
+at 96rem so a wide monitor gets a wider table rather than seven columns spread
+across a desk.
+
 Motion stays exactly as step 7 left it. No new animation. `design-system.test.ts`
 forbids `@keyframes` outright and that does not change.
 

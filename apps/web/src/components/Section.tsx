@@ -9,6 +9,7 @@ export function Section({
   subtitle,
   children,
   emphasis = false,
+  bleed = false,
 }: {
   index: number;
   title: string;
@@ -16,9 +17,20 @@ export function Section({
   children: React.ReactNode;
   /** The deny table gets more air and a heavier title than the rest. */
   emphasis?: boolean;
+  /**
+   * Span the viewport rather than the measure — see `.bleed` in `globals.css`.
+   *
+   * Only works where `.bleed` works: as a direct child of `.screen`. It is a
+   * prop rather than a `className` escape hatch because there is exactly one
+   * thing on this site wide enough to want it, and a general className would
+   * invite the second and third.
+   */
+  bleed?: boolean;
 }) {
   return (
-    <section className={emphasis ? 'flex flex-col gap-6' : 'flex flex-col gap-4'}>
+    <section
+      className={`${bleed ? 'bleed ' : ''}${emphasis ? 'flex flex-col gap-6' : 'flex flex-col gap-4'}`}
+    >
       <header className="flex flex-col gap-1.5">
         <span className="eyebrow text-faint">{String(index).padStart(2, '0')}</span>
         <h2

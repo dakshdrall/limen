@@ -400,6 +400,17 @@ body::before {
     --screen-max: 74rem;
     --screen-gap: 3rem;
 
+    /* The page gutter, named because `.bleed` below has to do arithmetic with
+       it. It was written twice as a padding value before; now it is the same
+       number in both places by construction. */
+    --screen-pad: 1.5rem;
+
+    /* How wide a full-bleed band is allowed to get. The band spans the viewport;
+       its contents stop here. A refusal table stretched across a 2560px monitor
+       is not evidence presented at scale, it is seven columns with a metre of
+       air between them. */
+    --bleed-max: 96rem;
+
     /* One measure for running prose. There were five — 74, 76, 78, 80 and 86ch —
        across pages that all just wanted "a paragraph". Nothing distinguished
        them; they were matched by eye at different times. Genuine layout
@@ -408,19 +419,56 @@ body::before {
     --measure: 78ch;
   }
 
+  /* A three-column grid rather than a centred max-width box, so that one section
+     can span the viewport while every other stays in the measure.
+
+     The content column computes to exactly what the old `max-width: 74rem` plus
+     padding produced, so no existing screen moved: at 1280 it is 1104px, at 800
+     it is 720, at 390 it is 342.
+
+     PLAN-V5 F5 warns off the usual break-out, and the warning is the reason this
+     is a grid at all. `margin-inline: calc(50% - 50vw)` is the technique
+     everybody reaches for, and `100vw` includes the scrollbar — so on any page
+     long enough to scroll, a "full-bleed" section is about 15px wider than the
+     viewport and the document scrolls sideways. That is the exact regression
+     `e2e/viewports.spec.ts` exists to catch and that `f91d854` fixed at 390px.
+     The other habit — hiding it with `overflow-x` on the body — is worse: it
+     stops the test being able to fail while leaving the page broken.
+
+     Percentages resolve against this element's own width, which is the viewport
+     minus the scrollbar. No viewport units appear anywhere below, so there is
+     nothing to get wrong. */
   .screen {
-    display: flex;
-    flex-direction: column;
-    gap: var(--screen-gap);
+    display: grid;
+    grid-template-columns:
+      [full-start] minmax(var(--screen-pad), 1fr)
+      [content-start] calc(min(var(--screen-max), 100%) - var(--screen-pad) * 2) [content-end]
+      minmax(var(--screen-pad), 1fr) [full-end];
+    /* Rows only. A `gap` shorthand here would put three rem between the gutter
+       columns and the content, which is a page 6rem narrower than it looks. */
+    row-gap: var(--screen-gap);
     width: 100%;
-    max-width: var(--screen-max);
+    padding-block: 3.5rem;
+  }
+
+  .screen > * {
+    grid-column: content;
+  }
+
+  /* Full-bleed, and only as a direct child of `.screen` — a grid line cannot be
+     addressed from further down the tree, so the selector says out loud where
+     this works rather than failing quietly two levels in. */
+  .screen > .bleed {
+    grid-column: full;
+    width: 100%;
+    max-width: var(--bleed-max);
     margin-inline: auto;
-    padding: 3.5rem 1.5rem;
+    padding-inline: var(--screen-pad);
   }
 
   @media (min-width: 640px) {
-    .screen {
-      padding-inline: 2.5rem;
+    :root {
+      --screen-pad: 2.5rem;
     }
   }
 
