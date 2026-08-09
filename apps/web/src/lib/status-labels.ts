@@ -8,7 +8,22 @@
  *
  * These are not decoration. A project that states its own limits precisely
  * reads as more trustworthy than one that stays quiet, and for a permissions
- * tool that is the entire impression that matters.
+ * tool that is the entire impression that matters. PLAN-V6 keeps them ahead of
+ * the argument rather than under it: the labels appear before the scene that
+ * makes the claim they qualify.
+ *
+ * ## Why this is in `lib/` and not beside the component that renders it
+ *
+ * Through V5 these constants lived in `components/StatusLabel.tsx`, and
+ * `lib/local-key.ts` imported `LOCAL_KEY_LABEL` from there — a module in the
+ * data layer reaching up into the rendering layer for a string. That inversion
+ * was invisible while both existed, and became a type error the moment the V6
+ * rebuild deleted the component: the safety rule that every key-handling file
+ * must name its label was resting on a component file continuing to exist.
+ *
+ * The vocabulary is content, not markup. It lives here, dependency-free like
+ * `markers.ts` and for the same reason, and the component that renders it is a
+ * consumer. That is the direction the dependency should always have run.
  */
 
 export const STATUS_LABELS = {
@@ -16,8 +31,10 @@ export const STATUS_LABELS = {
   MIT: 'Licensed MIT.',
   'TESTNET ONLY': 'Stellar testnet. No real funds are involved anywhere in this application.',
   'IN DEVELOPMENT': 'Actively changing. Interfaces and data may not survive the next deploy.',
-  'NOT AUDITED': 'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
-  'COMPOSITION ONLY': 'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
+  'NOT AUDITED':
+    'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
+  'COMPOSITION ONLY':
+    'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
   // The second sentence used to read "There is no code path here that can move
   // your funds." It stopped being true the moment a screen could generate a
   // signing key: that key exists precisely so it can move testnet funds, and on
@@ -53,34 +70,3 @@ export type StatusLabelName = keyof typeof STATUS_LABELS;
  * of the two things on this page a person must read before they act.
  */
 export const LOCAL_KEY_LABEL = 'TESTNET ONLY · LOCAL KEY' satisfies StatusLabelName;
-
-/**
- * `loud` is for the one label a person must read before they act — `NOT
- * AUDITED` above an install button. It is a brighter rule and brighter text
- * within the existing ramp, never a colour of its own: a warning that looks
- * like a badge gets read as a badge.
- */
-export function StatusLabel({
-  name,
-  weight = 'normal',
-}: {
-  name: StatusLabelName;
-  weight?: 'normal' | 'loud';
-}) {
-  return (
-    <span className="status-label" data-weight={weight} title={STATUS_LABELS[name]}>
-      {name}
-    </span>
-  );
-}
-
-/** A row of labels, for the landing spec strip and screen headers. */
-export function StatusLabels({ names }: { names: readonly StatusLabelName[] }) {
-  return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      {names.map((name) => (
-        <StatusLabel key={name} name={name} />
-      ))}
-    </span>
-  );
-}

@@ -1,23 +1,20 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import { LedgerSource } from "@/components/LedgerSource";
-import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
 /**
  * IBM Plex, self-hosted.
  *
- * `next/font/google` downloads the files at build time and serves them from
- * this origin — there is no request to Google at runtime, and no system-font
- * fallback stack anywhere in the cascade. The previous typeface was Geist,
- * loaded from the Next.js default helper, which is the single clearest tell
- * that a page was generated rather than designed.
+ * Carried across the V6 rebuild unchanged, because the reasoning behind it is
+ * not a decision about the old page's shape. `next/font/google` downloads the
+ * files at build time and serves them from this origin — there is no request to
+ * Google at runtime, and no system-font fallback stack anywhere in the cascade.
  *
  * Plex was drawn for IBM's technical documentation, and its mono is a true
  * companion to its sans rather than an unrelated face. That is what lets "mono
- * is reserved for on-chain values" read as one system rather than as a mix:
- * the two share a skeleton, so switching between them signals provenance
- * without signalling a change of voice.
+ * is reserved for on-chain values" read as one system rather than as a mix: the
+ * two share a skeleton, so switching between them signals provenance without
+ * signalling a change of voice.
  *
  * `adjustFontFallback` stays on. It generates a metrics-matched local face used
  * only for the swap frame before the webfont paints; it is not a fallback
@@ -56,20 +53,18 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: TITLE,
   description: DESCRIPTION,
-  openGraph: {
-    type: "website",
-    siteName: "Limen",
-    title: TITLE,
-    description: DESCRIPTION,
-    url: "/",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: TITLE,
-    description: DESCRIPTION,
-  },
 };
 
+/**
+ * The root layout, in its scaffold form.
+ *
+ * The V5 layout wrapped everything in `LedgerSource` so that one ledger poll
+ * served the whole application and no two readouts could disagree about what
+ * the present is. That property is being kept, but the component that provides
+ * it is part of the rendering layer and is rebuilt in step 2; re-adding it here
+ * before there is anything to read it would be scaffolding pretending to be a
+ * system.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -80,17 +75,7 @@ export default function RootLayout({
       lang="en"
       className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {/* One ledger poll for the whole application, per PLAN-V4 §8. It wraps
-            rather than sits beside, so the top bar's counter and any screen's
-            closing window read the same sequence and cannot disagree about what
-            the present is. `children` is passed through as a prop, so the pages
-            under it stay server components. */}
-        <LedgerSource>
-          <TopBar />
-          {children}
-        </LedgerSource>
-      </body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
