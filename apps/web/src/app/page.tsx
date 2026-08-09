@@ -12,8 +12,8 @@ import { EVIDENCE } from "@/lib/evidence";
 
 export default function Home() {
   return (
-    <main className="p-12">
-      <p className="text-sm">
+    <main className="scene">
+      <p className="scene-lead measure-scene">
         Scaffold. {EVIDENCE.chain.transactions} recorded transactions on{" "}
         {EVIDENCE.chain.network}, as of {EVIDENCE.chain.recordedAt}.
       </p>
