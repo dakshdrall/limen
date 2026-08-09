@@ -9,7 +9,7 @@ import { Code } from '@/components/Code';
 import { TxHash } from '@/components/ExplorerLink';
 import { Section } from '@/components/Section';
 import { StatusLabels } from '@/components/StatusLabel';
-import { PermittedRow, RefusedTable } from '@/components/app/RefusalTable';
+import { Exhibit, PermittedRow, RefusedTable } from '@/components/app/RefusalTable';
 import { RevokePanel } from '@/components/landing/RevokePanel';
 import { SectionNav } from '@/components/landing/SectionNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
@@ -254,9 +254,14 @@ export default function Home() {
           // reads as the page opening up rather than as the page being wide.
           bleed
         >
-          <PermittedRow run={RECORDED_RUN} />
+          {/* One exhibit, so one width — see `Exhibit`. The prose below stays
+              outside it, at the measure, because it is commentary on the
+              exhibit rather than part of it. */}
+          <Exhibit>
+            <PermittedRow run={RECORDED_RUN} />
 
-          {survey !== undefined && <RefusedTable rows={survey.axes} caption={survey.note} />}
+            {survey !== undefined && <RefusedTable rows={survey.axes} caption={survey.note} />}
+          </Exhibit>
 
           <p className="measure text-[13px] leading-relaxed text-muted">
             Each row changes exactly one dimension of the permitted flow: the amount, the function,

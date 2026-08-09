@@ -28,12 +28,71 @@ import type { RecordedAxis, RecordedWalkthrough } from '@/lib/recorded-runs';
  *    on-ledger code it does not have.
  */
 
+/**
+ * The permitted transaction and the refusals under it, as one object.
+ *
+ * They are one exhibit and not two adjacent elements — one transaction this
+ * boundary was built to permit, and six it refused, making a single argument.
+ * That reads as one thing only if it looks like one, which means sharing both
+ * edges rather than only the left.
+ *
+ * `w-max` so the container is the width of its widest child, which is the
+ * table: `.tbl-fit` makes that the sum of the column tokens rather than
+ * whatever holds it. `max-w-full` keeps it bounded by the band, so when the
+ * viewport is narrower than the sum the container stops at the band and the
+ * table scrolls inside its own `.scroll-x` box rather than pushing the page
+ * sideways.
+ *
+ * The alternative was letting the panel hug its own content. It was declined:
+ * the band would then carry three different right edges — prose at `.measure`,
+ * the panel at roughly 800, the table at 1074. Left alignment makes differing
+ * right edges acceptable, not free, and three is where it stops reading as
+ * deliberate.
+ *
+ * Both children then fill that width by the flex default — `align-items:
+ * stretch` on a column, with neither child setting a width of its own. An
+ * explicit `w-full` on the panel was tried and measured to change nothing, so
+ * it is not here; a class that does nothing while a comment calls it
+ * load-bearing is worse than no class.
+ *
+ * The one thing this arrangement asks of its children: **the table has to be
+ * the widest of them.** If the panel's max-content ever exceeded the table's,
+ * the panel would size the container and the table — still `w-max` — would sit
+ * inside it at its own narrower width, which is the mismatch this exists to
+ * remove, mirrored. Today it is not close: measured at 1440 the panel asks for
+ * 663px against the table's 1074. Nothing in the panel is free to grow either,
+ * since both its rows are truncated values at fixed widths and its one run of
+ * prose is capped at the measure. None of that is enforced by the CSS, which is
+ * why `e2e/viewports.spec.ts` measures the two edges rather than trusting it.
+ */
+export function Exhibit({ children }: { children: React.ReactNode }) {
+  // `data-exhibit` is a test hook and is here deliberately rather than in the
+  // spec as a class selector. The table's own bordered box is also `w-max`, so
+  // a test that went looking for the container by that class would, if this
+  // component were ever removed, find the table box instead and compare it to
+  // itself — passing loudly while the two panels drifted apart. An attribute
+  // only this component sets cannot be satisfied by the thing it wraps.
+  return (
+    <div data-exhibit className="flex w-max max-w-full flex-col gap-6">
+      {children}
+    </div>
+  );
+}
+
 export function PermittedRow({ run }: { run: RecordedWalkthrough }) {
   return (
     <div className="flex flex-col gap-4 rounded-[5px] border border-permit-line bg-surface px-5 py-4">
       <div className="flex flex-wrap items-center gap-4">
         <Verdict state="permitted" size="lg" />
-        <p className="text-[13px] leading-relaxed text-foreground/90">
+        {/* `measure` is a bound rather than typography, and it is headroom
+            rather than a thing currently doing work: this sentence renders at
+            less than the cap, so removing the class changes nothing today. It
+            is here because this is the one element in the panel free to grow —
+            the two rows below are truncated values at fixed widths — and inside
+            the `Exhibit` above, a panel that outgrew the table would silently
+            take over sizing the exhibit. Measured at 1440: the panel asks for
+            663px and the table for 1074. */}
+        <p className="measure text-[13px] leading-relaxed text-foreground/90">
           The transfer this boundary was built to permit. It reached a ledger and succeeded.
         </p>
       </div>
