@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { LedgerSource } from "@/components/LedgerSource";
+import { SiteHeader } from "@/components/site/SiteHeader";
 import "./globals.css";
 
 /**
@@ -56,14 +58,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * The root layout, in its scaffold form.
+ * The root layout.
  *
- * The V5 layout wrapped everything in `LedgerSource` so that one ledger poll
- * served the whole application and no two readouts could disagree about what
- * the present is. That property is being kept, but the component that provides
- * it is part of the rendering layer and is rebuilt in step 2; re-adding it here
- * before there is anything to read it would be scaffolding pretending to be a
- * system.
+ * One ledger poll for the whole application. `LedgerSource` wraps rather than
+ * sits beside, so the header's counter and any screen's closing window read the
+ * same sequence and cannot disagree about what the present is. `children` is
+ * passed through as a prop, so the pages under it stay server components.
  */
 export default function RootLayout({
   children,
@@ -75,7 +75,12 @@ export default function RootLayout({
       lang="en"
       className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <LedgerSource>
+          <SiteHeader />
+          {children}
+        </LedgerSource>
+      </body>
     </html>
   );
 }
