@@ -3,8 +3,10 @@
 Status: **§1 released without an intake — see §1, and read it before crediting
 this project with having fixed anything. §2 complete: the palette is light,
 measured and pinned, and every screen and state has been looked at in a browser.
-§3 in progress: the screenshot script is built, gated in CI, and the revoke step
-is decided (3.1).** Written against the repository at `1156fa4`, after reading
+§3 built: the screenshot script is gated in CI, the revoke step is decided
+(3.1), and the evidence band is composed and measured (3.5). §4's friendbot
+control is closed. What stays open is §11's by-hand run, on port forwarding.**
+Written against the repository at `1156fa4`, after reading
 `globals.css`, `app/page.tsx`, `caveats.test.ts`, `design-system.test.ts`,
 `TopBar.tsx`, `e2e/viewports.spec.ts` and `ci.yml`.
 
@@ -541,6 +543,26 @@ together. Its prose still stops at `.measure`, and `--bleed-max` stops the table
 at 96rem so a wide monitor gets a wider table rather than seven columns spread
 across a desk.
 
+**The permitted panel is the table's width, not the band's.** They are one
+exhibit — one transaction this boundary was built to permit and six it refused,
+making a single argument — and that reads as one thing only if it looks like
+one, which means sharing both edges rather than only the left. The panel was
+stretching while the table stopped at the sum of its columns: 286px apart at
+1440. Content-hugging was the alternative and was declined, because it leaves
+the band with three different right edges — prose at `.measure`, panel at 663,
+table at 1074 — and left alignment makes differing right edges acceptable, not
+free. One `Exhibit` container, `w-max` so the table sizes it and `max-w-full` so
+it stays bounded by the band, with the table scrolling inside its own box below
+the sum. Measured at 1440/1280/1024/768/390: edges shared at every width,
+1074/1074 down to 342/342, verdict still 136, zero document overflow.
+
+Nothing in the CSS enforces the one thing the arrangement needs — that the table
+is the widest child — so `e2e/viewports.spec.ts` measures it. Both of that
+test's selectors were wrong first and both were found by making it fail on
+purpose rather than by reading it: `div.w-max` also matches the table's own box,
+so deleting the container would have had the test compare the table to itself
+and pass green.
+
 Motion stays exactly as step 7 left it. No new animation. `design-system.test.ts`
 forbids `@keyframes` outright and that does not change.
 
@@ -579,6 +601,18 @@ These are open and stay open until closed properly.
   fails without the fix, in `e2e/` rather than the Node suite, because a control
   that fails to disable is invisible to a suite that reads source. Landed after
   §3, so the landing is not interrupted mid-page.
+
+  **Closed.** `e2e/funding-control.spec.ts`, three tests, all three failing
+  against the commit before the fix: the control never disables, the row stays
+  at `idle` for the length of the call, and a second click reaches friendbot
+  twice. The submission/not-a-submission split is kept — friendbot is still not
+  a transaction this application built and signed — but `note` becomes `track`,
+  which takes the same ref guard, `running` entry and `busy` as `run` and
+  differs only in who builds the outcome. Both now go through one `perform`;
+  two copies of that path is how the fault existed at all. The test holds the
+  request open rather than delaying it by a timer, so the in-flight window is
+  bounded by its own assertions rather than by the clock, and it is hermetic —
+  friendbot is intercepted, no testnet funds are spent.
 
 - **Session fragility.** Commit at every completed step, not at the end of a work
   block. This project has lost sessions to usage limits, a dead battery and a
