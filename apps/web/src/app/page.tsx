@@ -393,26 +393,26 @@ export default function Home() {
           <h3 className="scene-h3 text-foreground">What this is not, stated plainly</h3>
           <ul className="flex flex-col gap-2.5 text-[14px] leading-relaxed text-muted measure-scene">
             <li>
-              <span className="value text-foreground">Testnet only.</span> Every address and hash on
+              <span className="value text-foreground">Testnet only.</span>{' '}Every address and hash on
               this site is Stellar testnet. No real funds are involved anywhere.
             </li>
             <li>
-              <span className="value text-foreground">Not audited.</span> The OpenZeppelin contracts
+              <span className="value text-foreground">Not audited.</span>{' '}The OpenZeppelin contracts
               Limen installs are audited. The code that decides what to install is not, and no third
               party has reviewed it.
             </li>
             <li>
-              <span className="value text-foreground">Composition only.</span> Every policy is a
+              <span className="value text-foreground">Composition only.</span>{' '}Every policy is a
               configuration of an existing primitive. {EVIDENCE.chain.rustSourceFiles} lines of Rust
               are generated, which is the claim as a number rather than as a promise.
             </li>
             <li>
-              <span className="value text-foreground">No custody.</span> No key of yours reaches a
+              <span className="value text-foreground">No custody.</span>{' '}No key of yours reaches a
               Limen server, an environment variable, or a log line. Any key that can move funds here
               was generated in your browser and stays in it.
             </li>
             <li>
-              <span className="value text-foreground">Single-transaction derivation.</span> A
+              <span className="value text-foreground">Single-transaction derivation.</span>{' '}A
               boundary is derived from one observed transaction. Deriving from a set of them, and
               arguing about what their union should permit, is not built.
             </li>
@@ -438,7 +438,7 @@ export default function Home() {
           <StatusLabels names={['OPEN SOURCE', 'MIT', 'IN DEVELOPMENT', 'TESTNET ONLY']} />
           <p className="text-[12.5px] leading-relaxed text-muted-dim measure">
             Every figure on this site is read from{' '}
-            <span className="value">deployments/testnet.json</span> or from a generated evidence
+            <span className="value">deployments/testnet.json</span>{' '}or from a generated evidence
             file, and a check fails the build when either drifts. Nothing on this page is typed by
             hand.
           </p>

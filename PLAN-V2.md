@@ -1,4 +1,4 @@
-# Limen V2 — from fixture demo to working MVP
+g# Limen V2 — from fixture demo to working MVP
 
 Status: **implemented 2026-08-02.** All four decisions resolved — see §8.
 

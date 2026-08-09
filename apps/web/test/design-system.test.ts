@@ -209,6 +209,55 @@ describe('the reveal fails visible', () => {
   });
 });
 
+describe('prose does not lose the space beside an inline value', () => {
+  /**
+   * A word joined to the value before it, in rendered output, from source that
+   * looks correct.
+   *
+   * JSX drops the leading whitespace of a text node when that node runs on past
+   * a newline. So this source:
+   *
+   *     The network invokes <span className="value">__check_auth</span> on the
+   *     smart account, and the account's own code decides.
+   *
+   * renders as `__check_authon the smart account`. The space is there in the
+   * file, on the same line as the tag, and it is gone in the HTML.
+   *
+   * This is the worst kind of defect this project can ship: it is invisible in
+   * a diff, invisible in review, survives every type check and every build, and
+   * lands in the one register the page uses for values a reader is meant to
+   * copy — a contract address welded to the next word. Twenty-three instances
+   * existed across the site and the docs when it was first noticed, all from
+   * the same writing habit, and the only reason any of them were found is that
+   * somebody looked at a screenshot.
+   *
+   * The fix at each site is an explicit `{' '}`. The rule here is what stops the
+   * habit coming back, and it is deliberately narrow: it fires only when a text
+   * run both begins immediately after an inline closing tag *and* continues past
+   * a line break, which is exactly the shape that loses the space. A tag
+   * followed by text that stays on one line is fine and is not flagged.
+   */
+  const INLINE_CLOSE = /<\/(?:span|code|em|strong|a|Link|ExplorerLink|Address|TxHash)>[ \t]+(?=[A-Za-z(])/g;
+
+  const offenders = tsx.flatMap(([path, source]) =>
+    [...source.matchAll(INLINE_CLOSE)].flatMap((match) => {
+      const after = source.slice(match.index + match[0].length);
+      const nextMarkup = after.search(/[<{]/);
+      const run = nextMarkup === -1 ? after : after.slice(0, nextMarkup);
+      if (!run.includes('\n')) return [];
+      const line = source.slice(0, match.index).split('\n').length;
+      return [`${path}:${line}`];
+    }),
+  );
+
+  it('never relies on a literal space that JSX will swallow', () => {
+    expect(
+      offenders,
+      `these will render with the space missing — use {' '} instead:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
 describe('the grid is a token set, not a judgement call', () => {
   const tokens = ['--col-addr', '--col-hash', '--col-amount', '--col-ledger', '--col-verdict', '--col-label', '--col-signer', '--col-error'];
 
@@ -319,18 +368,36 @@ describe('a fact is stated in one place', () => {
     }
   });
 
-  it('gives every page one of the two shells', () => {
+  it('gives every page one of the two shells, itself or through a layout', () => {
     // V5 required `.screen` on every page including the landing, on the
     // argument that a reader should not feel the application resize itself.
     // V6 keeps the argument and widens it by exactly one: a page is either the
     // instrument or the argument, and nothing is allowed to be neither. A page
     // that invents its own width is the failure both shells exist to prevent.
+    //
+    // A page may satisfy this through an enclosing layout rather than directly,
+    // which is how `/docs` works — four pages sharing one `.screen` and one
+    // sidebar. Requiring the shell on the page itself would have forced four
+    // copies of the shell, which is the duplication the rule exists to stop.
+    const shell = (source: string) =>
+      /className="(?:screen|scene)"/.test(source) || source.includes('<Scene');
+
+    /** Layout sources enclosing a page, nearest first. */
+    function enclosing(path: string): string[] {
+      const parts = path.split('/');
+      const layouts: string[] = [];
+      for (let i = parts.length - 1; i > 0; i--) {
+        const candidate = [...parts.slice(0, i), 'layout.tsx'].join('/');
+        const found = tsx.find(([other]) => other === candidate);
+        if (found !== undefined) layouts.push(found[1]);
+      }
+      return layouts;
+    }
+
     for (const [path, source] of tsx) {
       if (!path.endsWith('/page.tsx')) continue;
-      expect(
-        /className="(?:screen|scene)"/.test(source) || source.includes('<Scene'),
-        `${path} uses neither shell`,
-      ).toBe(true);
+      const satisfied = shell(source) || enclosing(path).some(shell);
+      expect(satisfied, `${path} uses neither shell, and no layout above it does`).toBe(true);
     }
   });
 });
