@@ -81,11 +81,19 @@ export function NewAccountScreen() {
 
   const fund = async (role: 'OWNER' | 'AGENT', publicKey: string) => {
     const what = `Friendbot funding the ${role === 'OWNER' ? 'owner' : 'agent'}’s classic account`;
-    const result = await fundFromFriendbot(publicKey);
 
-    log.note(
-      `fund:${role}`,
-      result.ok
+    // `track`, not `note`. Friendbot is still not a submission — nothing here
+    // is built or signed by this application, and the outcome is assembled
+    // below rather than converted from a submit result — but it is a call that
+    // takes a second, and the control has to be shut for the length of it. It
+    // was not: `note` recorded a finished outcome, so `busy` never went up, the
+    // button stayed live through its own call, and a second click bought a
+    // second friendbot request that answers "already exists" and is reported as
+    // success. `e2e/funding-control.spec.ts` holds the request open and clicks
+    // again.
+    await log.track(`fund:${role}`, what, async () => {
+      const result = await fundFromFriendbot(publicKey);
+      return result.ok
         ? {
             status: 'onLedger',
             what,
@@ -98,8 +106,8 @@ export function NewAccountScreen() {
             opResult: 'friendbot',
             ledgerStatus: 'SUCCESS',
           }
-        : { status: 'failed', what, stage: 'submit', message: result.message, code: null },
-    );
+        : { status: 'failed', what, stage: 'submit', message: result.message, code: null };
+    });
   };
 
   const deploy = async () => {
