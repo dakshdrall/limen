@@ -42,7 +42,12 @@ describe('the sidebar is a map of pages that exist', () => {
   it('lists every documentation page that exists, so none is unreachable', () => {
     // The other direction. A page nobody links to is a page nobody reads, and
     // it will drift because nothing brings a reader to it.
-    const routed = new Set(PAGES.map(([, path]) => path));
+    // `Set<string>` explicitly. `PAGES` carries Next's typed-route shape —
+    // `app/${string}/page.tsx` — and `found` below is built by walking the
+    // filesystem, so it is plain `string`. Left inferred, `routed` narrows to
+    // the template literal and `routed.has(path)` is a type error: the check
+    // this test exists to make cannot be expressed against the values it has.
+    const routed = new Set<string>(PAGES.map(([, path]) => path));
     const found: string[] = [];
 
     function walk(dir: string) {
