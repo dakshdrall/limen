@@ -591,4 +591,32 @@ describe('accessibility is a constraint, not a pass', () => {
     expect(declarations).not.toMatch(/animation-name\s*:/);
     expect(declarations).not.toMatch(/\banimation\s*:(?!\s*none)/);
   });
+
+  it('does not let a utility class smuggle a keyframe loop past the stylesheet', () => {
+    // The case above reads `globals.css`, and for four versions that was the
+    // whole surface. It is not: Tailwind's `animate-*` utilities generate their
+    // own `@keyframes` into the compiled output, so a component could — and one
+    // did — ship a loop the rule never saw.
+    //
+    // `ScreenState`'s pending marker carried `animate-pulse` from V4 until the
+    // V6 rebuild. It pulsed at the same rate whether the read was in flight, had
+    // died in a dropped connection, or had resolved into a component that failed
+    // to re-render: motion running on its own authority, which is this
+    // project's definition of decoration, in the one place a reader is actually
+    // waiting on the signal.
+    //
+    // Scoped to `animate-` rather than to the word "animation" so a comment
+    // explaining the rule does not fail it, and so `transition-*` — which is
+    // exactly what this system does permit — is untouched.
+    const offenders = tsx.flatMap(([path, source]) => {
+      const markup = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      return [...markup.matchAll(/\banimate-\[?[\w.-]+/g)].map(
+        ([match]) => `${path}: ${match}`,
+      );
+    });
+    expect(
+      offenders,
+      `these ship a keyframe loop through a utility class:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
 });
