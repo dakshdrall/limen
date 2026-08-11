@@ -1,19 +1,38 @@
 #!/usr/bin/env node
 /**
- * The landing's product screenshots, generated rather than taken.
+ * Product screenshots, generated rather than taken.
  *
- * PLAN-V5 §3.1. The landing needs images of the product, and the obvious way to
+ * PLAN-V5 §3.1. The landing needed images of the product, and the obvious way to
  * get them is to open the app, crop a window, and commit the PNG. Do that and
  * every hash in those images is frozen at the moment somebody pressed the
  * shutter — while the hashes themselves are read at build time from
  * `deployments/testnet.json`, which changes whenever a script runs. The page's
  * text stays honest automatically and its pictures quietly stop matching it.
  *
- * That is the one place `caveats.test.ts` cannot reach. A stale sentence is a
- * red build; a stale screenshot is a picture of a transaction that is no longer
- * this project's, and nobody would think to check it. So the images are output,
- * not input: this script produces them, `--check` fails when they have drifted,
- * and regenerating is a rerun rather than an afternoon in a screenshot tool.
+ * A stale sentence was a red build; a stale screenshot is a picture of a
+ * transaction that is no longer this project's, and nobody would think to check
+ * it. So the images are output, not input: this script produces them, `--check`
+ * fails when they have drifted, and regenerating is a rerun rather than an
+ * afternoon in a screenshot tool.
+ *
+ * ## Nothing renders these today, and that is a decision waiting to be taken
+ *
+ * PLAN-V6 step 5 rebuilt the four screens below, so the manifest points at real
+ * routes again and `--check` passes against them. What it does not do is put the
+ * images back on a page: the V5 landing that imported them is gone, the V6
+ * narrative argues in live markup and inline SVG, and `grep` finds no consumer
+ * of `public/shots` anywhere in `src/`.
+ *
+ * The check is deliberately kept rather than deleted with its consumer, because
+ * it still proves two things nothing else does: that the app screens render the
+ * values in `deployments/testnet.json` rather than values of their own, and —
+ * through `assertNothingScrolls` — that no table on them loses a column at 900px.
+ * Both are properties of the application, not of the page that used to show it.
+ *
+ * But "generated images with no reader" is not a resting state. Either the
+ * narrative gains a place for them or they go, and that is a design call rather
+ * than a script's to make. Until it is taken, this file says which it is instead
+ * of implying a consumer it no longer has.
  *
  * ## What may be photographed, and what may not
  *
@@ -587,8 +606,12 @@ try {
     for (const shot of SHOTS) {
       const { name } = shot;
       // The image is still required to be present, even though it is no longer
-      // compared: the landing imports it, and a sidecar with no PNG beside it
-      // would pass this check and fail the build.
+      // compared. It used to be required because the landing imported it and a
+      // sidecar with no PNG beside it would pass this check and fail the build;
+      // no page imports one today. It stays required because a sidecar is a
+      // description of an image, and one with nothing to describe is a text
+      // fixture wearing a screenshot's name — the check would go on passing
+      // while the artefact it exists for had quietly stopped being produced.
       if (!existsSync(join(OUT, `${name}.png`))) {
         drifted.push(`${name} (image never committed)`);
         continue;

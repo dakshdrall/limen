@@ -4,18 +4,32 @@
 
 ## Status
 
-Steps 1 through 4 are committed on `v5-product`, pushed, at `f187ce8` — scaffold,
-design system, the six-scene narrative, and `/docs`. 358 tests pass across 21
-files; the build emits all 15 routes. `mark:check` is current. `evidence:check`
-fails because `evidence.json` still claims the pre-rebuild counts — left until
-step 5 changes them again rather than regenerating twice.
-
-Steps 5 and 6 remain: rebuild `/app/*`, then re-point the screenshot script and
-the evidence generator.
+**All six steps are committed on `v5-product` and pushed.** 425 tests pass across
+24 files; `tsc`, lint, `evidence:check`, `mark:check` and `shots:check` are all
+green, and the build emits 21 routes. `git diff` against `packages/` is empty.
 
 The branch label under-describes its contents: this is V6 work on a branch named
 for V5. That is deliberate for now. A rename, if wanted, comes after the rebuild
 is green and as its own thing.
+
+### Open, and deliberately not closed inside the rebuild
+
+- **The generated screenshots have no reader.** `public/shots` holds four images
+  and their sidecars, `shots:check` passes against the rebuilt screens, and
+  nothing in `src/` renders them — the V5 landing that imported them is gone and
+  the V6 narrative argues in live markup and inline SVG. Either the narrative
+  gains a place for them or they go; it is a design call, and the script says so
+  in its own header rather than implying a consumer it no longer has.
+- **`e2e/viewports.spec.ts` still expects the V5 landing's exhibit.** Five of its
+  cases locate `[data-exhibit]` inside `#evidence` on `/`, a container step 3
+  removed with the landing. The e2e suite is not in CI — every run spends testnet
+  funds, so the workflow deliberately omits it — which is why this has stayed
+  invisible. The three other specs target `/app` routes and should pass again now
+  that step 5 has rebuilt them.
+- **`PolicyTable` and `ObservedSection` carry inline column widths.** `w-[13rem]`
+  and friends, where the column tokens exist so a width is stated once. Left as
+  its own commit with its own before-and-after, because converting them shifts
+  rendered widths and `shots:check` now pins those widths as evidence.
 
 ## What survives, and this is not negotiable
 
@@ -153,8 +167,11 @@ conceptually.
 3. **Done** — `d456cdd`. `/` — the narrative, scene by scene, committed per
    scene.
 4. **Done** — `f187ce8`. `/docs`.
-5. **Remaining.** `/app/*` — the product screens, rebuilt.
-6. **Remaining.** The screenshot script and the evidence generator, re-pointed.
+5. **Done** — `45effce`, `e36e9b3`, `ba5b888`. `/app/*` — the product screens,
+   rebuilt, committed in three parts: the accounts screens and the primitives
+   under them, the policy screens with the agent run, then activity and the
+   simulator.
+6. **Done.** The screenshot script and the evidence generator, re-pointed.
 
 Commit at every completed step.
 

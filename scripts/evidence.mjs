@@ -49,7 +49,16 @@ const MANIFEST = join(root, 'packages/chain/src/wasm/manifest.json');
 const SUITES = [
   { workspace: '@limen/core', directory: 'packages/core', covers: 'synthesis and the deny-case harness' },
   { workspace: '@limen/chain', directory: 'packages/chain', covers: 'lowering, refusal decoding, and the auth encoding' },
-  { workspace: '@limen/web', directory: 'apps/web', covers: 'extraction, ingest refusals, caveats, and the design system' },
+  // `covers` named `caveats` until the V6 rebuild. `caveats.test.ts` was one of
+  // the four suites step 1 deleted with the rendering layer — it pinned
+  // sentences on a landing page that no longer exists — so the description
+  // outlived the thing it described. It is rendered on the site, which makes it
+  // a claim rather than a comment.
+  {
+    workspace: '@limen/web',
+    directory: 'apps/web',
+    covers: 'extraction, ingest refusals, the design system, and the documentation',
+  },
 ];
 
 const checkOnly = process.argv.includes('--check');
