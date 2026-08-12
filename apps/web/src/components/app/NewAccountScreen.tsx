@@ -6,13 +6,9 @@ import { Address } from '@/components/Address';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
 import { Section } from '@/components/Section';
-import { StatusLabel, LOCAL_KEY_LABEL } from '@/components/StatusLabel';
-import {
-  ACCOUNT_WASM_HASH,
-  ED25519_VERIFIER,
-  RPC_URL,
-  WASM_SOURCE,
-} from '@/lib/chain-config';
+import { StatusLabel } from '@/components/StatusLabel';
+import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
+import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, RPC_URL, WASM_SOURCE } from '@/lib/chain-config';
 import { fundFromFriendbot, loadChain } from '@/lib/chain-write';
 import { NOT_EXPORTABLE } from '@/lib/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
@@ -35,16 +31,16 @@ import { useWriteLog } from '@/lib/use-write';
  *
  * PLAN-V4 gate G4, answered against the wallet path. A connected wallet could
  * only ever be a `Delegated` signer, whose nested authorization requirement is
- * raised from inside `__check_auth` and is undiscoverable from either
- * simulation — measured, not assumed. The fallback of connecting a wallet for
- * identity while this browser's key stays the real owner was declined too:
- * someone who connects a wallet has told you what they believe is about to
- * happen, and a caption correcting them is worse than never offering it.
+ * raised from inside `__check_auth` and is undiscoverable from either simulation
+ * — measured, not assumed. The fallback of connecting a wallet for identity
+ * while this browser's key stays the real owner was declined too: someone who
+ * connects a wallet has told you what they believe is about to happen, and a
+ * caption correcting them is worse than never offering it.
  *
  * So there is one owner path, the screen states which key owns the account at
  * the moment it is created, and `NO CUSTODY` is not claimed on this screen at
- * all — because it would not be true here. This key can move funds. That is
- * what it is for.
+ * all — because it would not be true here. This key can move funds. That is what
+ * it is for.
  *
  * ## Two keys, and the fence that makes it a mechanism
  *
@@ -81,11 +77,19 @@ export function NewAccountScreen() {
 
   const fund = async (role: 'OWNER' | 'AGENT', publicKey: string) => {
     const what = `Friendbot funding the ${role === 'OWNER' ? 'owner' : 'agent'}’s classic account`;
-    const result = await fundFromFriendbot(publicKey);
 
-    log.note(
-      `fund:${role}`,
-      result.ok
+    // `track`, not `note`. Friendbot is still not a submission — nothing here
+    // is built or signed by this application, and the outcome is assembled
+    // below rather than converted from a submit result — but it is a call that
+    // takes a second, and the control has to be shut for the length of it. It
+    // was not: `note` recorded a finished outcome, so `busy` never went up, the
+    // button stayed live through its own call, and a second click bought a
+    // second friendbot request that answers "already exists" and is reported as
+    // success. `e2e/funding-control.spec.ts` holds the request open and clicks
+    // again.
+    await log.track(`fund:${role}`, what, async () => {
+      const result = await fundFromFriendbot(publicKey);
+      return result.ok
         ? {
             status: 'onLedger',
             what,
@@ -98,8 +102,8 @@ export function NewAccountScreen() {
             opResult: 'friendbot',
             ledgerStatus: 'SUCCESS',
           }
-        : { status: 'failed', what, stage: 'submit', message: result.message, code: null },
-    );
+        : { status: 'failed', what, stage: 'submit', message: result.message, code: null };
+    });
   };
 
   const deploy = async () => {
@@ -253,10 +257,10 @@ export function NewAccountScreen() {
               <StatusLabel name="COMPOSITION ONLY" />
             </div>
             <p className="measure text-[13px] leading-relaxed text-foreground/90">
-              The account contract is OpenZeppelin&rsquo;s multisig smart account example, built from{' '}
-              <span className="value">{WASM_SOURCE.tag}</span> and already on testnet. Limen writes
-              no Rust and generates none. What is not audited is the code that decides what to
-              install.
+              The account contract is OpenZeppelin&rsquo;s multisig smart account example, built
+              from <span className="value">{WASM_SOURCE.tag}</span>{' '}
+              and already on testnet. Limen writes no Rust and generates none. What is not audited
+              is the code that decides what to install.
             </p>
             <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[12.5px]">
               {/* `min-w-0`: the `scroll-x` on the value below cannot do
@@ -278,7 +282,11 @@ export function NewAccountScreen() {
             </dl>
 
             {haveKeys && (
-              <div className="flex flex-col gap-2 border-t border-border-faint pt-4">
+              // `border-border-subtle`. See `AccountWriteSteps`: this divider
+              // asked for `border-border-faint`, which is not a token this
+              // palette has ever defined, so it emitted nothing and the rule was
+              // never drawn.
+              <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
                 <p className="text-[12.5px] leading-relaxed text-muted">
                   This account will be owned by the key below, and by no other. It is fixed at
                   creation.

@@ -10,10 +10,10 @@ import { decimalise, ledgersToDuration } from '@/lib/format';
  *
  * This is the strictest table in the application. `validFromLedger` has no
  * on-chain counterpart (plan §2.3) and every derived rationale line is this
- * repository's reasoning rather than the network's — so neither appears here,
- * at any size, in any colour. The install summary shows the fields that go to
- * the chain and nothing more, because a user reviewing a boundary is entitled
- * to assume that what they are reading is what will be enforced.
+ * repository's reasoning rather than the network's — so neither appears here, at
+ * any size, in any colour. The install summary shows the fields that go to the
+ * chain and nothing more, because a user reviewing a boundary is entitled to
+ * assume that what they are reading is what will be enforced.
  *
  * The `notes` block sits outside the table for the same reason: it is the
  * lowering explaining itself, which is useful and is not part of the write.
@@ -24,8 +24,8 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
       <div className="flex flex-wrap items-center gap-3">
         <StatusLabel name="COMPOSITION ONLY" />
         <p className="text-[12.5px] text-muted-dim">
-          {plan.rules.length === 1 ? 'One context rule' : `${plan.rules.length} context rules`}, each a
-          configuration of an audited OpenZeppelin primitive.
+          {plan.rules.length === 1 ? 'One context rule' : `${plan.rules.length} context rules`}, each
+          a configuration of an audited OpenZeppelin primitive.
         </p>
       </div>
 
@@ -55,7 +55,9 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
                         <Address value={rule.contract} />
                       </td>
                       <td className="num">
-                        {rule.validUntilLedger === null ? '—' : rule.validUntilLedger.toLocaleString('en-US')}
+                        {rule.validUntilLedger === null
+                          ? '—'
+                          : rule.validUntilLedger.toLocaleString('en-US')}
                       </td>
                       <td colSpan={3} className="text-[12.5px] text-unproven">
                         no policy — this rule would authorize its context unbounded
@@ -65,7 +67,9 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
                 : rule.policies.map((policy, index) => (
                     <tr key={`${rule.name}-${policy.asset}-${index}`}>
                       <td className="value">{index === 0 ? rule.name : ''}</td>
-                      <td className="col-addr">{index === 0 ? <Address value={rule.contract} /> : null}</td>
+                      <td className="col-addr">
+                        {index === 0 ? <Address value={rule.contract} /> : null}
+                      </td>
                       <td className="num">
                         {index === 0
                           ? rule.validUntilLedger === null
@@ -97,7 +101,10 @@ export function InstallPlanTable({ plan }: { plan: InstallPlan }) {
               // document sideways and takes every screen that renders a plan
               // with it. Measured at 390px, where it was the whole of the
               // overflow on `/app/policies/new`.
-              <li key={note} className="measure text-[12.5px] leading-relaxed break-words text-muted">
+              <li
+                key={note}
+                className="measure text-[12.5px] leading-relaxed break-words text-muted"
+              >
                 {note}
               </li>
             ))}

@@ -97,8 +97,8 @@ export default async function SimulatorPage() {
         The demo account is disposable and holds trivial funds; it is rate-limited and its
         compromise is uninteresting by design. Steps 3 through 6 run entirely in your browser using
         the same <span className="value">@limen/core</span> and{' '}
-        <span className="value">@limen/chain</span> packages the test suite runs — the page executes
-        exactly the code CI gates on.
+        <span className="value">@limen/chain</span>{' '}
+        packages the test suite runs — the page executes exactly the code CI gates on.
       </footer>
     </main>
   );

@@ -14,11 +14,11 @@ export type BeatKind = 'on-chain' | 'computed' | 'shipped';
  * what it claims next.
  *
  * `shipped` is the third case and it is not a shade of the first. Beats 1 and 2
- * are on-chain when the simulator performs a transaction and reads it back;
- * they are `shipped` when the reviewer starts from a fixture instead, which is
- * the path anyone without a configured demo account takes. A fixed `on-chain`
- * badge over a fixture would be the single most flattering mislabel available
- * on this page, so the kind is passed per render rather than declared once.
+ * are on-chain when the simulator performs a transaction and reads it back; they
+ * are `shipped` when the reviewer starts from a fixture instead, which is the
+ * path anyone without a configured demo account takes. A fixed `on-chain` badge
+ * over a fixture would be the single most flattering mislabel available on this
+ * page, so the kind is passed per render rather than declared once.
  */
 export function Beat({
   index,
@@ -71,7 +71,9 @@ export function Beat({
             <div
               role="alert"
               className={`flex flex-col gap-1.5 rounded-[5px] border px-4 py-3 ${
-                isRefusal ? 'border-deny-line bg-deny-dim/40' : 'border-border-bright bg-surface-raised'
+                isRefusal
+                  ? 'border-deny-line bg-deny-dim/40'
+                  : 'border-border-bright bg-surface-raised'
               }`}
             >
               <div className="flex flex-wrap items-baseline gap-x-3">
@@ -80,11 +82,9 @@ export function Beat({
                 </span>
                 <span className="value text-muted-dim">{error.code}</span>
               </div>
-              <p className="measure text-[13px] leading-relaxed text-foreground">
-                {error.message}
-              </p>
+              <p className="measure text-[13px] leading-relaxed text-foreground">{error.message}</p>
               {error.detail !== undefined && error.detail.length > 0 && (
-                <p className="value measure break-words text-[12px] text-faint">{error.detail}</p>
+                <p className="value measure text-[12px] break-words text-faint">{error.detail}</p>
               )}
             </div>
           )}

@@ -5,7 +5,8 @@ import { looksLikeContractAddress } from '@/lib/account-contract';
 
 export const metadata = {
   title: 'Limen — account',
-  description: 'The permission boundary installed on one smart account, read live from Stellar testnet.',
+  description:
+    'The permission boundary installed on one smart account, read live from Stellar testnet.',
 };
 
 /**
@@ -31,8 +32,9 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
         <div className="panel" data-tone="refused">
           <span className="eyebrow text-deny">not an address</span>
           <p className="measure text-[13px] leading-relaxed text-foreground/90">
-            A smart account address is 56 characters and starts with <span className="value">C</span>.
-            The value in this URL is not that shape, so there is nothing to read.
+            A smart account address is 56 characters and starts with{' '}
+            <span className="value">C</span>. The value in this URL is not that shape, so there is
+            nothing to read.
           </p>
           <Link href="/app/accounts" className="link self-start text-[12.5px]">
             All accounts

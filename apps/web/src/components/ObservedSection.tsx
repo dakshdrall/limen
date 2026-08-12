@@ -1,11 +1,11 @@
 'use client';
 
 import type { ObservedTransaction } from '@limen/core';
-import { Address } from './Address';
-import { decimalise } from '@/lib/format';
-import { UNREADABLE_ARG } from '@/lib/markers';
+import { Address } from '@/components/Address';
 import { ExplorerLink } from '@/components/ExplorerLink';
+import { decimalise } from '@/lib/format';
 import { explorerTxUrl } from '@/lib/explorer';
+import { UNREADABLE_ARG } from '@/lib/markers';
 
 export function ObservedSection({ observed }: { observed: ObservedTransaction }) {
   const explorer = explorerTxUrl(observed);
@@ -95,9 +95,7 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
                             // Marked, not silently rendered as a value. Arguments
                             // are presentational — no policy reads them — so an
                             // unreadable one is labelled rather than fatal.
-                            <span className="text-muted-dim italic">
-                              unreadable argument
-                            </span>
+                            <span className="text-muted-dim italic">unreadable argument</span>
                           ) : (
                             <span className="break-all">{arg}</span>
                           )}
@@ -172,9 +170,9 @@ function Movements({ observed }: { observed: ObservedTransaction }) {
 
       <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
         Amounts are integers in the asset&apos;s smallest unit; the parenthesised value is a display
-        rendering only. Only <span className="font-mono text-deny">OUT</span> movements — those
-        leaving the source account — contribute to a derived cap, and they are summed gross: an
-        inflow of the same asset is never subtracted.
+        rendering only. Only <span className="font-mono text-deny">OUT</span>{' '}
+        movements — those leaving the source account — contribute to a derived cap, and they are
+        summed gross: an inflow of the same asset is never subtracted.
       </p>
     </div>
   );

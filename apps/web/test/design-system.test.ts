@@ -5,23 +5,46 @@
  * What they catch is the specific class of regression that is invisible in
  * review and fatal to the system: a font fallback stack creeping back in, a
  * table inventing its own column width, a fourth verdict colour, a verdict
- * that stops being legible in greyscale.
+ * that stops being legible in greyscale, a scroll reveal that ships a blank
+ * page to anyone whose JavaScript is slow.
  *
  * The brief calls these non-negotiables. A non-negotiable with no test is a
  * preference.
+ *
+ * ## What PLAN-V6 changed here
+ *
+ * Most of this file is carried across unchanged, because most of it pins
+ * properties of the system rather than properties of the page that happened to
+ * use it — the palette agreement, the column tokens, the greyscale rule, the
+ * keyframe ban.
+ *
+ * What is new is the motion contract in `the reveal fails visible`, which is
+ * the one genuinely new primitive V6 introduces and the one with a failure mode
+ * bad enough to deserve four cases of its own.
+ *
+ * What is deferred is anything naming a component that has not been rebuilt
+ * yet. Those cases are guarded on the file existing and assert the guard, so a
+ * deferred check is visible rather than silently absent — the same argument
+ * `local-key-label.test.ts` makes about tripwires that match nothing.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { MARK_RECTS } from '../src/lib/mark';
+import { THEME } from '../src/lib/theme';
 
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(src(relative), 'utf8');
+const present = (relative: string) => existsSync(src(relative));
 
 const css = read('app/globals.css');
 const layout = read('app/layout.tsx');
 const verdict = read('components/Verdict.tsx');
-const topBar = read('components/TopBar.tsx');
+const reveal = read('components/Reveal.tsx');
+
+/** `globals.css` with comments removed, for rules that forbid a construct the file documents. */
+const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 /** Every `.tsx` under `src/`, as `[path relative to src, contents]`. */
 function sources(dir = ''): [string, string][] {
@@ -71,6 +94,170 @@ describe('numerals', () => {
   });
 });
 
+describe('two rhythms, one grid', () => {
+  // The V6 change, stated as a property rather than as a look.
+  //
+  // The site gets air and the app stays dense, and the risk in splitting them
+  // is that they drift into two layout systems with two sets of bugs. They
+  // share the grid technique — which is what the no-sideways-scroll guarantee
+  // is proved against — and differ only in spacing and type size.
+
+  it('gives the instrument and the argument their own spacing scales', () => {
+    expect(declarations).toMatch(/--screen-gap:/);
+    expect(declarations).toMatch(/--scene-gap:/);
+    expect(declarations).toMatch(/--scene-pad:/);
+  });
+
+  it('builds both shells from the same named grid lines', () => {
+    // A second grid technique is a second place for the break-out bug below to
+    // reappear, and only one of them would have a test.
+    for (const shell of ['.screen', '.scene']) {
+      const block = new RegExp(`\\${shell}\\s*\\{[^}]*\\}`, 's').exec(declarations)?.[0] ?? '';
+      expect(block, `${shell} does not define the full/content grid`).toContain('[full-start]');
+      expect(block, `${shell} does not define the content column`).toContain('[content-start]');
+    }
+  });
+
+  it('lets both shells hold a full-bleed band', () => {
+    expect(declarations).toMatch(/\.screen\s*>\s*\.bleed/);
+    expect(declarations).toMatch(/\.scene\s*>\s*\.bleed/);
+  });
+
+  it('keeps the base size at the instrument’s density, so the app pays nothing', () => {
+    // The narrative raises its own size. Raising `body` instead would have made
+    // every table, label and column token in the application a size it was not
+    // designed at, which is the change that looks smallest and breaks most.
+    const body = /body\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+    expect(body).toContain('font-size: 13.5px');
+    expect(/\.scene\s*\{[^}]*\}/s.exec(declarations)?.[0] ?? '').toMatch(/font-size:\s*16\.5px/);
+  });
+
+  it('gives narrative prose its own measure', () => {
+    // 78ch at 16.5px is a 1290px line. The app's measure is correct at the
+    // app's size and wrong at this one.
+    expect(declarations).toMatch(/--measure-scene:/);
+  });
+});
+
+describe('the reveal fails visible', () => {
+  // The one new primitive in V6, and the one whose failure mode is worst.
+  //
+  // The natural way to write a scroll reveal is `opacity: 0` in the stylesheet
+  // and `opacity: 1` once an observer fires. That page is blank until
+  // JavaScript runs — so a slow connection, a parse error, a stripped bundle or
+  // a crawler all get a site with no content on it. PLAN-V6 requires the page
+  // be usable with JavaScript slow, and blank is the opposite of usable.
+  //
+  // These four cases are what make "fails visible" a property rather than an
+  // intention.
+
+  it('declares no hidden state on the class itself', () => {
+    // The whole guarantee. `.reveal` unqualified must not touch opacity or
+    // transform: an element that is never armed is an element at its final
+    // position.
+    const bare = /\.reveal\s*\{([^}]*)\}/.exec(declarations)?.[1] ?? '';
+    expect(bare, '.reveal was not found in globals.css').not.toBe('');
+    expect(bare).not.toMatch(/opacity/);
+    expect(bare).not.toMatch(/transform/);
+  });
+
+  it('hides only what an attribute has armed', () => {
+    // Every hidden state is behind `[data-reveal='out']`, which only the
+    // component sets, and which it only sets once it can bring the element back.
+    const hidden = [...declarations.matchAll(/([^{}]*)\{[^}]*opacity:\s*0[;\s}]/g)].map(([, sel]) =>
+      sel.trim(),
+    );
+    for (const selector of hidden) {
+      if (!selector.includes('.reveal')) continue;
+      expect(selector, `${selector} hides a reveal without requiring the armed attribute`).toContain(
+        "data-reveal='out'",
+      );
+    }
+  });
+
+  it('renders the same page under reduced motion — present, and still', () => {
+    // Not a degraded page. Content at final position, no transition.
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n  \}/.exec(
+      declarations.slice(declarations.indexOf('.reveal')),
+    )?.[1];
+    expect(reduced, 'no reduced-motion block follows the reveal rules').toBeDefined();
+    expect(reduced).toContain('opacity: 1');
+    expect(reduced).toContain('transform: none');
+  });
+
+  it('declines to arm when it cannot observe or must not move', () => {
+    // The component's half of the same contract. A reveal that cannot observe
+    // is a reveal that must not hide, and reduced motion is checked in script
+    // as well as in CSS so the attribute is normally never set at all.
+    expect(reveal).toContain("typeof IntersectionObserver === 'undefined'");
+    expect(reveal).toContain('prefers-reduced-motion: reduce');
+    // Arming is a state change after mount, never a render-time decision — a
+    // server-rendered `data-reveal` would put the blank page back.
+    expect(reveal).toMatch(/useState\(false\)/);
+  });
+
+  it('moves only what compositing can move', () => {
+    // A scene that animates height or top costs layout on every frame of a
+    // scroll. Transform and opacity are the two properties that do not.
+    const armed = declarations.slice(declarations.indexOf(".reveal[data-reveal='out']"));
+    const transitioned = /transition:\s*([^;]*);/.exec(armed)?.[1] ?? '';
+    expect(transitioned).toContain('opacity');
+    expect(transitioned).toContain('transform');
+    for (const expensive of ['height', 'width', 'top', 'left', 'margin']) {
+      expect(transitioned, `the reveal transitions ${expensive}`).not.toContain(expensive);
+    }
+  });
+});
+
+describe('prose does not lose the space beside an inline value', () => {
+  /**
+   * A word joined to the value before it, in rendered output, from source that
+   * looks correct.
+   *
+   * JSX drops the leading whitespace of a text node when that node runs on past
+   * a newline. So this source:
+   *
+   *     The network invokes <span className="value">__check_auth</span> on the
+   *     smart account, and the account's own code decides.
+   *
+   * renders as `__check_authon the smart account`. The space is there in the
+   * file, on the same line as the tag, and it is gone in the HTML.
+   *
+   * This is the worst kind of defect this project can ship: it is invisible in
+   * a diff, invisible in review, survives every type check and every build, and
+   * lands in the one register the page uses for values a reader is meant to
+   * copy — a contract address welded to the next word. Twenty-three instances
+   * existed across the site and the docs when it was first noticed, all from
+   * the same writing habit, and the only reason any of them were found is that
+   * somebody looked at a screenshot.
+   *
+   * The fix at each site is an explicit `{' '}`. The rule here is what stops the
+   * habit coming back, and it is deliberately narrow: it fires only when a text
+   * run both begins immediately after an inline closing tag *and* continues past
+   * a line break, which is exactly the shape that loses the space. A tag
+   * followed by text that stays on one line is fine and is not flagged.
+   */
+  const INLINE_CLOSE = /<\/(?:span|code|em|strong|a|Link|ExplorerLink|Address|TxHash)>[ \t]+(?=[A-Za-z(])/g;
+
+  const offenders = tsx.flatMap(([path, source]) =>
+    [...source.matchAll(INLINE_CLOSE)].flatMap((match) => {
+      const after = source.slice(match.index + match[0].length);
+      const nextMarkup = after.search(/[<{]/);
+      const run = nextMarkup === -1 ? after : after.slice(0, nextMarkup);
+      if (!run.includes('\n')) return [];
+      const line = source.slice(0, match.index).split('\n').length;
+      return [`${path}:${line}`];
+    }),
+  );
+
+  it('never relies on a literal space that JSX will swallow', () => {
+    expect(
+      offenders,
+      `these will render with the space missing — use {' '} instead:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
 describe('the grid is a token set, not a judgement call', () => {
   const tokens = ['--col-addr', '--col-hash', '--col-amount', '--col-ledger', '--col-verdict', '--col-label', '--col-signer', '--col-error'];
 
@@ -94,9 +281,7 @@ describe('the grid is a token set, not a judgement call', () => {
     // This shipped wrong twice on the first two tables to use these tokens. The
     // tokens state content width; `.tbl` cells add 0.75rem of padding on each
     // side; and under `table-layout: fixed` the shortfall does not shrink the
-    // content or scroll it — it overlaps the next column. A verdict badge sat
-    // on top of the adjacent cell's text, and a 9-character ledger number ran
-    // straight into the row description beside it.
+    // content or scroll it — it overlaps the next column.
     expect(css).toContain('--col-pad:');
     for (const token of tokens) {
       const cls = token.replace('--', '.');
@@ -105,23 +290,15 @@ describe('the grid is a token set, not a judgement call', () => {
   });
 
   it('lets a long unbreakable value wrap rather than paint over its neighbour', () => {
-    // The same bug four times now, in four flavours: a verdict badge, a ledger
-    // number, a 33-character contract error code, and a signer badge beside an
-    // address. Under `table-layout: fixed` a cell that cannot fit its contents
-    // does not shrink them and does not scroll them — it paints them across the
-    // next column, which looks like a spacing problem and is not one.
-    //
-    // Two of the four were column widths and are covered above. This is the
-    // other half: content that no reasonable column width contains, which has
-    // to be allowed to break. `anywhere` and not `break-word`, because only
-    // `anywhere` also reduces the min-content width a fixed layout distributes.
+    // `anywhere` and not `break-word`, because only `anywhere` also reduces the
+    // min-content width a fixed layout distributes.
     expect(css).toMatch(/\.tbl tbody td \{[^}]*overflow-wrap: anywhere/s);
   });
 
   it('sizes the verdict column to the badge it holds, not to the word', () => {
     // `DENY` is four characters; the badge is `min-w-[6.25rem]`.
-    const verdict = /--col-verdict:\s*(\d+)ch/.exec(css)?.[1];
-    expect(Number(verdict)).toBeGreaterThanOrEqual(13);
+    const width = /--col-verdict:\s*(\d+)ch/.exec(css)?.[1];
+    expect(Number(width)).toBeGreaterThanOrEqual(13);
   });
 });
 
@@ -130,8 +307,7 @@ describe('verdicts survive greyscale', () => {
     // Four since PLAN-V4 F3. The count is asserted rather than left open
     // because every addition here is a claim that some outcome is genuinely
     // unlike the three already present — and the cost of getting that wrong is
-    // a table that looks more decisive than the evidence behind it. A fifth
-    // needs the same argument made again, in a diff someone reads.
+    // a table that looks more decisive than the evidence behind it.
     const states = [...verdict.matchAll(/^\s{2}(?:'[\w-]+'|\w+): \{$/gm)];
     expect(states).toHaveLength(4);
   });
@@ -142,26 +318,21 @@ describe('verdicts survive greyscale', () => {
   });
 
   it('keeps a revoked rule distinct from a boundary refusal', () => {
-    // The F3 distinction, and the reason it is a state rather than a footnote:
-    // after a revoke, the call that used to be permitted fails
+    // After a revoke, the call that used to be permitted fails
     // ContextRuleNotFound#3000, which `errors.ts` deliberately keeps out of
     // BOUNDARY_REFUSAL_CODES. "The boundary refused you" and "the boundary is
-    // gone" are different claims, and only one of them is evidence the boundary
-    // works.
+    // gone" are different claims, and only one is evidence the boundary works.
     expect(verdict).toContain('rule-revoked');
     expect(verdict).toMatch(/aria: 'the context rule was revoked/);
   });
 
   it('pairs every state with a glyph, so hue is never the only signal', () => {
-    // Colour-blind reviewers and greyscale printouts both depend on this.
     for (const glyph of ['✓', '✕', '⊘', '∅']) expect(verdict).toContain(glyph);
   });
 
   it('distinguishes the third and fourth states by treatment, not by new hues', () => {
     expect(verdict).toContain('border-dashed');
     expect(verdict).toContain('text-unproven');
-    // The fourth reuses the neutral ramp — `text-muted` and the default border
-    // — so it is visibly not a verdict rather than visibly a new kind of one.
     expect(verdict).toContain('border-dotted');
     expect(verdict).toMatch(/'rule-revoked': \{[^}]*text-muted/s);
   });
@@ -174,21 +345,9 @@ describe('verdicts survive greyscale', () => {
 });
 
 describe('a fact is stated in one place', () => {
-  // Step 11's whole subject. Step 8 tokenised the boxes — column widths, type,
-  // verdicts — and left what goes in them to each screen, so seven screens each
-  // decided how much of a hash to show, how to draw a link out to an explorer,
-  // and what a control looks like. None of those is wrong on its own; what is
-  // wrong is that they disagree, and disagreement is what makes an interface
-  // read as assembled rather than designed.
-  //
-  // These read source, so they catch the next screen restating the decision
-  // rather than the drift that already happened.
-
   it('builds every explorer URL in lib/explorer.ts', () => {
     // `lib/network.ts` says it outright: a second place for the network to be
-    // written down is a second place for it to be wrong. Three screens had the
-    // testnet explorer path typed into them, which would have kept linking
-    // testnet with total confidence on the day a mainnet build shipped.
+    // written down is a second place for it to be wrong.
     for (const [path, source] of tsx) {
       expect(source, `${path} builds an explorer URL itself`).not.toContain('stellar.expert/explorer');
     }
@@ -196,40 +355,49 @@ describe('a fact is stated in one place', () => {
   });
 
   it('truncates an address or a hash only in lib/format.ts', () => {
-    // There were four truncations of a transaction hash and two of an address,
-    // all rendering into columns whose widths are shared tokens. The token
-    // fixes the box; this fixes what goes in it.
     for (const [path, source] of tsx) {
       expect(source, `${path} truncates a value inline`).not.toMatch(/\.slice\(0,\s*\d+\)\s*}?…/);
     }
   });
 
   it('declares the focus ring once, globally', () => {
-    // Nine components restated `focus-visible:outline-accent`, which is the
-    // base rule spelled out again at the call site. Restating it is how one of
-    // them ends up disagreeing — an earlier version of `ExplorerLink` overrode
-    // the ring to the permit hue, so a keyboard user who had learned the accent
-    // ring met a green one on one screen.
+    // An earlier version of `ExplorerLink` overrode the ring to the permit hue,
+    // so a keyboard user who had learned the accent ring met a green one.
     for (const [path, source] of tsx) {
       expect(source, `${path} restates the global focus ring`).not.toContain('focus-visible:outline-accent');
     }
   });
 
-  it('gives every app screen the same shell', () => {
-    // Seven pages chose three maximum widths and four section gaps between
-    // them. Navigating between two screens must not feel like the application
-    // resized itself.
+  it('gives every page one of the two shells, itself or through a layout', () => {
+    // V5 required `.screen` on every page including the landing, on the
+    // argument that a reader should not feel the application resize itself.
+    // V6 keeps the argument and widens it by exactly one: a page is either the
+    // instrument or the argument, and nothing is allowed to be neither. A page
+    // that invents its own width is the failure both shells exist to prevent.
+    //
+    // A page may satisfy this through an enclosing layout rather than directly,
+    // which is how `/docs` works — four pages sharing one `.screen` and one
+    // sidebar. Requiring the shell on the page itself would have forced four
+    // copies of the shell, which is the duplication the rule exists to stop.
+    const shell = (source: string) =>
+      /className="(?:screen|scene)"/.test(source) || source.includes('<Scene');
+
+    /** Layout sources enclosing a page, nearest first. */
+    function enclosing(path: string): string[] {
+      const parts = path.split('/');
+      const layouts: string[] = [];
+      for (let i = parts.length - 1; i > 0; i--) {
+        const candidate = [...parts.slice(0, i), 'layout.tsx'].join('/');
+        const found = tsx.find(([other]) => other === candidate);
+        if (found !== undefined) layouts.push(found[1]);
+      }
+      return layouts;
+    }
+
     for (const [path, source] of tsx) {
       if (!path.endsWith('/page.tsx')) continue;
-      // No exemption for the landing any more. It had one — it ran at its own
-      // scale, one sentence per viewport, with its own type ramp and its own
-      // maximum width — and step 12 ended that: it is now made of the same
-      // shell, the same `Section`, the same column tokens and the same tables
-      // as every screen it links to. Someone arriving on the landing and
-      // clicking into the application should not feel the application resize
-      // itself, and that is the same argument that produced `.screen` in the
-      // first place, applied to the one page that was excused from it.
-      expect(source, `${path} does not use the screen shell`).toContain('className="screen"');
+      const satisfied = shell(source) || enclosing(path).some(shell);
+      expect(satisfied, `${path} uses neither shell, and no layout above it does`).toBe(true);
     }
   });
 });
@@ -241,22 +409,143 @@ describe('controls are a closed set', () => {
   });
 
   it('separates the register from the variant', () => {
-    // The app screens' controls speak in the mono label voice — `SCAN AGAIN`,
-    // `FORGET` — beside `.col-head` and `.status-label`. Making that a fourth
-    // and fifth variant (`label-secondary`, `label-quiet`) is how a closed set
-    // stops being closed: the variants say how much weight a control carries,
-    // the register says which voice it speaks in, and they multiply rather than
-    // extend.
-    expect(css).toContain(".btn[data-register='label']");
+    // The variants say how much weight a control carries; a register says which
+    // voice it speaks in. Making `label` a fourth variant is how a closed set
+    // stops being closed: it would need `label-secondary` and `label-quiet`,
+    // and registers multiply with variants rather than extending them. V6 adds
+    // `scene` for the same reason and by the same route.
+    const registers = [...css.matchAll(/\.btn\[data-register='([\w-]+)'\]/g)].map(([, name]) => name);
+    expect(new Set(registers)).toEqual(new Set(['label', 'scene']));
   });
 
   it('states disabled once, and not as opacity', () => {
-    // Five inline buttons disagreed about this, and one of them dimmed while
-    // keeping its border — which still reads as an available control, just
-    // dimmer. This application's whole argument is that it does not present
-    // controls for things it cannot do.
+    // One inline button dimmed while keeping its border — which still reads as
+    // an available control, just dimmer. This application's whole argument is
+    // that it does not present controls for things it cannot do.
     expect(css).toMatch(/\.btn:disabled\s*\{[^}]*\}/);
     expect(/\.btn:disabled\s*\{([^}]*)\}/.exec(css)?.[1]).not.toContain('opacity');
+  });
+});
+
+describe('the palette has one definition, and every consumer reads it', () => {
+  // PLAN-V5 F4. `opengraph-image.tsx` renders through satori with inline styles
+  // and no cascade, so `var(--permit)` resolves to nothing and its eleven
+  // colours were literals — all eleven drifted from the tokens they were copied
+  // from, while its docstring said "same palette as the page".
+  //
+  // `lib/theme.ts` is now the palette and both are consumers. Without the second
+  // case in particular, a token added to the stylesheet alone would never be
+  // pinned, and the module would decay back into a partial copy.
+
+  /** `--name: value;` declarations whose value is a colour, from `:root` blocks. */
+  const declared = new Map(
+    [...css.matchAll(/^\s*(--[\w-]+):\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]*\));/gm)].map(
+      ([, name, value]) => [name, value],
+    ),
+  );
+
+  it('agrees with globals.css on every token it defines', () => {
+    for (const [name, value] of Object.entries(THEME)) {
+      expect(declared.get(name), `${name} is in lib/theme.ts but not in globals.css`).toBeDefined();
+      expect(declared.get(name), `${name} disagrees between lib/theme.ts and globals.css`).toBe(value);
+    }
+  });
+
+  it('carries every colour token globals.css defines, so none escapes the pin', () => {
+    for (const name of declared.keys()) {
+      expect(name in THEME, `${name} is in globals.css but not in lib/theme.ts`).toBe(true);
+    }
+  });
+
+  it('leaves no colour literal in the card that cannot read a custom property', () => {
+    // Deferred while the share card is unbuilt — it is a rendering surface and
+    // returns with the narrative in step 3. The guard is asserted rather than
+    // silently skipped, so this reads as "not yet" and not as "passing".
+    if (!present('app/opengraph-image.tsx')) {
+      expect(present('app/opengraph-image.tsx')).toBe(false);
+      return;
+    }
+    const card = read('app/opengraph-image.tsx').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(card).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(card).not.toMatch(/\brgba?\(/);
+    expect(card).toContain("from '@/lib/theme'");
+  });
+});
+
+describe('the full-bleed band', () => {
+  // PLAN-V5 F5. `margin-inline: calc(50% - 50vw)` is what everyone reaches for,
+  // and `100vw` includes the scrollbar: on any page long enough to scroll, the
+  // "full-bleed" section ends up about 15px wider than the viewport and the
+  // document scrolls sideways.
+  //
+  // The e2e suite catches the symptom at five widths. This catches the cause, in
+  // the suite that runs on every commit.
+
+  it('never breaks out with a viewport unit in a margin', () => {
+    // Scoped to margins on purpose. `vw` is fine for a font size and fine for a
+    // width that subtracts more than a scrollbar; it is breaking *out* with one
+    // that reintroduces the overflow.
+    expect(declarations).not.toMatch(/margin[a-z-]*:[^;}]*\bvw\b/);
+  });
+
+  it('is scoped to where a grid line can actually be addressed', () => {
+    expect(declarations).toMatch(/\.screen\s*>\s*\.bleed/);
+    expect(declarations).toMatch(/\[full-start\]/);
+    expect(declarations).toMatch(/\[content-start\]/);
+  });
+
+  it('caps how wide a band may get', () => {
+    expect(declarations).toMatch(/--bleed-max:/);
+    expect(declarations).toMatch(/max-width:\s*var\(--bleed-max\)/);
+  });
+});
+
+describe('the mark has one definition, and every consumer reads it', () => {
+  // PLAN-V5 §3.2. The mark appears in four places and three of them cannot
+  // import a React component. `lib/mark.ts` holds the geometry and
+  // `scripts/mark.mjs` builds the artefacts from it, so the committed files are
+  // output rather than input.
+
+  it('regenerates the committed icon.svg exactly', async () => {
+    const { iconSvg } = await import('../../../scripts/mark.mjs');
+    expect(read('app/icon.svg')).toBe(iconSvg());
+  });
+
+  it('regenerates the committed favicon.ico exactly', async () => {
+    const { iconIco } = await import('../../../scripts/mark.mjs');
+    const committed = readFileSync(src('app/favicon.ico'));
+    // Also the assertion that the Next.js default is gone. That file is 25,931
+    // bytes of someone else's icon, and shipping it is the clearest possible
+    // signal that nobody looked at the tab.
+    expect(committed.equals(iconIco())).toBe(true);
+  });
+
+  it('keeps the geometry on the grid that makes every icon size crisp', () => {
+    // Multiples of 1.5 on a 24 grid land on whole pixels at 16, 32 and 48px.
+    for (const rect of MARK_RECTS) {
+      for (const value of [rect.x, rect.y, rect.width, rect.height]) {
+        expect((value * 2) % 3, `${value} is not a multiple of 1.5`).toBe(0);
+      }
+    }
+  });
+
+  it('keeps the rectangles from overlapping, which the rasteriser assumes', () => {
+    // `scripts/mark.mjs` sums per-pixel coverage instead of unioning it, which
+    // is only correct while no two rectangles share area.
+    for (const [i, a] of MARK_RECTS.entries()) {
+      for (const b of MARK_RECTS.slice(i + 1)) {
+        const overlaps =
+          a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        expect(overlaps, `${JSON.stringify(a)} overlaps ${JSON.stringify(b)}`).toBe(false);
+      }
+    }
+  });
+
+  it('names no colour in the component, so the mark is whatever the text is', () => {
+    const mark = read('components/Mark.tsx');
+    expect(mark).toContain('currentColor');
+    expect(mark).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(mark).not.toMatch(/\brgba?\(/);
   });
 });
 
@@ -288,61 +577,46 @@ describe('accessibility is a constraint, not a pass', () => {
   });
 
   it('has no keyframe animation, and is not allowed to grow one', () => {
-    // PLAN-V4 §8, and the one design rule step 7 could most easily have broken.
-    // Every motion this system permits is a transition on a data change: the
-    // ground's heartbeat and a policy's closing window both move because a
-    // ledger sequence arrived, and both stop when one stops arriving. A
-    // keyframe loop runs on its own authority — it would keep going with the
-    // network unreachable, which is this project's definition of decoration.
+    // PLAN-V4 §8, and the rule V6's scroll motion could most easily have
+    // broken. Every motion this system permits is a transition on a state
+    // change: the ground's heartbeat moves because a ledger sequence arrived, a
+    // scene moves because it entered the viewport, and both stop when the thing
+    // driving them stops. A keyframe loop runs on its own authority — it would
+    // keep going with the network unreachable, which is this project's
+    // definition of decoration.
     //
     // Read with comments stripped, so the block in `globals.css` that explains
     // this rule at length does not fail it.
-    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(withoutComments).not.toContain('@keyframes');
-    expect(withoutComments).not.toMatch(/animation-name\s*:/);
-    expect(withoutComments).not.toMatch(/\banimation\s*:(?!\s*none)/);
-  });
-});
-
-describe('the network indicator cannot disagree with the network', () => {
-  it('reads the shared constant rather than hardcoding a string', () => {
-    expect(topBar).toContain("from '@/lib/network'");
-    expect(topBar).toContain('{NETWORK}');
-    // The literal must not appear as a bare string in the component.
-    expect(topBar).not.toMatch(/>\s*TESTNET\s*</);
+    expect(declarations).not.toContain('@keyframes');
+    expect(declarations).not.toMatch(/animation-name\s*:/);
+    expect(declarations).not.toMatch(/\banimation\s*:(?!\s*none)/);
   });
 
-  it('marks the current section for assistive technology, not only visually', () => {
-    expect(topBar).toContain("aria-current={active ? 'page' : undefined}");
-  });
-
-  it('keeps the unbuilt state available for the next section that needs it', () => {
-    // A nav item that 404s reads as a broken application. One that says "not
-    // built yet" is just true.
+  it('does not let a utility class smuggle a keyframe loop past the stylesheet', () => {
+    // The case above reads `globals.css`, and for four versions that was the
+    // whole surface. It is not: Tailwind's `animate-*` utilities generate their
+    // own `@keyframes` into the compiled output, so a component could — and one
+    // did — ship a loop the rule never saw.
     //
-    // Every section is built as of step 10, so this can no longer assert that
-    // some section carries `built: false` — that assertion would now only be
-    // satisfiable by leaving a screen unfinished. What has to survive is the
-    // *branch*: the flag, and the state it renders. Deleting it because nothing
-    // currently uses it is how the next planned-before-written section becomes
-    // a 404 instead of a placeholder.
-    expect(topBar).toContain('built: boolean');
-    expect(topBar).toContain('Not built yet');
-    expect(topBar).toContain('aria-disabled="true"');
-  });
-
-  it('links only sections this application actually serves', () => {
-    // The other half, and the one that catches a typo: a `built: true` entry
-    // pointing at a route with no page is exactly the 404 the flag exists to
-    // prevent, and it is invisible in review.
-    const routes = topBar.matchAll(/href: '([^']+)', built: true/g);
-    const hrefs = [...routes].map(([, href]) => href);
-    expect(hrefs.length).toBeGreaterThan(0);
-
-    for (const href of hrefs) {
-      const segments = href === '/' ? [] : href.split('/').filter(Boolean);
-      const page = fileURLToPath(new URL(`../src/app/${[...segments, 'page.tsx'].join('/')}`, import.meta.url));
-      expect(existsSync(page), `${href} is linked as built but ${page} does not exist`).toBe(true);
-    }
+    // `ScreenState`'s pending marker carried `animate-pulse` from V4 until the
+    // V6 rebuild. It pulsed at the same rate whether the read was in flight, had
+    // died in a dropped connection, or had resolved into a component that failed
+    // to re-render: motion running on its own authority, which is this
+    // project's definition of decoration, in the one place a reader is actually
+    // waiting on the signal.
+    //
+    // Scoped to `animate-` rather than to the word "animation" so a comment
+    // explaining the rule does not fail it, and so `transition-*` — which is
+    // exactly what this system does permit — is untouched.
+    const offenders = tsx.flatMap(([path, source]) => {
+      const markup = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      return [...markup.matchAll(/\banimate-\[?[\w.-]+/g)].map(
+        ([match]) => `${path}: ${match}`,
+      );
+    });
+    expect(
+      offenders,
+      `these ship a keyframe loop through a utility class:\n${offenders.join('\n')}`,
+    ).toEqual([]);
   });
 });

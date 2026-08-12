@@ -15,23 +15,23 @@ import { REFUSAL_CODES, type IngestError } from '@/lib/ingest-contract';
 import { explorerTxUrl } from '@/lib/explorer';
 import { INITIAL_STATE, LAST_BEAT, loadState, saveState, type DemoState } from '@/lib/demo-state';
 import { useLowering } from '@/lib/use-lowering';
-import { DenyTable, type AdjudicatedCase } from '../DenyTable';
-import { ExplorerLink } from '../ExplorerLink';
-import { InstallPlanTable } from '../app/InstallPlanTable';
-import { Pending, ReadFailure } from '../app/ScreenState';
-import { NotEnforceable } from '../NotEnforceable';
-import { ObservedSection } from '../ObservedSection';
-import { PolicyTable } from '../PolicyTable';
-import { RefusalSection } from '../RefusalSection';
-import { Beat, type BeatKind } from './Beat';
+import { DenyTable, type AdjudicatedCase } from '@/components/DenyTable';
+import { ExplorerLink } from '@/components/ExplorerLink';
+import { InstallPlanTable } from '@/components/app/InstallPlanTable';
+import { Pending, ReadFailure } from '@/components/app/ScreenState';
+import { NotEnforceable } from '@/components/NotEnforceable';
+import { ObservedSection } from '@/components/ObservedSection';
+import { PolicyTable } from '@/components/PolicyTable';
+import { RefusalSection } from '@/components/RefusalSection';
+import { Beat, type BeatKind } from '@/components/simulator/Beat';
 
 /**
  * A shipped flow the simulator can start from.
  *
  * `hash` rather than the short key, because it is what goes into the resumable
  * state — see the note on `sourceOf` below. `refuses` marks the fixtures whose
- * whole purpose is to be declined somewhere in the pipeline, so a reviewer
- * knows the refusal is the point rather than a broken preset.
+ * whole purpose is to be declined somewhere in the pipeline, so a reviewer knows
+ * the refusal is the point rather than a broken preset.
  */
 export interface Preset {
   key: string;
@@ -61,8 +61,7 @@ const BEATS: Array<{ index: number; title: string; blurb: string }> = [
   {
     index: 4,
     title: 'Try to exceed it',
-    blurb:
-      'Adjacent transactions, one mutated dimension each. Every one must be refused.',
+    blurb: 'Adjacent transactions, one mutated dimension each. Every one must be refused.',
   },
   {
     index: 5,
@@ -131,7 +130,9 @@ export function SimulatorStepper({
   const [observed, setObserved] = useState<ObservedTransaction | null>(null);
   const [xdr, setXdr] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
-  const [errors, setErrors] = useState<Record<number, { code: string; message: string; detail?: string }>>({});
+  const [errors, setErrors] = useState<
+    Record<number, { code: string; message: string; detail?: string }>
+  >({});
   const restored = useRef(false);
 
   /**
@@ -169,9 +170,12 @@ export function SimulatorStepper({
     saveState(window.sessionStorage, state);
   }, [state]);
 
-  const setError = useCallback((beat: number, error: { code: string; message: string; detail?: string }) => {
-    setErrors((previous) => ({ ...previous, [beat]: error }));
-  }, []);
+  const setError = useCallback(
+    (beat: number, error: { code: string; message: string; detail?: string }) => {
+      setErrors((previous) => ({ ...previous, [beat]: error }));
+    },
+    [],
+  );
 
   const clearError = useCallback((beat: number) => {
     setErrors((previous) => {
@@ -188,9 +192,15 @@ export function SimulatorStepper({
     clearError(1);
     try {
       const response = await fetch('/api/demo/perform', { method: 'POST' });
-      const payload = (await response.json()) as { hash?: string; error?: { code: string; message: string } };
+      const payload = (await response.json()) as {
+        hash?: string;
+        error?: { code: string; message: string };
+      };
       if (!response.ok || payload.hash === undefined) {
-        setError(1, payload.error ?? { code: 'submit_failed', message: 'the demo transaction failed' });
+        setError(
+          1,
+          payload.error ?? { code: 'submit_failed', message: 'the demo transaction failed' },
+        );
         return;
       }
       setObserved(null);
@@ -285,7 +295,10 @@ export function SimulatorStepper({
       }
       return {
         proposal: null,
-        refusal: { code: 'not_expressible', message: error instanceof Error ? error.message : String(error) },
+        refusal: {
+          code: 'not_expressible',
+          message: error instanceof Error ? error.message : String(error),
+        },
       };
     }
   }, [observed]);
@@ -328,7 +341,8 @@ export function SimulatorStepper({
   // step that asks the question rather than being computed and held back.
   const lowered = useLowering(state.beat >= 6 ? proposal : null);
 
-  const advance = (to: number) => setState((previous) => ({ ...previous, beat: Math.max(previous.beat, to) }));
+  const advance = (to: number) =>
+    setState((previous) => ({ ...previous, beat: Math.max(previous.beat, to) }));
 
   // Only a hash that reached a ledger gets a link to one. A shipped fixture's
   // hash is valid-looking and belongs to no transaction anywhere.
@@ -359,7 +373,10 @@ export function SimulatorStepper({
           reached={state.beat >= beat.index}
           busy={busy === beat.index}
           error={errors[beat.index]}
-          isRefusal={errors[beat.index] !== undefined && REFUSAL_CODES.has(errors[beat.index]!.code as never)}
+          isRefusal={
+            errors[beat.index] !== undefined &&
+            REFUSAL_CODES.has(errors[beat.index]!.code as never)
+          }
         >
           {beat.index === 1 && (
             <BeatOne
@@ -378,9 +395,7 @@ export function SimulatorStepper({
           {beat.index === 2 && state.beat >= 2 && (
             <div className="flex flex-col gap-4">
               {state.hash === null || source === null ? (
-                <p className="text-[13px] text-muted">
-                  Nothing has been chosen in step 1 yet.
-                </p>
+                <p className="text-[13px] text-muted">Nothing has been chosen in step 1 yet.</p>
               ) : observed === null ? (
                 <button
                   type="button"
@@ -389,7 +404,11 @@ export function SimulatorStepper({
                   className="btn"
                   data-variant="primary"
                 >
-                  {busy === 2 ? 'Reading…' : source === 'testnet' ? 'Read it back from testnet' : 'Read the shipped flow'}
+                  {busy === 2
+                    ? 'Reading…'
+                    : source === 'testnet'
+                      ? 'Read it back from testnet'
+                      : 'Read the shipped flow'}
                 </button>
               ) : (
                 // No continue button here. `applyOutcome` advances the beat in
@@ -416,7 +435,11 @@ export function SimulatorStepper({
                 <>
                   <PolicyTable proposal={proposal} />
                   <Rationale proposal={proposal} />
-                  <Continue onClick={() => advance(4)} shown={state.beat === 3} label="Try to exceed it" />
+                  <Continue
+                    onClick={() => advance(4)}
+                    shown={state.beat === 3}
+                    label="Try to exceed it"
+                  />
                 </>
               ) : null}
             </div>
@@ -434,7 +457,11 @@ export function SimulatorStepper({
                 implementation of the same rules — not by a deployed policy contract. Nothing above
                 has been enforced on-chain.
               </p>
-              <Continue onClick={() => advance(5)} shown={state.beat === 4} label="Read the policy" />
+              <Continue
+                onClick={() => advance(5)}
+                shown={state.beat === 4}
+                label="Read the policy"
+              />
             </div>
           )}
 
@@ -524,7 +551,6 @@ export function SimulatorStepper({
   );
 }
 
-
 function Continue({ onClick, shown, label }: { onClick: () => void; shown: boolean; label: string }) {
   if (!shown) return null;
   return (
@@ -537,12 +563,12 @@ function Continue({ onClick, shown, label }: { onClick: () => void; shown: boole
 /**
  * Step 1, and the two ways to satisfy it.
  *
- * The preset row is always offered, not only as a fallback when the demo
- * account is missing. Before, skipping straight past an unconfigured beat 1 set
- * no hash at all and left step 2 saying "beat 1 has not produced a transaction
- * yet" with nothing to click — a dead end reachable by every reviewer running
- * this repository without credentials, which is most of them. It is also what
- * makes the simulator the home for flows the chain cannot hold: reaching the
+ * The preset row is always offered, not only as a fallback when the demo account
+ * is missing. Before, skipping straight past an unconfigured beat 1 set no hash
+ * at all and left step 2 saying "beat 1 has not produced a transaction yet" with
+ * nothing to click — a dead end reachable by every reviewer running this
+ * repository without credentials, which is most of them. It is also what makes
+ * the simulator the home for flows the chain cannot hold: reaching the
  * multi-contract case needs a way to select it.
  */
 function BeatOne({
@@ -566,7 +592,7 @@ function BeatOne({
   onPerform: () => void;
   onChoosePreset: (preset: Preset) => void;
 }) {
-  const chosen = hash === null ? null : presets.find((preset) => preset.hash === hash) ?? null;
+  const chosen = hash === null ? null : (presets.find((preset) => preset.hash === hash) ?? null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -595,7 +621,13 @@ function BeatOne({
       {source !== 'testnet' && (
         <div className="flex flex-col gap-2.5">
           {available ? (
-            <button type="button" disabled={busy} onClick={onPerform} className="btn" data-variant="primary">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onPerform}
+              className="btn"
+              data-variant="primary"
+            >
               {busy ? 'Submitting to testnet…' : 'Perform a transaction on testnet'}
             </button>
           ) : (
@@ -631,8 +663,9 @@ function BeatOne({
         </div>
         <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
           Shipped flows were never observed on a live network. The ones marked{' '}
-          <span className="text-faint">refused</span> are declined somewhere in the pipeline on
-          purpose — a simulator that can only succeed is not evidence about anything.
+          <span className="text-faint">refused</span>{' '}
+          are declined somewhere in the pipeline on purpose — a simulator that can only succeed is
+          not evidence about anything.
         </p>
       </div>
     </div>

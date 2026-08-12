@@ -19,16 +19,16 @@ import { useStored } from '@/lib/use-store';
 /**
  * Everything the accounts this browser knows have been permitted to do.
  *
- * "Permitted" is the load-bearing word and it is on the screen, not only in
- * this comment. Contract events are emitted on success, so a refused
- * transaction is not in this feed and cannot be — refusals come from
- * transaction results, a different source with different confidence, and they
- * live on the policy screen where their provenance can be stated per row.
+ * "Permitted" is the load-bearing word and it is on the screen, not only in this
+ * comment. Contract events are emitted on success, so a refused transaction is
+ * not in this feed and cannot be — refusals come from transaction results, a
+ * different source with different confidence, and they live on the policy screen
+ * where their provenance can be stated per row.
  *
- * A feed that quietly contained only successes while implying completeness
- * would be the most flattering possible misrepresentation of a permissions
- * tool: every boundary looks perfectly obeyed if you only read the transactions
- * that got through.
+ * A feed that quietly contained only successes while implying completeness would
+ * be the most flattering possible misrepresentation of a permissions tool: every
+ * boundary looks perfectly obeyed if you only read the transactions that got
+ * through.
  */
 
 type FeedState =
@@ -51,10 +51,7 @@ export function ActivityScreen() {
       <EmptyState title="No accounts to read activity for.">
         <p>
           Activity is scanned per account. Add one on the{' '}
-          <Link
-            href="/app/accounts"
-            className="rounded-[2px] link"
-          >
+          <Link href="/app/accounts" className="link rounded-[2px]">
             accounts screen
           </Link>{' '}
           and its history is read from the ledger.
@@ -190,9 +187,8 @@ function ScanWindow({ response }: { response: ActivityResponse }) {
       <div className="flex flex-wrap items-center gap-3">
         <StatusLabel name="ON-CHAIN" />
         <p className="text-[12.5px] text-muted">
-          Scanned ledgers{' '}
-          <span className="value">{window.fromLedger.toLocaleString('en-US')}</span> to{' '}
-          <span className="value">{window.toLedger.toLocaleString('en-US')}</span> —{' '}
+          Scanned ledgers <span className="value">{window.fromLedger.toLocaleString('en-US')}</span>{' '}
+          to <span className="value">{window.toLedger.toLocaleString('en-US')}</span> —{' '}
           {ledgersToDuration(span)} — in {window.requests} upstream requests.
         </p>
       </div>
@@ -258,7 +254,9 @@ function EventTable({ response }: { response: ActivityResponse }) {
                       </>
                     )}
                   </span>
-                  {event.ruleName !== null && <span className="value text-[12px]">{event.ruleName}</span>}
+                  {event.ruleName !== null && (
+                    <span className="value text-[12px]">{event.ruleName}</span>
+                  )}
                 </div>
                 {event.spend !== null && (
                   <p className="mt-1 text-[11.5px] text-muted-dim">
@@ -278,7 +276,7 @@ function EventTable({ response }: { response: ActivityResponse }) {
                       contractId: response.contractId,
                       ruleId: event.contextRuleId,
                     })}`}
-                    className="rounded-[2px] link"
+                    className="link rounded-[2px]"
                   >
                     {event.contextRuleId}
                   </Link>

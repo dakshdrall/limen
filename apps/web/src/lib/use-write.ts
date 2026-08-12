@@ -25,6 +25,25 @@ import {
  * smart account and a second fee, and — on the agent screens — a second
  * transaction whose refusal is indistinguishable from the first except by hash.
  * A disabled attribute is a hint to a person; this is the mechanism.
+ *
+ * ## Submissions and the things that are not submissions
+ *
+ * That split is real and is kept: a friendbot call is not a transaction this
+ * application built, signed and submitted, and `toWriteOutcome` has nothing to
+ * say about one. What the split is *not* is a reason for the second kind to run
+ * unguarded and unannounced.
+ *
+ * It used to be. `note` recorded a finished outcome and nothing else, so the
+ * one caller that funded from friendbot never set `busy` and never wrote a
+ * `running` entry: its button stayed live through its own call, and a second
+ * click bought a second friendbot request that comes back "already exists" and
+ * is reported as success. PLAN-V5 §2.3 found it by driving the screen; nothing
+ * readable in either file was wrong.
+ *
+ * So `track` replaces `note`. Both kinds now take the same path — ref guard,
+ * `running` entry, `busy`, outcome — and differ only in who builds the outcome:
+ * `run` converts a submission result, `track` is handed one. That is the
+ * distinction that was worth keeping, and it is the whole of it.
  */
 
 export type WriteState =
@@ -50,10 +69,17 @@ export interface WriteLog {
     fn: () => Promise<SubmitResultLike>,
   ) => Promise<WriteOutcome | null>;
   /**
-   * Record something that is not a submission — a friendbot call, a read — so
-   * it appears in the same log as the transactions around it.
+   * Run something that is not a submission — a friendbot call, a read — under
+   * the same guard, and log it beside the transactions around it.
+   *
+   * The caller builds the outcome because only the caller knows what the result
+   * means; everything else about the step is identical to `run`.
    */
-  note: (key: string, outcome: WriteOutcome) => void;
+  track: (
+    key: string,
+    what: string,
+    fn: () => Promise<WriteOutcome>,
+  ) => Promise<WriteOutcome | null>;
   reset: () => void;
 }
 
@@ -64,12 +90,16 @@ export function useWriteLog(): WriteLog {
 
   const stateOf = useCallback((key: string): WriteState => entries[key] ?? IDLE, [entries]);
 
-  const note = useCallback((key: string, outcome: WriteOutcome) => {
-    setEntries((current) => ({ ...current, [key]: outcome }));
-  }, []);
-
-  const run = useCallback(
-    async (key: string, what: string, fn: () => Promise<SubmitResultLike>) => {
+  /**
+   * One step, whatever kind it is: guard, mark running, await, log.
+   *
+   * `run` and `track` are both this with a different way of arriving at the
+   * outcome. Written once rather than twice because the two copies is how the
+   * fault existed in the first place — the second path had none of this, and
+   * the difference was invisible from either call site.
+   */
+  const perform = useCallback(
+    async (key: string, what: string, fn: () => Promise<WriteOutcome>) => {
       // Synchronous, before the first await. See the note above.
       if (busyRef.current) return null;
       busyRef.current = true;
@@ -78,7 +108,7 @@ export function useWriteLog(): WriteLog {
 
       let outcome: WriteOutcome;
       try {
-        outcome = toWriteOutcome(what, await fn());
+        outcome = await fn();
       } catch (error) {
         // Anything thrown before a submission is a browser-side failure and
         // never a refusal: the network was not asked. `assertTestnet` and
@@ -103,9 +133,19 @@ export function useWriteLog(): WriteLog {
     [],
   );
 
+  const run = useCallback(
+    (key: string, what: string, fn: () => Promise<SubmitResultLike>) =>
+      // Inside `perform`'s try, so a throw from either the submission or the
+      // conversion lands in the same browser-stage outcome it always did.
+      perform(key, what, async () => toWriteOutcome(what, await fn())),
+    [perform],
+  );
+
+  const track = perform;
+
   const reset = useCallback(() => {
     setEntries({});
   }, []);
 
-  return { stateOf, busy, run, note, reset };
+  return { stateOf, busy, run, track, reset };
 }

@@ -33,9 +33,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
           <span className="eyebrow text-deny">not a policy</span>
           <p className="measure text-[13px] leading-relaxed text-foreground/90">
             A policy is addressed by its smart account and its context rule id, joined by a hyphen —{' '}
-            <span className="value">C…-5</span>. There is no such thing as a globally unique rule id,
-            so an id alone would show one account&rsquo;s boundary under another account&rsquo;s
-            policy.
+            <span className="value">C…-5</span>. There is no such thing as a globally unique rule
+            id, so an id alone would show one account&rsquo;s boundary under another
+            account&rsquo;s policy.
           </p>
           <Link href="/app/accounts" className="link self-start text-[12.5px]">
             All accounts

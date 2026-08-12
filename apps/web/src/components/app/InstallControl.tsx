@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { Address } from '@/components/Address';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
-import { StatusLabel, LOCAL_KEY_LABEL } from '@/components/StatusLabel';
+import { StatusLabel } from '@/components/StatusLabel';
+import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 import type { InstallPlan } from '@limen/chain/plan';
 import { ED25519_VERIFIER, RPC_URL, SPENDING_LIMIT_POLICY } from '@/lib/chain-config';
 import { loadChain } from '@/lib/chain-write';
@@ -19,24 +20,24 @@ import { useWriteLog } from '@/lib/use-write';
  * Writing the reviewed plan to the person's own account.
  *
  * This replaces the paragraph that used to stand here explaining why nothing
- * could be installed. That paragraph was accurate when it was written and is
- * now retired by this component existing — PLAN-V4 §9, which insists a caveat
- * is retired by the thing it described becoming possible, not by deleting the
+ * could be installed. That paragraph was accurate when it was written and is now
+ * retired by this component existing — PLAN-V4 §9, which insists a caveat is
+ * retired by the thing it described becoming possible, not by deleting the
  * sentence.
  *
  * One sentence from it survives verbatim, and deliberately: **there is no form
  * here that accepts a secret key, and there will not be one.** It was true when
- * nothing could sign and it is more load-bearing now that something can. The
- * key that signs this install was generated in the page, has never left it, and
+ * nothing could sign and it is more load-bearing now that something can. The key
+ * that signs this install was generated in the page, has never left it, and
  * cannot be exported or pasted in.
  *
  * ## What is submitted, and by whom
  *
  * `add_context_rule` on the smart account, authorized through `__check_auth`
  * under the owner's Default rule. One submission per rule in the plan, because
- * `add_context_rule` returns the rule it created and the id in that return
- * value is the only trustworthy source for what was installed — batching would
- * save a fee and lose the attribution every later screen depends on.
+ * `add_context_rule` returns the rule it created and the id in that return value
+ * is the only trustworthy source for what was installed — batching would save a
+ * fee and lose the attribution every later screen depends on.
  *
  * The agent's key is what the rule is installed *for*. It never signs here, and
  * `assertDistinctSigners` runs inside `installFunctions` before a single host
@@ -212,7 +213,12 @@ export function InstallControl({
           installed <em>for</em> — it does not sign this.
         </p>
 
-        <div className="flex flex-col gap-3 border-t border-border-faint pt-4">
+        {/* `border-border-subtle`. This divider asked for `border-border-faint`,
+            which is not a token the palette defines — see `AccountWriteSteps`
+            for the full account. It emitted nothing, so the rule separating the
+            two keys had never been drawn on the one screen where telling them
+            apart is the entire point. */}
+        <div className="flex flex-col gap-3 border-t border-border-subtle pt-4">
           <div className="flex flex-col gap-1">
             <span className="col-head text-muted-dim">signs this install</span>
             <LocalKeyBadge role="OWNER" publicKey={owner} />
@@ -246,9 +252,10 @@ export function InstallControl({
         <div className="panel" data-tone="permitted">
           <span className="eyebrow text-permit">installed</span>
           <p className="measure text-[13px] leading-relaxed text-foreground/90">
-            Context rule <span className="value">{installed.ruleId}</span> is on the account. The id
-            was read out of what <span className="value">add_context_rule</span> returned, not
-            assumed.
+            Context rule <span className="value">{installed.ruleId}</span>{' '}
+            is on the account. The id was read out of what{' '}
+            <span className="value">add_context_rule</span>{' '}
+            returned, not assumed.
           </p>
           <Link
             href={`/app/policies/${formatPolicyId({ contractId: accountId, ruleId: installed.ruleId })}`}

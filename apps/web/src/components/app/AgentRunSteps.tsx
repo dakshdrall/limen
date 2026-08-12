@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { isBoundaryRefusal, isRevokedRule } from '@limen/chain/errors';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
-import { StatusLabel, LOCAL_KEY_LABEL } from '@/components/StatusLabel';
+import { StatusLabel } from '@/components/StatusLabel';
+import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 import { Verdict } from '@/components/Verdict';
 import type { SnapshotRule } from '@/lib/account-contract';
 import { ED25519_VERIFIER, RPC_URL } from '@/lib/chain-config';
@@ -42,11 +43,11 @@ import { useWriteLog, type WriteState } from '@/lib/use-write';
  *
  * ## The borrowed footprint, and why steps 2, 3 and 5 need one
  *
- * A failed simulation yields no footprint, so a call the boundary refuses
- * cannot be assembled into a transaction on its own. Each of those three
- * borrows a footprint from a call that touches the same contracts and does not
- * fail. Without that they would never reach a ledger, would have no hash, and
- * would appear on this screen as an assertion.
+ * A failed simulation yields no footprint, so a call the boundary refuses cannot
+ * be assembled into a transaction on its own. Each of those three borrows a
+ * footprint from a call that touches the same contracts and does not fail.
+ * Without that they would never reach a ledger, would have no hash, and would
+ * appear on this screen as an assertion.
  *
  * ## Step 5 is not a refusal
  *
@@ -107,8 +108,8 @@ export function AgentRunSteps({
    * A ref rather than state: nothing renders from it, and re-rendering when it
    * is filled would be a render caused by bookkeeping. It is cleared by a
    * reload, which is correct — the footprint belongs to a specific enforcing
-   * simulation and reusing one across a page load would be borrowing from a
-   * call this session never made.
+   * simulation and reusing one across a page load would be borrowing from a call
+   * this session never made.
    */
   const permitted = useRef<PermittedCall | null>(null);
 
@@ -302,42 +303,38 @@ export function AgentRunSteps({
     // value that decides who is allowed to sign.
     const ownerSigns = ctx.ownerSigns;
 
-    await log.run(
-      'agent-revoke',
-      'The agent tries to remove the boundary that binds it',
-      async () => {
-        const revokeFunc = ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId);
+    await log.run('agent-revoke', 'The agent tries to remove the boundary that binds it', async () => {
+      const revokeFunc = ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId);
 
-        // Borrowed from the *owner's* revoke, which simulates cleanly. The
-        // agent's own attempt does not, which is the finding.
-        const footprint = await ctx.chain.enforcingFootprint({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.owner.publicKey,
-          func: revokeFunc,
-          signAuthEntry: ownerSigns,
-        });
+      // Borrowed from the *owner's* revoke, which simulates cleanly. The
+      // agent's own attempt does not, which is the finding.
+      const footprint = await ctx.chain.enforcingFootprint({
+        rpcUrl: RPC_URL,
+        passphrase: NETWORK_PASSPHRASE,
+        feeSource: ctx.keys.owner.publicKey,
+        func: revokeFunc,
+        signAuthEntry: ownerSigns,
+      });
 
-        const [entry] = await ctx.chain.recordAuthEntries({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          func: revokeFunc,
-        });
-        if (entry === undefined) throw new Error('the revoke call produced no auth entry');
+      const [entry] = await ctx.chain.recordAuthEntries({
+        rpcUrl: RPC_URL,
+        passphrase: NETWORK_PASSPHRASE,
+        feeSource: ctx.keys.agent.publicKey,
+        func: revokeFunc,
+      });
+      if (entry === undefined) throw new Error('the revoke call produced no auth entry');
 
-        return ctx.chain.submitWithBorrowedFootprint({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          signEnvelope: ctx.keys.agent.signEnvelope,
-          func: revokeFunc,
-          transactionData: footprint,
-          auth: [await ctx.agentSigns(entry)],
-          label: 'agent-revoke',
-        });
-      },
-    );
+      return ctx.chain.submitWithBorrowedFootprint({
+        rpcUrl: RPC_URL,
+        passphrase: NETWORK_PASSPHRASE,
+        feeSource: ctx.keys.agent.publicKey,
+        signEnvelope: ctx.keys.agent.signEnvelope,
+        func: revokeFunc,
+        transactionData: footprint,
+        auth: [await ctx.agentSigns(entry)],
+        label: 'agent-revoke',
+      });
+    });
     onWritten();
   };
 
@@ -493,9 +490,10 @@ export function AgentRunSteps({
         verdict={verdictFor(log.stateOf('agent-revoke'), 'deny')}
       >
         Refused by the contract, not by this page withholding a button.{' '}
-        <span className="value">remove_context_rule</span> requires the account to authorize itself,
-        and this rule&rsquo;s context is a call to the token — which does not match a call to the
-        account. The owner&rsquo;s Default rule matches any context, so the owner can.
+        <span className="value">remove_context_rule</span>{' '}
+        requires the account to authorize itself, and this rule&rsquo;s context is a call to the
+        token — which does not match a call to the account. The owner&rsquo;s Default rule matches
+        any context, so the owner can.
       </Step>
 
       <Step

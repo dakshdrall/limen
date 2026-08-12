@@ -16,8 +16,8 @@ export default function ActivityPage() {
         lede={
           <>
             Read from contract events, which are emitted on success — so this is a record of what
-            each boundary <em>permitted</em>, and it says so on every scan. Refusals emit nothing and
-            are not here; they are on the policy screen, where each one can carry its own
+            each boundary <em>permitted</em>, and it says so on every scan. Refusals emit nothing
+            and are not here; they are on the policy screen, where each one can carry its own
             transaction hash.
           </>
         }

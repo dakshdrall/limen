@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
-import { StatusLabel, LOCAL_KEY_LABEL } from '@/components/StatusLabel';
+import { StatusLabel } from '@/components/StatusLabel';
+import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 import { ED25519_VERIFIER, RPC_URL } from '@/lib/chain-config';
 import { loadChain } from '@/lib/chain-write';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
@@ -18,10 +19,10 @@ import { useWriteLog } from '@/lib/use-write';
  *
  * PLAN-V4 §1 makes a point of the second one: **the observed transaction is the
  * person's own.** The boundary installed on the next screen is derived from a
- * transfer this account just made, read back off the ledger — not from a
- * shipped fixture and not from the constant this code sent. That is the
- * product's sentence, *"a user performs a transaction once"*, executed rather
- * than illustrated.
+ * transfer this account just made, read back off the ledger — not from a shipped
+ * fixture and not from the constant this code sent. That is the product's
+ * sentence, *"a user performs a transaction once"*, executed rather than
+ * illustrated.
  *
  * Which is also why the amount is read back rather than remembered. The
  * derivation on `/app/policies/new` starts from `/api/ingest`, which reads the
@@ -55,11 +56,11 @@ export function AccountWriteSteps({
 }: {
   contractId: string;
   /**
-   * The rules as last read. `null` while the read is still in flight — which
-   * now includes every re-read this component's own writes trigger, because it
-   * stays mounted through them. {@link useLastRead} is what keeps the Default
-   * rule known across that gap, so the buttons below do not disappear and
-   * reappear after each transaction.
+   * The rules as last read. `null` while the read is still in flight — which now
+   * includes every re-read this component's own writes trigger, because it stays
+   * mounted through them. {@link useLastRead} is what keeps the Default rule
+   * known across that gap, so the buttons below do not disappear and reappear
+   * after each transaction.
    */
   rules: SnapshotRule[] | null;
   /** Re-read the chain. Called after every write that lands. */
@@ -99,8 +100,7 @@ export function AccountWriteSteps({
     );
 
   const observed = log.stateOf('observe');
-  const observedHash =
-    observed.status === 'onLedger' && observed.ok ? observed.hash : null;
+  const observedHash = observed.status === 'onLedger' && observed.ok ? observed.hash : null;
 
   const seed = async () => {
     const keys = signers();
@@ -177,7 +177,7 @@ export function AccountWriteSteps({
 
   if (owner === undefined || agent === undefined) {
     return (
-      <Panel>
+      <div className="panel">
         <span className="eyebrow text-muted-dim">read-only from this browser</span>
         <p className="measure text-[13px] leading-relaxed text-foreground/90">
           This browser holds no keys, so everything above is readable and nothing here is signable.
@@ -189,15 +189,15 @@ export function AccountWriteSteps({
           </Link>{' '}
           to get a disposable owner key in this browser.
         </p>
-      </Panel>
+      </div>
     );
   }
 
   if (!ownsThisAccount) {
     return (
-      <Panel>
+      <div className="panel">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="eyebrow text-muted-dim">not this browser’s account</span>
+          <span className="eyebrow text-muted-dim">not this browser&rsquo;s account</span>
           <StatusLabel name={LOCAL_KEY_LABEL} />
         </div>
         <p className="measure text-[13px] leading-relaxed text-foreground/90">
@@ -206,7 +206,7 @@ export function AccountWriteSteps({
             : 'This account’s Default rule names a different signer than the owner key in this browser. It can be read here and signed for nowhere.'}
         </p>
         <LocalKeyBadge role="OWNER" publicKey={owner} />
-      </Panel>
+      </div>
     );
   }
 
@@ -217,13 +217,13 @@ export function AccountWriteSteps({
           Give this account something to derive a boundary from
         </h3>
         <p className="measure text-[13px] leading-relaxed text-muted">
-          A boundary is derived from a transaction that already happened. These two produce one:
-          the account is funded, then it makes a transfer of its own, authorized by the owner key
-          in this browser.
+          A boundary is derived from a transaction that already happened. These two produce one: the
+          account is funded, then it makes a transfer of its own, authorized by the owner key in
+          this browser.
         </p>
       </div>
 
-      <Panel>
+      <div className="panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="col-head text-muted">01 · fund the account</span>
           <LocalKeyBadge role="OWNER" publicKey={owner} />
@@ -243,9 +243,9 @@ export function AccountWriteSteps({
           Fund the account
         </button>
         <WriteResult state={log.stateOf('seed')} />
-      </Panel>
+      </div>
 
-      <Panel>
+      <div className="panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="col-head text-muted">02 · the observed transaction</span>
           <LocalKeyBadge role="OWNER" publicKey={owner} />
@@ -268,14 +268,22 @@ export function AccountWriteSteps({
         <WriteResult state={log.stateOf('observe')} />
 
         {observedHash !== null && <DeriveFromIt hash={observedHash} contractId={contractId} />}
-      </Panel>
+      </div>
     </div>
   );
 }
 
 function DeriveFromIt({ hash, contractId }: { hash: string; contractId: string }) {
   return (
-    <div className="flex flex-col gap-2.5 border-t border-border-faint pt-4">
+    // `border-border-subtle`, and it is a fix rather than a restatement. This
+    // divider and the one in `NewAccountScreen` both asked for
+    // `border-border-faint` — a token that has never existed. The palette has
+    // `--border-subtle`, `--border` and `--border-bright`, exposed as
+    // `border-subtle`, `border-default` and `border-bright`; `faint` is a *text*
+    // step. Tailwind emits nothing for an unknown colour, so both rules were
+    // silently no-ops and both separators had been invisible since they were
+    // written. Nothing looked broken, which is why it survived four versions.
+    <div className="flex flex-col gap-2.5 border-t border-border-subtle pt-4">
       <p className="measure text-[12.5px] leading-relaxed text-foreground/90">
         Derive a boundary from this transaction. It is read back from the network there — the cap
         comes from what the ledger recorded, not from what this screen sent.
@@ -289,10 +297,6 @@ function DeriveFromIt({ hash, contractId }: { hash: string; contractId: string }
       </Link>
     </div>
   );
-}
-
-function Panel({ children }: { children: React.ReactNode }) {
-  return <div className="panel">{children}</div>;
 }
 
 /**

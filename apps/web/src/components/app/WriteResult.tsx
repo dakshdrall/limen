@@ -43,8 +43,9 @@ export function WriteResult({ state }: { state: WriteState }) {
 
         {state.code !== null && (
           <p className="text-[12.5px] leading-relaxed text-muted">
-            The simulation reported <span className="value">{describeContractError(state.code)}</span>.
-            A code from a simulation is the contract&rsquo;s verdict, but nothing on chain records it.
+            The simulation reported{' '}
+            <span className="value">{describeContractError(state.code)}</span>. A code from a
+            simulation is the contract&rsquo;s verdict, but nothing on chain records it.
           </p>
         )}
 
@@ -101,8 +102,8 @@ export function WriteResult({ state }: { state: WriteState }) {
         // of budget reports *and* what a genuine refusal reports, so a failure
         // with no decoded code is not attributable to the boundary.
         <p className="measure text-[12.5px] leading-relaxed text-muted">
-          No contract error code could be decoded from this transaction&rsquo;s diagnostic events, so
-          it is not attributable to the boundary. A failure is not a refusal until its error code
+          No contract error code could be decoded from this transaction&rsquo;s diagnostic events,
+          so it is not attributable to the boundary. A failure is not a refusal until its error code
           says so.
         </p>
       )}

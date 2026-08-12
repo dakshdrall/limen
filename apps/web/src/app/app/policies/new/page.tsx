@@ -42,8 +42,8 @@ export default async function NewPolicyPage({
   const accountId =
     accountParam !== null && LOOKS_LIKE_CONTRACT.test(accountParam) ? accountParam : null;
 
-  // Read at request time for the same reason `/` does: whether live ingest works
-  // is a property of the running deployment, not of the build.
+  // Read at request time for the same reason the narrative does: whether live
+  // ingest works is a property of the running deployment, not of the build.
   await connection();
   const liveIngestEnabled = (process.env.SOROBAN_RPC_URL ?? '').length > 0;
 

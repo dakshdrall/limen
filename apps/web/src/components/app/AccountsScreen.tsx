@@ -6,6 +6,7 @@ import { Address } from '@/components/Address';
 import { AccountLink } from '@/components/app/AccountLink';
 import { EmptyState, Pending, ReadFailure } from '@/components/app/ScreenState';
 import { looksLikeContractAddress } from '@/lib/account-contract';
+import { RECORDED_ACCOUNT } from '@/lib/recorded-runs';
 import { useAccountSnapshot } from '@/lib/use-account-snapshot';
 import { useStored } from '@/lib/use-store';
 import { forgetAccount, listAccounts, rememberAccount, type StoredAccount } from '@/lib/store';
@@ -42,13 +43,14 @@ export function AccountsScreen() {
           <p>
             Paste a deployed smart account address above and its installed boundary is read from
             testnet — no sign-in, and nothing of yours stored anywhere but this browser. The
-            walkthrough account from the README works:{' '}
-            <span className="value break-all">CBNPFNPWY57O22O3VTSAJ5RGROBJXMF4UCVAXJ6NVIAEJ2VBFTRD3G3V</span>
+            walkthrough account works, read here from the deployments file rather than typed in:{' '}
+            <span className="value break-all">{RECORDED_ACCOUNT}</span>
           </p>
           <p className="mt-2.5">
             A browser that has never seen an account can still read any account. It can only{' '}
-            <em>sign</em> for one it owns — that is, one whose signer is a key this browser
-            generated. Reading is open to everyone; acting is not.
+            <em>sign</em>{' '}
+            for one it owns — that is, one whose signer is a key this browser generated. Reading is
+            open to everyone; acting is not.
           </p>
         </EmptyState>
       ) : (
@@ -101,7 +103,7 @@ function AddAccount({ known }: { known: StoredAccount[] }) {
         {/* Reading someone else's account and creating your own are different
             acts, so they are different controls rather than one field that
             changes meaning. */}
-        <Link href="/app/accounts/new" className="text-[12.5px] link">
+        <Link href="/app/accounts/new" className="link text-[12.5px]">
           Create one instead
         </Link>
       </div>
@@ -132,7 +134,11 @@ function AddAccount({ known }: { known: StoredAccount[] }) {
         </button>
       </div>
       {problem !== null && (
-        <p id="account-address-problem" role="alert" className="text-[12.5px] leading-relaxed text-deny">
+        <p
+          id="account-address-problem"
+          role="alert"
+          className="text-[12.5px] leading-relaxed text-deny"
+        >
           {problem}
         </p>
       )}
@@ -144,9 +150,9 @@ function AddAccount({ known }: { known: StoredAccount[] }) {
  * One account, with its boundary read live.
  *
  * The summary is deliberately thin — how many rules, how many still live, at
- * which ledger. Anything more would be the detail screen rendered twice, and
- * the numbers that matter (caps, spend) deserve the space the detail screen
- * gives them.
+ * which ledger. Anything more would be the detail screen rendered twice, and the
+ * numbers that matter (caps, spend) deserve the space the detail screen gives
+ * them.
  */
 function AccountRow({ account, onForget }: { account: StoredAccount; onForget: () => void }) {
   const { state, reload } = useAccountSnapshot(account.contractId);
@@ -168,7 +174,9 @@ function AccountRow({ account, onForget }: { account: StoredAccount; onForget: (
         </button>
       </div>
 
-      {state.status === 'pending' && <Pending what="Reading this account's context rules from testnet." />}
+      {state.status === 'pending' && (
+        <Pending what="Reading this account's context rules from testnet." />
+      )}
 
       {state.status === 'failed' && (
         <ReadFailure
@@ -188,7 +196,9 @@ function AccountRow({ account, onForget }: { account: StoredAccount; onForget: (
           />
           <Stat
             label="policies"
-            value={String(state.snapshot.rules.reduce((total, rule) => total + rule.policies.length, 0))}
+            value={String(
+              state.snapshot.rules.reduce((total, rule) => total + rule.policies.length, 0),
+            )}
           />
           <Stat label="at ledger" value={state.snapshot.ledger.toLocaleString('en-US')} />
         </dl>

@@ -12,10 +12,10 @@ import { formatPolicyId } from '@/lib/policy-id';
  * Every column here is chain state read at `atLedger`. Nothing derived by this
  * application appears in this table — `validFromLedger`, the headroom that
  * produced a cap, and the transaction a policy was derived from are all local
- * provenance and belong under their own label on the policy screen, never
- * inside the on-chain rule block. That separation is design decision 5 in the
- * plan and it is the difference between showing what the network will enforce
- * and showing what this app believes.
+ * provenance and belong under their own label on the policy screen, never inside
+ * the on-chain rule block. That separation is design decision 5 in the plan and
+ * it is the difference between showing what the network will enforce and showing
+ * what this app believes.
  */
 
 function signerLabel(signer: SnapshotSigner): string {
@@ -28,9 +28,9 @@ function signerValue(signer: SnapshotSigner): string {
 
 /**
  * `valid_until` is inclusive on-chain, so a rule whose bound equals the current
- * ledger is live for this ledger and expires with the next one. Saying
- * "expires" rather than "expired" for that case is the difference between a
- * rule someone can still use and one they cannot.
+ * ledger is live for this ledger and expires with the next one. Saying "expires"
+ * rather than "expired" for that case is the difference between a rule someone
+ * can still use and one they cannot.
  */
 function expiryText(rule: SnapshotRule, atLedger: number): string {
   if (rule.validUntilLedger === null) return 'no expiry';
@@ -83,7 +83,10 @@ export function RulesTable({
               <td>
                 <span className="value">{rule.name}</span>
                 {!rule.live && (
-                  <span className="status-label ml-2" title="Past its valid_until ledger. The network will refuse a call made under it.">
+                  <span
+                    className="status-label ml-2"
+                    title="Past its valid_until ledger. The network will refuse a call made under it."
+                  >
                     EXPIRED
                   </span>
                 )}
@@ -139,7 +142,8 @@ export function RulesTable({
                           </span>
                         ) : (
                           <span className="value text-[12.5px]">
-                            {decimalise(policy.limit.spentInWindow)} / {decimalise(policy.limit.limit)}{' '}
+                            {decimalise(policy.limit.spentInWindow)} /{' '}
+                            {decimalise(policy.limit.limit)}{' '}
                             <span className="text-muted-dim">
                               per {ledgersToDuration(policy.limit.periodLedgers)}
                             </span>

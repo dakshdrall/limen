@@ -20,7 +20,7 @@
  * counting. Those come from the run, and `--check` is what keeps them current.
  */
 
-import { readFileSync } from 'node:fs';
+import { type Dirent, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { EVIDENCE } from '../src/lib/evidence';
@@ -42,8 +42,6 @@ const recorded = JSON.parse(recordedText) as {
     axes: { ledger: string; hash?: string }[];
   };
 };
-
-const landing = readFileSync(fileURLToPath(new URL('../src/app/page.tsx', import.meta.url)), 'utf8');
 
 describe('the chain figures are what the deployments file says', () => {
   it('counts every distinct transaction hash in the recording', () => {
@@ -141,23 +139,54 @@ describe('the test totals are internally consistent', () => {
   });
 });
 
-describe('the landing reads the numbers rather than restating them', () => {
-  it('renders every figure through EVIDENCE', () => {
-    expect(landing).toContain("from '@/lib/evidence'");
-    // The failure this guards is a single hand-typed digit appearing beside six
-    // generated ones, wearing the same typeface and carrying none of the same
-    // guarantee. Every `value` prop on this page — a stat tile's figure, an
-    // address — is an expression, so a string literal in that slot is the
-    // regression.
-    const typed = [...landing.matchAll(/\bvalue="([^"]*)"/g)].map(([, literal]) => literal);
-    expect(typed, `values typed into the landing rather than read: ${typed.join(' | ')}`).toEqual([]);
+describe('no rendered surface restates a chain value', () => {
+  /**
+   * The V5 form of this pinned two selector names — `RECORDED_RUN` and
+   * `RECORDED_DERIVATION` — against `app/page.tsx` specifically. That coupled a
+   * real guarantee to one page's structure, and PLAN-V6 deletes that structure:
+   * `RECORDED_DERIVATION` was shaped to serve one worked example and does not
+   * survive the rebuild.
+   *
+   * The guarantee is worth more than the coupling, so it is restated the way it
+   * should always have been — as a property of everything that renders, not of
+   * the file that happened to render it first. This is strictly stronger: it
+   * held for one file before and holds for every page and component now,
+   * including the V6 scenes as they arrive. A scene that types a hash in fails
+   * here the commit it is written, rather than the commit somebody notices.
+   *
+   * What it cannot catch is a *wrong* figure read correctly from the recording.
+   * That is what re-deriving the chain counts above is for.
+   */
+  function rendered(dir: string): [string, string][] {
+    const root = new URL(`../src/${dir}/`, import.meta.url);
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(root, { withFileTypes: true });
+    } catch {
+      return []; // The directory need not exist yet mid-rebuild.
+    }
+    return entries.flatMap((entry) => {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) return rendered(path);
+      if (!entry.name.endsWith('.tsx')) return [];
+      return [[path, readFileSync(fileURLToPath(new URL(`../src/${path}`, import.meta.url)), 'utf8')]];
+    });
+  }
+
+  const surfaces = [...rendered('app'), ...rendered('components')];
+
+  it('has surfaces to check, so an empty sweep cannot pass as a clean one', () => {
+    // Without this, deleting every page would turn the two tests below green.
+    expect(surfaces.length).toBeGreaterThan(0);
   });
 
-  it('reads its hashes and caps from the recording', () => {
-    expect(landing).toContain('RECORDED_RUN');
-    expect(landing).toContain('RECORDED_DERIVATION');
-    // Nothing that looks like a transaction hash or a strkey is typed in.
-    expect(landing).not.toMatch(/[0-9a-f]{64}/);
-    expect(landing).not.toMatch(/\b[CG][A-Z2-7]{55}\b/);
+  it.each(surfaces)('%s types in no transaction hash', (path, source) => {
+    const typed = source.match(/[0-9a-f]{64}/g) ?? [];
+    expect(typed, `hashes typed into ${path} rather than read: ${typed.join(' | ')}`).toEqual([]);
+  });
+
+  it.each(surfaces)('%s types in no contract or account address', (path, source) => {
+    const typed = source.match(/\b[CG][A-Z2-7]{55}\b/g) ?? [];
+    expect(typed, `addresses typed into ${path} rather than read: ${typed.join(' | ')}`).toEqual([]);
   });
 });

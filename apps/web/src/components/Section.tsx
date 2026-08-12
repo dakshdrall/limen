@@ -1,7 +1,24 @@
 /**
+ * A numbered section within a screen.
+ *
  * Sections are separated by space rather than rules. The eyebrow numeral is
- * faint and small; the title carries the weight. Hierarchy comes from weight
- * and colour, not from size alone.
+ * faint and small; the title carries the weight. Hierarchy comes from weight and
+ * colour, not from size alone — which is the instrument's rule, and the reason
+ * the emphasised title tops out at 22px rather than reaching for the narrative's
+ * scale.
+ *
+ * ## What V6 dropped: `id` and `bleed`
+ *
+ * Both existed for the V5 landing. `id` set an anchor and a scroll margin for
+ * `landing/SectionNav`, and `bleed` spanned the viewport for the one table wide
+ * enough to want it. The landing is gone — the argument is told in `Scene` now,
+ * which owns its own anchoring and its own full-bleed band.
+ *
+ * That leaves `/app` as the only consumer, and `/app` passes neither. They are
+ * dropped rather than carried: a prop with no call site is a prop that drifts,
+ * and the scroll-margin value in particular encoded the height of a sticky nav
+ * that no longer exists. A screen that needs to be anchored again should get the
+ * margin measured against the chrome of the day.
  */
 export function Section({
   index,
@@ -14,7 +31,7 @@ export function Section({
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  /** The deny table gets more air and a heavier title than the rest. */
+  /** The step a screen is actually about gets more air and a heavier title. */
   emphasis?: boolean;
 }) {
   return (

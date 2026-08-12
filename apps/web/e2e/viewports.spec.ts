@@ -137,6 +137,103 @@ test.describe('no page scrolls the body sideways', () => {
   }
 });
 
+/**
+ * The evidence band's two panels are one exhibit, and share both edges.
+ *
+ * 1440 is in this list and not in `WIDTHS` above because it is the width where
+ * the band has slack to give away: `--bleed-max` is 96rem, so at 1440 the band
+ * spans the viewport while the exhibit stops at the sum of the table's columns
+ * and about 286px collects on the right. That slack is the point of the
+ * arrangement and also the only place a stretched panel could hide.
+ *
+ * Measured rather than asserted from the source because nothing in the CSS
+ * forces it. `Exhibit` is `w-max`, so it takes the width of its widest child
+ * and the table is expected to be that child — an expectation about rendered
+ * text metrics, which is exactly the kind of claim the Node suite cannot make.
+ * If the panel's prose ever outgrew the table's columns, the panel would size
+ * the exhibit, the table would sit inside it one edge short, and every source
+ * file involved would still read correctly.
+ *
+ * The lower bound matters too: below the sum the exhibit is bounded by the
+ * band, both panels stop at the gutter, and the table scrolls inside its own
+ * `.scroll-x` box. A panel that overflowed instead would put the whole page on
+ * a horizontal scroll, which the suite above catches from the other side.
+ */
+const EXHIBIT_WIDTHS = [1440, 1280, 1024, 768, 390] as const;
+
+test.describe('the permitted panel and the refusal table are one width', () => {
+  for (const width of EXHIBIT_WIDTHS) {
+    test(`at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+      const band = page.locator('#evidence');
+      // `[data-exhibit]`, not the `w-max` class that does the work: the table's
+      // own box carries that class too, so a class selector would survive the
+      // container being deleted by matching the table and comparing it to
+      // itself. See `Exhibit`.
+      const exhibit = band.locator('[data-exhibit]');
+      // By what makes it the permitted panel, not by being the first child.
+      // A positional selector passes for the wrong reason if the panel is ever
+      // moved out of the exhibit: the table's own wrapper becomes the first
+      // child, and the test compares it to the table inside it — two elements
+      // that share edges trivially, while the panel this is about sits outside
+      // stretched to the band.
+      //
+      // `>` because the permitted `Verdict` badge inside the panel is drawn
+      // with the same border token, so an unscoped match finds two elements.
+      const panel = exhibit.locator('> .border-permit-line');
+      // The table's *bordered box*, not the table: the box is the edge a reader
+      // sees, and below the sum it is the one that stops at the band while the
+      // table keeps its full width and scrolls.
+      const box = exhibit.locator('.scroll-x').first();
+
+      // Named separately so deleting the container fails as "there is no
+      // exhibit" rather than as a timeout on one of its descendants.
+      await expect(exhibit, 'the evidence band should hold exactly one exhibit').toHaveCount(1);
+      await expect(
+        panel,
+        'the permitted panel should be inside the exhibit — outside it, it is sized by the ' +
+          'band rather than by the table',
+      ).toHaveCount(1);
+
+      const [panelBox, tableBox, bandBox] = await Promise.all([
+        panel.boundingBox(),
+        box.boundingBox(),
+        band.boundingBox(),
+      ]);
+
+      expect(panelBox, 'the permitted panel should render').not.toBeNull();
+      expect(tableBox, 'the refusal table should render').not.toBeNull();
+      expect(bandBox, 'the evidence band should render').not.toBeNull();
+      if (panelBox === null || tableBox === null || bandBox === null) return;
+
+      const left = panelBox.x - tableBox.x;
+      const right = panelBox.x + panelBox.width - (tableBox.x + tableBox.width);
+
+      // Sub-pixel, because both edges are laid out from the same resolved
+      // container width and a fractional container splits the same way twice.
+      expect(
+        Math.abs(left),
+        `at ${width}px the panel's left edge is ${left.toFixed(1)}px off the table's — ` +
+          'the two are one exhibit and share both edges',
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(right),
+        `at ${width}px the panel's right edge is ${right.toFixed(1)}px off the table's — ` +
+          'a panel wider than the table is the panel sizing the exhibit, which is the ' +
+          'mismatch this arrangement exists to remove',
+      ).toBeLessThanOrEqual(0.5);
+
+      // Bounded by the band, not overflowing it, at every width below the sum.
+      expect(
+        panelBox.x + panelBox.width,
+        `at ${width}px the exhibit runs past the band's right edge`,
+      ).toBeLessThanOrEqual(bandBox.x + bandBox.width + 0.5);
+    });
+  }
+});
+
 test('every screen states where its numbers came from', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 900 });

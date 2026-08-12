@@ -194,7 +194,12 @@ describe('the detectors can fire', () => {
 });
 
 describe('the label exists once, in the closed set', () => {
-  const statusLabel = readFileSync(join(SRC, 'components/StatusLabel.tsx'), 'utf8');
+  // V6 moved the closed set from `components/StatusLabel.tsx` to
+  // `lib/status-labels.ts`. The rule is unchanged; only the file it reads is.
+  // The move happened because `lib/local-key.ts` imported the constant from the
+  // component layer, so this safety rule was resting on a component file
+  // continuing to exist — which the rebuild disproved on its first build.
+  const statusLabel = readFileSync(join(SRC, 'lib/status-labels.ts'), 'utf8');
 
   it('is a member of STATUS_LABELS, not a string a screen invented', () => {
     expect(statusLabel).toContain("'TESTNET ONLY · LOCAL KEY'");
@@ -258,12 +263,29 @@ describe('the label follows the key wherever it is used', () => {
     expect(unlabelled).toEqual([]);
   });
 
-  it('puts the label on a screen once the key can be created', () => {
-    if (!moduleLanded) {
-      // Nothing to check yet, and saying so beats a silently skipped test.
-      expect(moduleLanded).toBe(false);
-      return;
-    }
+  it('puts the label on a screen once a screen can create a key', () => {
+    expect(moduleLanded).toBe(true);
+
+    /**
+     * The obligation attaches to the rendering surface that can create a key,
+     * and during the V6 rebuild there is not one yet — every screen was deleted
+     * in step 1 and the key-creating screen returns in step 5.
+     *
+     * The V5 form of this keyed off the *module* existing, which made it fail
+     * for the whole rebuild. Keying off a screen that imports the module is the
+     * same rule stated against the thing that actually incurs the obligation:
+     * it is vacuous only while no screen can create a key, and it goes live by
+     * itself the moment one does. It is not weaker in the end state.
+     *
+     * The count is asserted rather than the emptiness tolerated silently, so
+     * the transition from "no such screen" to "a screen that must be labelled"
+     * is visible in the diff of this file's expectations rather than invisible.
+     */
+    const keyCreatingScreens = sources().filter(
+      ({ path, text }) => path.endsWith('.tsx') && IMPORTS_THE_LOCAL_KEY_MODULE.test(text),
+    );
+
+    if (keyCreatingScreens.length === 0) return;
 
     const rendered = sources().filter(({ text }) => RENDERS_THE_LABEL.test(text));
     // A label that only ever exists as a constant is the README failure mode

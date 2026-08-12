@@ -63,12 +63,25 @@ export function TransactionPicker({
             autoComplete="off"
             placeholder="64 hexadecimal characters"
             aria-describedby="tx-hash-note"
-            className="value min-w-0 flex-1 basis-[28rem] rounded-[4px] border border-border-default bg-surface px-3 py-2 text-foreground transition-colors placeholder:text-faint hover:border-border-bright focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            // `.field`, rather than the six utilities that used to spell one out
+            // here. This input predates the component and had drifted from the
+            // one on the accounts screen in three ways — its own radius, its own
+            // ground, and its own hover — which is the drift `.field` exists to
+            // stop.
+            //
+            // Disabled follows `.btn:disabled` rather than dimming: the rule
+            // there is that a control this application cannot use should read as
+            // absent rather than as broken, and `opacity: 0.5` leaves something
+            // that still looks available, just fainter. Live ingest being
+            // unconfigured is exactly that case, and the note below already says
+            // so in words.
+            className="field value min-w-0 flex-1 basis-[28rem] disabled:cursor-not-allowed disabled:border-border-subtle disabled:text-faint"
           />
           <button
             type="submit"
             disabled={!liveIngestEnabled || loading}
-            className="btn" data-variant="primary"
+            className="btn"
+            data-variant="primary"
           >
             Observe
           </button>
@@ -85,8 +98,8 @@ export function TransactionPicker({
             // different transaction than the one asked for would be the worst
             // possible degradation.
             <>
-              Live ingest is unavailable — this deployment has no Soroban RPC endpoint configured
-              (<span className="value">SOROBAN_RPC_URL</span>). The shipped presets below still run
+              Live ingest is unavailable — this deployment has no Soroban RPC endpoint configured (
+              <span className="value">SOROBAN_RPC_URL</span>). The shipped presets below still run
               the full pipeline.
             </>
           )}

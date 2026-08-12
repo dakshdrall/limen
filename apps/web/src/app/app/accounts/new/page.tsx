@@ -13,10 +13,9 @@ export const metadata = {
  * Everything before v4 read the chain; nothing wrote to it, because writing
  * needs an owner signature and no browser signer existed. This is where that
  * stops being true, and the labels say so precisely: `TESTNET ONLY` and `NOT
- * AUDITED` as everywhere else, and no `NO CUSTODY` — the key created here
- * exists so it can move testnet funds, and claiming otherwise on the one screen
- * that generates it would be the exact inaccuracy the label set exists to
- * prevent.
+ * AUDITED` as everywhere else, and no `NO CUSTODY` — the key created here exists
+ * so it can move testnet funds, and claiming otherwise on the one screen that
+ * generates it would be the exact inaccuracy the label set exists to prevent.
  */
 export default function NewAccountPage() {
   return (

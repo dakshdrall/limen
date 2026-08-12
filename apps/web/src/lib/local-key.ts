@@ -51,9 +51,9 @@
 
 import { Keypair } from '@stellar/stellar-sdk';
 import { assertTestnet, toHex, type Ed25519Signer } from '@limen/chain/browser';
-import { LOCAL_KEY_LABEL } from '@/components/StatusLabel';
 import { KEY_ROLES, NOT_EXPORTABLE, type KeyRole } from '@/lib/key-roles';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
+import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 
 /**
  * The label, re-exported so a caller that renders it does not have to know it
@@ -63,6 +63,10 @@ import { NETWORK_PASSPHRASE } from '@/lib/network';
  * requires every file that imports this module to carry `LOCAL_KEY_LABEL`, and
  * a re-export is how a caller satisfies that by naming the constant rather than
  * by retyping the string and letting the two drift.
+ *
+ * V6 moved the constant from `components/StatusLabel.tsx` to
+ * `lib/status-labels.ts`. Only the import path changed; see that module for why
+ * the old direction was backwards.
  */
 export { LOCAL_KEY_LABEL };
 

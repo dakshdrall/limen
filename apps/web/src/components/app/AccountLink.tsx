@@ -12,13 +12,13 @@ import { truncateAddress } from '@/lib/format';
  *
  * That is a defensible difference. What was not defensible was where it lived:
  * the two screens that render this each spelled out `slice(0, 10)` and
- * `slice(-6)` themselves, so the decision existed twice and belonged to
- * neither. The next screen to show an account heading would have picked its own
- * numbers, and none of the three would have been wrong exactly — they would
- * just have disagreed.
+ * `slice(-6)` themselves, so the decision existed twice and belonged to neither.
+ * The next screen to show an account heading would have picked its own numbers,
+ * and none of the three would have been wrong exactly — they would just have
+ * disagreed.
  *
- * Not `Address`, which is a copy button: this navigates, and a control that
- * both copies and navigates does neither predictably. The full value is in the
+ * Not `Address`, which is a copy button: this navigates, and a control that both
+ * copies and navigates does neither predictably. The full value is in the
  * `title` for the same reason `Address` carries it — a truncated value a
  * reviewer cannot recover is a value they cannot check.
  */

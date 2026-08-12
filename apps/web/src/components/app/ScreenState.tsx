@@ -26,6 +26,24 @@ import type { ReactNode } from 'react';
 /**
  * `what` completes the sentence "waiting for …". It is required rather than
  * optional so a caller cannot skip it and get a bare spinner.
+ *
+ * ## Why there is no pulse on the dot
+ *
+ * Through V5 the marker carried Tailwind's `animate-pulse`, which compiles to a
+ * `@keyframes` loop. `globals.css` bans keyframes and `design-system.test.ts`
+ * pins the ban — but it reads the stylesheet, and a utility class generates its
+ * keyframes somewhere the test never looked. So the one motion in this
+ * application that broke its own rule was the one motion no rule was checking.
+ *
+ * The ban is not stylistic. A loop runs on its own authority: this dot pulsed at
+ * the same rate whether the read was in flight, had died in a dropped
+ * connection, or had resolved into a component that failed to re-render. It
+ * looked like liveness and carried none — which is worse than no indicator,
+ * because a reader waits on it.
+ *
+ * What is honest here is that nothing is known yet, so the marker is still and
+ * the sentence does the work. The state is announced to assistive technology by
+ * `role="status"`, which is the part that was ever load-bearing.
  */
 export function Pending({ what }: { what: string }) {
   return (
@@ -37,7 +55,7 @@ export function Pending({ what }: { what: string }) {
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full border border-accent"
         />
         <span className="text-[13px] leading-relaxed text-muted">{what}</span>
       </div>
@@ -79,11 +97,7 @@ export function ReadFailure({
   onRetry?: () => void;
 }) {
   return (
-    <div
-      role="alert"
-      className="panel"
-      data-tone={unconfigured ? 'pending' : 'refused'}
-    >
+    <div role="alert" className="panel" data-tone={unconfigured ? 'pending' : 'refused'}>
       <div className="flex flex-col gap-1.5">
         <span className={`eyebrow ${unconfigured ? 'text-muted-dim' : 'text-deny'}`}>
           {unconfigured ? 'not configured' : 'read failed'}
@@ -93,10 +107,10 @@ export function ReadFailure({
 
       {detail !== undefined && detail.length > 0 && (
         <details className="text-[12px] text-muted-dim">
-          <summary className="cursor-pointer rounded-[2px]">
-            What the endpoint said
-          </summary>
-          <p className="scroll-x mt-2 font-mono text-[11.5px] leading-relaxed break-words">{detail}</p>
+          <summary className="cursor-pointer rounded-[2px]">What the endpoint said</summary>
+          <p className="scroll-x mt-2 font-mono text-[11.5px] leading-relaxed break-words">
+            {detail}
+          </p>
         </details>
       )}
 

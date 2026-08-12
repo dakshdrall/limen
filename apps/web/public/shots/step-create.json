@@ -1,0 +1,6 @@
+{
+  "name": "step-create",
+  "route": "/app/accounts/new",
+  "select": "section:has(h2:has-text(\"Generate the two keys\"))",
+  "text": "01\nGenerate the two keys\nAn owner key and an agent key, both created in this browser. The owner installs boundaries; the agent is what the boundary is installed against.\nnothing generated yet\nTESTNET ONLY · LOCAL KEY\nTwo disposable ed25519 keypairs, generated here and kept in this browser’s storage. They are not a wallet and they never reach a Limen server.\nThis key cannot be exported. Clearing site data destroys it, and with it the account it owns.\nGenerate keys"
+}

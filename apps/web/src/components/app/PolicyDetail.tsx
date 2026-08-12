@@ -41,7 +41,9 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
   const survey = surveyFor(contractId);
 
   const rule =
-    state.status === 'ok' ? state.snapshot.rules.find((candidate) => candidate.id === ruleId) : undefined;
+    state.status === 'ok'
+      ? state.snapshot.rules.find((candidate) => candidate.id === ruleId)
+      : undefined;
 
   return (
     <div className="flex flex-col gap-14">
@@ -54,7 +56,7 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
         </div>
         <Link
           href={`/app/accounts/${contractId}`}
-          className="rounded-[3px] text-[12.5px] text-muted link"
+          className="link rounded-[3px] text-[12.5px] text-muted"
         >
           Whole account
         </Link>
@@ -65,7 +67,9 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
         title="The boundary, as the chain holds it"
         subtitle="Read from the ledger when this screen loaded. Not restored from anything this browser stored."
       >
-        {state.status === 'pending' && <Pending what="Reading this context rule and its policies from testnet." />}
+        {state.status === 'pending' && (
+          <Pending what="Reading this context rule and its policies from testnet." />
+        )}
         {state.status === 'failed' && (
           <ReadFailure
             message={state.message}
@@ -96,9 +100,7 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
                 sequence={ledger}
                 validUntilLedger={rule.validUntilLedger}
                 windowLedgers={
-                  provenance === undefined ||
-                  provenance === null ||
-                  rule.validUntilLedger === null
+                  provenance === undefined || provenance === null || rule.validUntilLedger === null
                     ? null
                     : rule.validUntilLedger - provenance.observedLedger
                 }
@@ -122,11 +124,8 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
                 The boundary above is installed and readable, and nothing in this repository has
                 attempted to cross it. That is an absence of evidence, not evidence of enforcement —
                 the deny table on the{' '}
-                <Link
-                  href="/"
-                  className="rounded-[2px] link"
-                >
-                  mechanism page
+                <Link href="/" className="link rounded-[2px]">
+                  narrative
                 </Link>{' '}
                 adjudicates the same six axes locally, and says so.
               </p>
@@ -143,8 +142,8 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
               {run === undefined && (
                 <p className="measure text-[12px] leading-relaxed text-unproven">
                   These attempts were recorded against this account, not against rule {ruleId}. The
-                  note above says which rules produced them. They are shown here as the account&rsquo;s
-                  history and are not a claim about this rule.
+                  note above says which rules produced them. They are shown here as the
+                  account&rsquo;s history and are not a claim about this rule.
                 </p>
               )}
             </>
@@ -184,9 +183,9 @@ export function PolicyDetail({ contractId, ruleId }: { contractId: string; ruleI
         ) : provenance === null ? (
           <EmptyState title="This browser did not derive this policy.">
             <p>
-              Provenance is written when a policy is installed through this application, and it lives
-              only in the browser that did it. Its absence says nothing about the rule above, which
-              is installed and enforced regardless.
+              Provenance is written when a policy is installed through this application, and it
+              lives only in the browser that did it. Its absence says nothing about the rule above,
+              which is installed and enforced regardless.
             </p>
           </EmptyState>
         ) : (
@@ -228,7 +227,9 @@ function RuleFacts({ rule, atLedger }: { rule: SnapshotRule; atLedger: number })
           label="valid until"
           value={
             <span className="value">
-              {rule.validUntilLedger === null ? 'no expiry' : rule.validUntilLedger.toLocaleString('en-US')}
+              {rule.validUntilLedger === null
+                ? 'no expiry'
+                : rule.validUntilLedger.toLocaleString('en-US')}
             </span>
           }
         />
@@ -254,7 +255,9 @@ function RuleFacts({ rule, atLedger }: { rule: SnapshotRule; atLedger: number })
               <Fact
                 key={`${policy.contract}-window`}
                 label="window"
-                value={<span className="value">{ledgersToDuration(policy.limit.periodLedgers)}</span>}
+                value={
+                  <span className="value">{ledgersToDuration(policy.limit.periodLedgers)}</span>
+                }
               />,
             ]
           ),
@@ -285,10 +288,7 @@ function Provenance({ provenance }: { provenance: StoredProvenance }) {
     <div className="flex flex-col gap-5">
       <StatusLabel name="COMPUTED LOCALLY" />
       <dl className="grid gap-x-10 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Fact
-          label="derived from"
-          value={<Address value={provenance.observedTxHash} />}
-        />
+        <Fact label="derived from" value={<Address value={provenance.observedTxHash} />} />
         <Fact
           label="observed at ledger"
           value={<span className="value">{provenance.observedLedger.toLocaleString('en-US')}</span>}
@@ -300,10 +300,11 @@ function Provenance({ provenance }: { provenance: StoredProvenance }) {
         <Fact label="installed by" value={<Address value={provenance.installTxHash} />} />
       </dl>
       <p className="measure text-[12px] leading-relaxed text-muted-dim">
-        <span className="value">validFromLedger</span> — the ledger the boundary was derived from —
-        has no counterpart on an OpenZeppelin context rule. It is kept here as provenance and is
-        deliberately absent from the on-chain block above, because a field rendered inside that block
-        would read as something the network enforces.
+        <span className="value">validFromLedger</span>{' '}
+        — the ledger the boundary was derived from — has no counterpart on an OpenZeppelin context
+        rule. It is kept here as provenance and is deliberately absent from the on-chain block
+        above, because a field rendered inside that block would read as something the network
+        enforces.
       </p>
     </div>
   );

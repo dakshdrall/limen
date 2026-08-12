@@ -41,10 +41,7 @@ export function AccountDetail({ contractId }: { contractId: string }) {
             </button>
           )}
         </div>
-        <Link
-          href="/app/accounts"
-          className="rounded-[3px] text-[12.5px] text-muted link"
-        >
+        <Link href="/app/accounts" className="link rounded-[3px] text-[12.5px] text-muted">
           All accounts
         </Link>
       </div>
@@ -85,9 +82,9 @@ export function AccountDetail({ contractId }: { contractId: string }) {
           {state.snapshot.rules.length === 0 ? (
             <EmptyState title="This account has no context rules.">
               <p>
-                The contract answered, so this is the account&rsquo;s real state rather than a failed
-                read: nothing is installed, and no signer is authorized for anything. An account in
-                this state cannot act.
+                The contract answered, so this is the account&rsquo;s real state rather than a
+                failed read: nothing is installed, and no signer is authorized for anything. An
+                account in this state cannot act.
               </p>
             </EmptyState>
           ) : (
@@ -97,7 +94,6 @@ export function AccountDetail({ contractId }: { contractId: string }) {
               atLedger={state.snapshot.ledger}
             />
           )}
-
         </>
       )}
 

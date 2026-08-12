@@ -26,14 +26,11 @@ import { useLowering } from '@/lib/use-lowering';
  * Four steps, in the order the brief asks for: observe a transaction, review
  * what Limen derived from it, see what would actually be written, and install.
  *
- * The third step is the one that does not exist on `/`. What `synthesize`
- * produces and what an OpenZeppelin smart account can hold are not the same
- * language, and a screen that showed only the first would be describing a
- * boundary the network may never have been asked to enforce. `lower` translates
- * or refuses, and both outcomes get a designed state.
- *
- * The fourth step cannot complete in this build, and says so in place rather
- * than presenting a button that fails. See `InstallStep`.
+ * The third step is the one that does not exist on the narrative. What
+ * `synthesize` produces and what an OpenZeppelin smart account can hold are not
+ * the same language, and a screen that showed only the first would be describing
+ * a boundary the network may never have been asked to enforce. `lower`
+ * translates or refuses, and both outcomes get a designed state.
  */
 
 export function NewPolicyScreen({
@@ -55,9 +52,8 @@ export function NewPolicyScreen({
    *
    * How the account screen hands its observed transaction over: by hash, so it
    * is read back from the network here rather than passed as a payload. A
-   * derived cap must come from what the ledger recorded, and shipping the
-   * amount across a URL would make it come from what the previous screen
-   * believed.
+   * derived cap must come from what the ledger recorded, and shipping the amount
+   * across a URL would make it come from what the previous screen believed.
    */
   observeHash?: string | null;
   /** The account to install onto, from `?account=`. */
@@ -122,8 +118,8 @@ export function NewPolicyScreen({
   }, [observeHash, observe]);
 
   // Lowering follows the proposal automatically. Making it a button would imply
-  // the user is choosing to lower, when in fact there is no version of this
-  // flow where they would not: the plan is what they are being asked to review.
+  // the user is choosing to lower, when in fact there is no version of this flow
+  // where they would not: the plan is what they are being asked to review.
   const lowered = useLowering(proposal);
 
   return (
@@ -173,7 +169,9 @@ export function NewPolicyScreen({
             Nothing to lower — the boundary above was not derived.
           </p>
         )}
-        {lowered.status === 'pending' && <Pending what="Lowering the proposal onto OpenZeppelin primitives." />}
+        {lowered.status === 'pending' && (
+          <Pending what="Lowering the proposal onto OpenZeppelin primitives." />
+        )}
         {lowered.status === 'lowered' && <InstallPlanTable plan={lowered.plan} />}
         {lowered.status === 'refused' && (
           <NotEnforceable constraint={lowered.constraint} message={lowered.message} />
@@ -222,9 +220,9 @@ function RefusedToDerive({ message }: { message: string }) {
  * There is no plan, so there is nothing to install.
  *
  * What used to stand here was the caveat explaining that *nothing* could be
- * installed, from a build with no browser signer. `InstallControl` retires it
- * by existing. This is the narrower, still-true statement: lowering refused or
- * has not finished, so there is no plan for a button to write.
+ * installed, from a build with no browser signer. `InstallControl` retires it by
+ * existing. This is the narrower, still-true statement: lowering refused or has
+ * not finished, so there is no plan for a button to write.
  *
  * It is not a disabled install button. A disabled control claims the action
  * exists and something is temporarily wrong; when `lower` has *refused*, the

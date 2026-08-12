@@ -12,8 +12,8 @@ import type { ReactNode } from 'react';
  * learns more about whether to trust it than one who only ever watches it
  * succeed.
  *
- * So this component states three things, in order: what was attempted, why
- * Limen refused, and — the part that turns a failure into evidence — what it
+ * So this component states three things, in order: what was attempted, why Limen
+ * refused, and — the part that turns a failure into evidence — what it
  * specifically did NOT do instead.
  */
 
@@ -83,7 +83,7 @@ export function RefusalSection({
 
       {/* The load-bearing part. Without this, a refusal reads as a failure. */}
       <Block title="What it did not do">
-        <ul className="flex measure flex-col gap-2">
+        <ul className="measure flex flex-col gap-2">
           <DidNot>approximate the constraint with the nearest primitive that fits</DidNot>
           <DidNot>drop the part it could not express and emit the rest</DidNot>
           <DidNot>widen a cap, a window, or an allowlist to make the flow fit</DidNot>
@@ -114,31 +114,5 @@ function DidNot({ children }: { children: ReactNode }) {
       </span>
       <span>{children}</span>
     </li>
-  );
-}
-
-/** The observed flow, summarised for the "what was attempted" block. */
-export function AttemptedFlow({
-  contracts,
-  functions,
-  assets,
-  ledger,
-}: {
-  contracts: number;
-  functions: number;
-  assets: number;
-  ledger: number;
-}) {
-  return (
-    <dl className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-x-5 gap-y-2 text-[13px]">
-      <dt className="col-head text-muted-dim">contracts</dt>
-      <dd className="value text-foreground">{contracts}</dd>
-      <dt className="col-head text-muted-dim">functions</dt>
-      <dd className="value text-foreground">{functions}</dd>
-      <dt className="col-head text-muted-dim">assets out</dt>
-      <dd className="value text-foreground">{assets}</dd>
-      <dt className="col-head text-muted-dim">ledger</dt>
-      <dd className="value text-foreground">{ledger}</dd>
-    </dl>
   );
 }
