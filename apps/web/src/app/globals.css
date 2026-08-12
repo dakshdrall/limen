@@ -925,6 +925,29 @@ body::before {
        wider than `DENY` reads. This was 11ch until the refusal screen became the
        first table to put a badge in it. */
     --col-verdict: 14ch;
+
+    /* The same column holding the `lg` badge, which is a different object:
+       `Verdict` renders `min-w-[7rem]` at `lg` against `min-w-[6.25rem]` at
+       `md`, and a `min-width` on an inline-flex child is a floor no wrapping can
+       get under. So this is the second token on the site whose binding
+       constraint is not the text in the column — see `--col-rowhead` below for
+       the first — and it is read off `Verdict.tsx` rather than off the longest
+       label, because the floor is wider than `REFUSED` sets.
+
+       It is a separate token rather than a wider `--col-verdict` because the
+       refusal table's `md` badge would then sit in 30px of column it does not
+       use. Two badge sizes are two column widths; that is what a token per
+       content type means.
+
+       20ch and not the 19 the floor implies, and the extra character is not
+       padding-by-feel. The floor is stated in `rem` and the column in `ch`, and
+       those two units only agree for as long as the mono face's advance stays
+       0.6em — a fallback face with a wider advance moves the column and leaves
+       the badge where it is. 19ch measured 114px against a 112px badge, which
+       is a 2px margin on a quantity that is only fixed while the font loads.
+       At 20ch it is 120px, and the failure needs a 7% metric change rather than
+       a 2% one. */
+    --col-verdict-lg: 20ch;
     --col-label: 10ch;
 
     /* A signer is a kind and a key — an `EXTERNAL` status label beside a
@@ -951,8 +974,29 @@ body::before {
 
        Both are read off the recording rather than guessed. The longest axis is
        `invocation` at 10 characters and the longest attempt is `approve on the
-       permitted token contract` at 39. */
-    --col-axis: 12ch;
+       permitted token contract` at 39.
+
+       `--col-axis` is 14ch and not the 12 it was, because the deny table became
+       the second table to use it and applies it in a different metric. `ch` is
+       resolved against the element the width lands on, and the refusal table
+       puts these tokens on a bare `th` — 12.5px, so `ch` is 8px — while every
+       table that came through the proposal conversion puts them on
+       `th.col-head`, which is 10px mono, so `ch` is 6px. The same 12ch is 96px
+       of content on the refusal table and 72px on this one.
+
+       `invocation` is ten characters of 12.5px mono at 7.88px each, so it wants
+       78.8px in both. It had 96px there and 72px here, and wrapped to two lines
+       here — nine characters on the first and the tenth alone on the second.
+       14ch is 84px in the narrower metric, which holds it with 5px to spare,
+       and costs the refusal table 16px it was not using.
+
+       Note what the unit is doing: 14ch buys 10.6 characters of the text the
+       column actually holds. `ch` states the column in the *header's* font and
+       the cells are set in another, so these tokens are only widths in
+       characters where the two fonts agree — and across tables they are only
+       equal widths at all where the headers agree. Nothing checks either.
+       Widening the token fixes this column; it does not fix that. */
+    --col-axis: 14ch;
     --col-attempt: 40ch;
 
     /* The four the proposal tables introduced when they were moved over off
@@ -1011,6 +1055,7 @@ body::before {
   .col-amount { width: calc(var(--col-amount) + var(--col-pad)); text-align: right; }
   .col-ledger { width: calc(var(--col-ledger) + var(--col-pad)); text-align: right; }
   .col-verdict { width: calc(var(--col-verdict) + var(--col-pad)); }
+  .col-verdict-lg { width: calc(var(--col-verdict-lg) + var(--col-pad)); }
   .col-label { width: calc(var(--col-label) + var(--col-pad)); }
   .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
@@ -1105,7 +1150,20 @@ body::before {
     border-bottom: none;
   }
 
-  .tbl tbody tr:hover td {
+  /* A row that carries its own verdict tint keeps it under the cursor.
+
+     The tint is set on the `tr` and the hover background on the `td`, so the
+     cell paints over the row and a hovered deny row loses exactly the colour
+     that marks it. The deny table is the first `.tbl` table with tinted rows, so
+     this is the first time the two rules have met; before it, every row was
+     untinted and the hover was unambiguous.
+
+     Written as an exclusion here rather than as a louder tint on the row,
+     because the rows opting out are the ones being pointed at — an
+     over-permissive result and the observed flow it is being compared against.
+     Losing the mark on hover would be losing it exactly when a reader has put
+     the cursor on the row to read it. */
+  .tbl tbody tr:not(.row-tinted):hover td {
     background: var(--surface-hover);
   }
 
