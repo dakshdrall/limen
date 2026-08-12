@@ -258,6 +258,147 @@ test.describe('the refusal table sizes its own surface', () => {
   }
 });
 
+/**
+ * The width `scripts/screenshots.mjs` photographed at, kept as the width this
+ * assertion was proven at rather than multiplied into five runs of itself.
+ *
+ * The columns under test are tokenised, so they are the same width at 1440 as at
+ * 900 — unlike the document-overflow suite above, whose whole subject is what
+ * changes with the viewport. 900 is where the token widths were last shown
+ * correct, so 900 is where they stay pinned.
+ */
+const SHOT_WIDTH = 900;
+
+/**
+ * Drives the simulator onto its deny table, which is beat 4.
+ *
+ * Through the shipped flow, never beat 1 — `perform()` is the only thing in this
+ * component that submits, and it is on the other branch. This suite's promise is
+ * that it spends no testnet fee, and driving four beats does not change that.
+ */
+async function simulatorThroughDenyTable(page: Page): Promise<void> {
+  await page.goto('/app/simulator', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'simple-transfer' }).click();
+  for (const [beat, label] of [
+    [2, 'Read the shipped flow'],
+    [3, 'Try to exceed it'],
+  ] as const) {
+    const button = page
+      .locator('ol')
+      .first()
+      .locator('> li')
+      .nth(beat - 1)
+      .getByRole('button', { name: label });
+    await button.waitFor({ state: 'visible', timeout: 30_000 });
+    await button.click();
+    await page.waitForTimeout(1400);
+  }
+  await page.locator('table.tbl').filter({ hasText: 'Verdict' }).first().waitFor({ timeout: 30_000 });
+}
+
+/**
+ * No column is narrower than what it holds.
+ *
+ * ## Where this came from
+ *
+ * This is `assertNothingScrolls`, which lived in `scripts/screenshots.mjs` and
+ * went when the screenshots did. It is here rather than deleted with them
+ * because it was the one thing in that script asserting a property of the
+ * application rather than a property of four PNGs.
+ *
+ * ## What it actually proved, which is less than it sounded like
+ *
+ * It ran inside a shot's crop, and there were four crops: two sections and two
+ * simulator beats. So it covered the tables inside those four regions and no
+ * others. **Neither the deny table nor the refusal table was ever in a shot** —
+ * the deny table is beat 4 and the manifest photographed beats 3 and 5 — so the
+ * two widest tables in `/app` were never under it. Both are covered here.
+ *
+ * ## Cells, not scroll boxes
+ *
+ * The distinction the screenshot check could not draw, because in a PNG the two
+ * look identical. A `.scroll-x` box that scrolls is the designed answer for a
+ * table wider than the column it sits in: at 900px the refusal table is 1088px
+ * in an 818px box and the deny table is 928px in a 768px one, both deliberate,
+ * both readable by dragging. In a photograph that was a silently cut column,
+ * which is what `assertNothingScrolls` was really objecting to — a property of
+ * the artefact, and it dies with the artefact.
+ *
+ * What does not die is the cell case. Under `table-layout: fixed` a cell that
+ * cannot fit its contents does not shrink them and does not scroll them; it
+ * paints them over the next column. That is a real defect at any width, in a
+ * live screen as much as in a picture, and it is what the token block in
+ * `globals.css` exists to prevent — `--col-rowhead` was caught at 18ch this way,
+ * a 134px heading in a 132px column.
+ *
+ * `sr-only` is excluded by construction, as it was in the original: the
+ * visually-hidden idiom is a 1px box clipped around real text, so it always
+ * overflows and always should. Scoping to table cells excludes it.
+ */
+test.describe('no table column is narrower than what it holds', () => {
+  test(`at ${SHOT_WIDTH}px`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: SHOT_WIDTH, height: 1100 });
+
+    await page.addInitScript((store) => {
+      window.localStorage.setItem('limen.v1', JSON.stringify(store));
+    }, SEEDED_STORE);
+
+    const overflowing = async () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('table.tbl td, table.tbl th')]
+          // +1 absorbs the sub-pixel difference between a cell's fractional
+          // laid-out width and the integer `scrollWidth` reports.
+          .filter((cell) => cell.scrollWidth > cell.clientWidth + 1)
+          .map((cell) => ({
+            tag: cell.tagName.toLowerCase(),
+            cls: String(cell.className).slice(0, 48),
+            shows: cell.clientWidth,
+            needs: cell.scrollWidth,
+            text: (cell.textContent ?? '').trim().slice(0, 40),
+          })),
+      );
+
+    // Every route, then one assertion — so a run names every overlapping column
+    // on the site rather than the first one and whatever it hid.
+    const found: string[] = [];
+    const collect = async (where: string) => {
+      for (const c of await overflowing()) {
+        found.push(
+          `${where}: <${c.tag} class="${c.cls}"> shows ${c.shows}px of ${c.needs}px — "${c.text}"`,
+        );
+      }
+    };
+
+    for (const route of ROUTES) {
+      await page.goto(route, { waitUntil: 'domcontentloaded' });
+      await page.waitForLoadState('networkidle').catch(() => {});
+
+      // A table still waiting on its chain read has no rows, and a table with no
+      // rows cannot overflow — it would pass this check by being empty, which is
+      // the failure mode the account pinning above exists to prevent, arriving
+      // by a different route. Where a table is on the page, wait for a row.
+      const body = page.locator('table.tbl tbody tr').first();
+      if ((await page.locator('table.tbl').count()) > 0) {
+        await body.waitFor({ state: 'visible', timeout: 60_000 }).catch(() => {});
+      }
+
+      await collect(route);
+    }
+
+    // Beat 4, which no shot ever reached.
+    await simulatorThroughDenyTable(page);
+    await collect('/app/simulator beat 4');
+
+    expect(
+      found,
+      `a column is painting over the one beside it —\n${found.join('\n')}\n` +
+        'a fixed-layout cell that cannot fit does not wrap or scroll, it overlaps: ' +
+        'give the column a token in globals.css, or widen the one it has',
+    ).toEqual([]);
+  });
+});
+
 test('every screen states where its numbers came from', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -271,19 +412,25 @@ test('every screen states where its numbers came from', async ({ page }) => {
     await page.waitForLoadState('networkidle').catch(() => {});
 
     // `main` where there is one, `.screen` where there is not. Every `/app`
-    // route renders `<main className="screen">` and `/` renders a bare `<main>`,
-    // but the docs shell wraps its sidebar and content column in a plain
-    // `<div className="screen">` — so a bare `main` locator does not resolve on
-    // `/docs` and this test spent its whole 180s timeout waiting for one.
+    // route renders `<main className="screen">` and `/` renders a bare `<main>`.
+    //
+    // The docs shell used to render neither — it wrapped its sidebar and content
+    // column in a plain `<div className="screen">`, so a bare `main` locator did
+    // not resolve on `/docs` and this test spent its whole 180s timeout waiting
+    // for one. That was recorded here as a real accessibility gap rather than
+    // worked around, and it has since been closed: `docs/layout.tsx` now marks
+    // its content column `<main>`, so a screen reader jumping to the landmark
+    // reaches the prose instead of the navigation.
+    //
+    // The `.screen` half of this selector is kept anyway. It is what makes the
+    // locator a statement about every screen rather than about the screens that
+    // currently happen to have a landmark, and it is the reason the gap above
+    // was visible from here at all.
     //
     // Scoped to a region rather than widened to `body` on purpose: `body` would
     // let the header's own chrome answer for a screen, and the top bar carries a
     // live ledger reading. The docs shell's sidebar comes along with `.screen`,
     // which is acceptable — it is navigation, and it states no figures.
-    //
-    // That missing landmark is a real gap and is not this file's to close: the
-    // docs pages are the only ones on the site with no `main` landmark, so a
-    // screen reader lands in the sidebar. Fixing it belongs in `docs/layout.tsx`.
     const text = await page.locator('main, .screen').first().innerText();
     const labelled = PROVENANCE.some((label) => text.includes(label));
     const noData = NO_DATA_STATES.some((state) => text.includes(state));

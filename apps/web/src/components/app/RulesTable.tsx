@@ -50,7 +50,21 @@ export function RulesTable({
 }) {
   return (
     <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-      <table className="tbl w-full min-w-[56rem]">
+      {/* 63rem, up from 56. Under `table-layout: fixed` the columns without a
+          width share what is left equally, so the floor is what decides whether
+          `name`, `authorizes` and `expiry` get enough — and at 56rem they got
+          75px each while `name` needed 84 for a rule name beside its `EXPIRED`
+          label and the `authorizes` header needed 80 for a word that cannot
+          break. Both were overlapping the column to their right.
+
+          The four tokenised columns take 672px, so the floor has to leave 3×108
+          on top of them. 63rem is 1008px and leaves 112 each.
+
+          Nothing changes above ~996px, which is why this was invisible: the
+          account detail screen is the one screen no shot could photograph, since
+          it renders a live chain read. It took moving `assertNothingScrolls` off
+          the four crops and onto the routes to see it. */}
+      <table className="tbl w-full min-w-[63rem]">
         <thead>
           <tr>
             <th scope="col" className="col-ledger">
@@ -65,7 +79,9 @@ export function RulesTable({
             <th scope="col" className="col-signer">
               signers
             </th>
-            <th scope="col">policies</th>
+            <th scope="col" className="col-policy">
+              policies
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -125,7 +141,7 @@ export function RulesTable({
                 )}
               </td>
 
-              <td>
+              <td className="col-policy">
                 {rule.policies.length === 0 ? (
                   // A rule with no policy is not a safe rule. It authorizes
                   // every call matching its context with nothing bounding the

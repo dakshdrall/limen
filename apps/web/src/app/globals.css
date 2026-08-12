@@ -959,6 +959,25 @@ body::before {
        one no amount of wrapping could have fixed. */
     --col-signer: 26ch;
 
+    /* The rules table's `policies` column: a cap line over the address of the
+       contract it bounds. Like `--col-signer` above, the binding half is the
+       address — `Address` renders a truncated key beside a copy button, and
+       neither yields, so the pair is a 112px unit no wrapping gets under.
+
+       It had no token until the deny table's conversion put a check on cell
+       overflow, which caught it on the first run against live chain data. This
+       is the fifth instance of the fixed-layout overlap and the first one found
+       by something other than a person looking at it: the column was one of four
+       with no width in a seven-column table, so it was taking a quarter of
+       whatever was left — 92px at 900px, holding 112px of address, painting the
+       difference over `signers`.
+
+       That it went unseen this long is the screenshot check's blind spot rather
+       than bad luck. No shot was ever taken of an account detail screen, because
+       that screen renders a live chain read and photographing one would commit a
+       picture of one account at one ledger. */
+    --col-policy: 15ch;
+
     /* A contract error code — `ContextRuleIdsLengthMismatch#3014` is the longest
        the pinned OpenZeppelin sources define, at 33 characters. The wrap rule
        below keeps a code this long from painting over the hash beside it, but
@@ -1058,6 +1077,7 @@ body::before {
   .col-verdict-lg { width: calc(var(--col-verdict-lg) + var(--col-pad)); }
   .col-label { width: calc(var(--col-label) + var(--col-pad)); }
   .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
+  .col-policy { width: calc(var(--col-policy) + var(--col-pad)); }
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
   .col-axis { width: calc(var(--col-axis) + var(--col-pad)); }
   .col-attempt { width: calc(var(--col-attempt) + var(--col-pad)); }
