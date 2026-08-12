@@ -955,6 +955,45 @@ body::before {
     --col-axis: 12ch;
     --col-attempt: 40ch;
 
+    /* The four the proposal tables introduced when they were moved over off
+       inline `w-[13rem]`-style widths. Sized to their longest content, like
+       every token above, and every one of them read out of the type rather than
+       guessed at from the rendered page:
+
+       - `--col-primitive` holds a `PolicyConfig` kind. The union in
+         `packages/core/src/types.ts` has exactly two members and
+         `function_allowlist` is 18 characters.
+       - `--col-fn` holds a function name with its parentheses. `rebalance()` is
+         the longest the shipped flows invoke, at 11.
+       - `--col-index` holds an invocation's position in its transaction. Two
+         digits is already generous — the observed flows run to five calls — but
+         a column this narrow costs nothing to leave room in.
+       - `--col-rowhead` holds a `<th scope="row">` label in the context-rule
+         table: `allowed contracts` and `allowed functions`, both 17.
+
+       These are the widths that were 12rem, 10rem, 3rem and 13rem when they
+       were stated per table. Three of the six converted columns needed no token
+       at all — they hold addresses, and `--col-addr` already existed. That is
+       the whole argument for the system: an address column is now the same
+       width here as on the rules table and the install plan, which it was not
+       while these two files each named their own.
+
+       `--col-rowhead` is 19ch and not the 18 its content implies, and it is the
+       one token here whose binding constraint is its *heading* rather than its
+       cells. Every other column on the site carries a short `.col-head` over
+       longer data, so the data decides. This one is the reverse: the label is
+       the longest string in the column, and `.col-head` renders it uppercase at
+       10px with `0.12em` of tracking and `white-space: nowrap` — so it cannot
+       wrap and it is materially wider than 17 characters of the 12.5px mono the
+       `ch` unit is measured against here. At 18ch the label wanted 134px in a
+       132px column, and `assertNothingScrolls` failed the screenshot run rather
+       than shipping a clipped heading. This is the fixed-layout overlap the
+       `--col-pad` note above describes, arriving from the header side. */
+    --col-primitive: 20ch;
+    --col-fn: 14ch;
+    --col-index: 3ch;
+    --col-rowhead: 19ch;
+
     /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
        how much *content* a column holds, so the padding is added by the classes
        below rather than folded into every token, where it would quietly stop
@@ -977,6 +1016,10 @@ body::before {
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
   .col-axis { width: calc(var(--col-axis) + var(--col-pad)); }
   .col-attempt { width: calc(var(--col-attempt) + var(--col-pad)); }
+  .col-primitive { width: calc(var(--col-primitive) + var(--col-pad)); }
+  .col-fn { width: calc(var(--col-fn) + var(--col-pad)); }
+  .col-index { width: calc(var(--col-index) + var(--col-pad)); }
+  .col-rowhead { width: calc(var(--col-rowhead) + var(--col-pad)); }
 
   /* ---------------------------------------------------------------------------
      Tables.
@@ -1039,7 +1082,26 @@ body::before {
     overflow-wrap: anywhere;
   }
 
-  .tbl tbody tr:last-child td {
+  /* Row headers. `.tbl` styled `thead th` and `tbody td` and nothing else, which
+     held for as long as every table on the site was a column-headed grid. The
+     context-rule table is not one: it is a two-column list whose left column is
+     `<th scope="row">`, which is the correct element for it and was getting
+     neither the padding nor the rule that its `<td>` sibling got.
+
+     Same padding as a `td` rather than a `thead th`'s, because it sits in a body
+     row and is read across to its value — a row header on the header's tighter
+     padding sits visibly high against the cell beside it. It keeps the heading
+     voice through `.col-head`, which the markup applies. */
+  .tbl tbody th {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .tbl tbody tr:last-child td,
+  .tbl tbody tr:last-child th {
     border-bottom: none;
   }
 

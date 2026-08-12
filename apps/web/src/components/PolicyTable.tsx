@@ -13,19 +13,27 @@ import { decimalise, ledgersToDuration } from '@/lib/format';
  * straight off a `synthesize()` return value, which is the invariant the whole
  * product rests on.
  *
- * ## The inline column widths are debt, and are carried deliberately
+ * ## The inline column widths are gone
  *
- * `w-[13rem]` and `w-[12rem]` below are exactly what `globals.css` says a table
- * should not do: the column tokens exist so a width is stated once and applied,
- * never re-derived per table. This table predates them and has not been moved
- * over.
+ * `w-[13rem]`, `w-[12rem]` and `w-[11rem]` used to sit on the cells below, which
+ * is exactly what `globals.css` says a table should not do: the column tokens
+ * exist so a width is stated once and applied, never re-derived per table. These
+ * two tables predated the tokens and had not been moved over. They are now, in
+ * their own commit and against a measured before-and-after, which is what the
+ * note here previously promised.
  *
- * Left as it is for the length of the rebuild, on the same reasoning PLAN-V6
- * gives for not relocating modules to `packages/` mid-flight: it is a change
- * with a real chance of shifting rendered widths, and the screenshot check in
- * step 6 is about to pin those widths as evidence. Converting it afterwards, as
- * its own commit with its own before-and-after, is cheaper to review than
- * converting it inside a commit that also moves five screens.
+ * The move is to `.tbl`, not to the tokens alone, and that is the whole reason
+ * it was worth doing. The tokens are stated in `ch`, so they only mean the same
+ * width in the type scale they were measured in: applying `.col-addr` to a table
+ * still at 13.5px would have produced a third address width rather than removed
+ * the second one. `.tbl w-full min-w-[Nrem]` is the pattern `RulesTable`,
+ * `ActivityScreen` and `InstallPlanTable` already use, so this is these two
+ * joining the house table rather than a new arrangement for them.
+ *
+ * The payoff is `--col-addr`. Three of the six converted columns hold an address
+ * and needed no new token at all — `Target` here and `Contract` in
+ * `ObservedSection` are now the same width as the contract column on the rules
+ * table and the install plan, which they were not while each file named its own.
  */
 export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
   const rule = proposal.contextRule;
@@ -36,16 +44,13 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
       <div className="flex flex-col gap-2.5">
         <h3 className="col-head text-muted">Context rule</h3>
         <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-          <table className="w-full min-w-[42rem] border-collapse text-left">
+          <table className="tbl w-full min-w-[42rem]">
             <tbody>
-              <tr className="border-b border-border-subtle">
-                <th
-                  scope="row"
-                  className="col-head w-[13rem] px-4 py-3 text-left align-top text-muted-dim"
-                >
+              <tr>
+                <th scope="row" className="col-head col-rowhead text-muted-dim">
                   allowed contracts
                 </th>
-                <td className="px-4 py-3">
+                <td>
                   <ul className="flex flex-col gap-1">
                     {rule.allowedContracts.map((contractId) => (
                       <li key={contractId}>
@@ -55,11 +60,11 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
                   </ul>
                 </td>
               </tr>
-              <tr className="border-b border-border-subtle">
-                <th scope="row" className="col-head px-4 py-3 text-left align-top text-muted-dim">
+              <tr>
+                <th scope="row" className="col-head col-rowhead text-muted-dim">
                   allowed functions
                 </th>
-                <td className="px-4 py-3">
+                <td>
                   <ul className="flex flex-col gap-1.5">
                     {rule.allowedContracts.map((contractId) => (
                       <li key={contractId} className="flex flex-wrap items-baseline gap-x-2">
@@ -78,10 +83,10 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
                 </td>
               </tr>
               <tr>
-                <th scope="row" className="col-head px-4 py-3 text-left align-top text-muted-dim">
+                <th scope="row" className="col-head col-rowhead text-muted-dim">
                   validity
                 </th>
-                <td className="px-4 py-3">
+                <td>
                   <span className="value text-foreground">
                     ledger {rule.validFromLedger} → {rule.validUntilLedger}
                   </span>{' '}
@@ -104,16 +109,16 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
           </span>
         </h3>
         <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-          <table className="w-full min-w-[46rem] border-collapse text-left">
+          <table className="tbl w-full min-w-[46rem]">
             <thead>
-              <tr className="border-b border-border-bright bg-surface-raised text-muted-dim">
-                <th scope="col" className="col-head w-[12rem] px-4 py-2.5">
+              <tr className="bg-surface-raised text-muted-dim">
+                <th scope="col" className="col-head col-primitive">
                   Primitive
                 </th>
-                <th scope="col" className="col-head w-[11rem] px-4 py-2.5">
+                <th scope="col" className="col-head col-addr">
                   Target
                 </th>
-                <th scope="col" className="col-head px-4 py-2.5">
+                <th scope="col" className="col-head">
                   Configuration
                 </th>
               </tr>
@@ -126,15 +131,14 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
                       ? `limit-${policy.asset}`
                       : `allow-${policy.contractId}`
                   }
-                  className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover"
                 >
-                  <td className="value px-4 py-3 align-top text-accent">{policy.kind}</td>
-                  <td className="px-4 py-3 align-top">
+                  <td className="col-primitive value text-accent">{policy.kind}</td>
+                  <td className="col-addr">
                     <Address
                       value={policy.kind === 'spending_limit' ? policy.asset : policy.contractId}
                     />
                   </td>
-                  <td className="px-4 py-3 align-top">
+                  <td>
                     {policy.kind === 'spending_limit' ? (
                       <span className="flex flex-wrap items-baseline gap-x-2">
                         <span className="value font-semibold text-foreground">{policy.limit}</span>

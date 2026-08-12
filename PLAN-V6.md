@@ -38,10 +38,30 @@ is green and as its own thing.
   reproduced inside the suite. They are now read from `deployments/testnet.json`.
   And `every screen states where its numbers came from` was spending its full
   180s timeout on `main`, because the docs shell has no such landmark.
-- **`PolicyTable` and `ObservedSection` carry inline column widths.** `w-[13rem]`
-  and friends, where the column tokens exist so a width is stated once. Left as
-  its own commit with its own before-and-after, because converting them shifts
-  rendered widths and `shots:check` now pins those widths as evidence.
+- ~~**`PolicyTable` and `ObservedSection` carry inline column widths.**~~
+  **Closed.** Both moved onto `.tbl` and the column tokens, in their own commit
+  against a measured before-and-after. The move had to be to `.tbl` rather than
+  to the tokens alone: the tokens are stated in `ch`, so applying `.col-addr` to
+  a table still at 13.5px would have produced a third address width instead of
+  removing the second one. Three of the six converted columns needed no new
+  token — they hold addresses, and both are now 156px, the same as the rules
+  table and the install plan.
+
+  `shots:check` stayed green, which is the useful part: it compares sidecar
+  text, so an unchanged result is positive evidence that the conversion moved
+  geometry and not content. `assertNothingScrolls` did fail once, on the one
+  column whose binding constraint is its heading rather than its cells — see
+  `--col-rowhead` in `globals.css`.
+
+  **The four PNGs in `public/shots` are now pictures of the pre-conversion
+  tables.** The check cannot see this and stays green. Regenerating is
+  `npm run shots`, and it is deliberately not done here because it is adjacent
+  to the first open item above, which is a design call.
+
+- **`DenyTable` is the third table still off the system.** Not in the scope that
+  closed the two above, and found while measuring them: `w-[9rem]` and `w-[7rem]`
+  on `min-w-[58rem]`, at 13.5px with `px-5`. It is now the only table in `/app`
+  not on `.tbl` — the same debt, in the file nobody named.
 
 ## What survives, and this is not negotiable
 
