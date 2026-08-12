@@ -13,6 +13,21 @@ import { DocsNav } from '@/components/docs/DocsNav';
  * cannot overlap the content column at any width — a fixed sidebar plus a
  * max-width content column is the usual way a docs page ends up with text
  * underneath its own navigation at 1024.
+ *
+ * ## The content column is `main`
+ *
+ * It was a `div` until `e2e/viewports.spec.ts` went looking for a `main` here
+ * and spent its whole timeout not finding one. Every other route on the site
+ * renders one — `/app` as `<main className="screen">`, `/` as a bare `<main>` —
+ * and these pages were the only ones without, which meant a screen reader
+ * jumping to the main landmark on any docs page landed in the sidebar and had to
+ * walk the whole nav to reach the prose.
+ *
+ * On the inner column rather than on `.screen`, which is the distinction the
+ * landmark is for: `main` is the content that is unique to this page, and the
+ * sidebar is the same list on all four. `<aside>` was already the right element
+ * beside it and is now correctly outside the main region rather than nominally
+ * beside it inside a shared `div`.
  */
 export default function DocsLayout({ children }: { children: ReactNode }) {
   return (
@@ -23,7 +38,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
             <DocsNav />
           </div>
         </aside>
-        <div className="min-w-0 flex-1">{children}</div>
+        <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>
   );
