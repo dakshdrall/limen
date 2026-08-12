@@ -20,12 +20,24 @@ is green and as its own thing.
   the V6 narrative argues in live markup and inline SVG. Either the narrative
   gains a place for them or they go; it is a design call, and the script says so
   in its own header rather than implying a consumer it no longer has.
-- **`e2e/viewports.spec.ts` still expects the V5 landing's exhibit.** Five of its
-  cases locate `[data-exhibit]` inside `#evidence` on `/`, a container step 3
-  removed with the landing. The e2e suite is not in CI — every run spends testnet
-  funds, so the workflow deliberately omits it — which is why this has stayed
-  invisible. The three other specs target `/app` routes and should pass again now
-  that step 5 has rebuilt them.
+- ~~**`e2e/viewports.spec.ts` still expects the V5 landing's exhibit.**~~ **Closed.**
+  The five `[data-exhibit]` cases were removed rather than re-pointed — `/app`
+  stacks the permitted row above the table, so the two-panel edge-sharing claim
+  has nothing left to assert. What replaced them measures the invariant that did
+  survive: `RefusedTable`'s `w-max max-w-full` surface is its table's width and
+  not its section's, confirmed failing at 1440 and 1280 before it was allowed to
+  pass.
+
+  Being off CI had hidden two further faults in the same file, neither of them
+  the one recorded above. Its `ACCOUNT` and rule id were typed, and both were
+  stale: that run revokes its own rule in its last step, so the chain correctly
+  answers "no rule 1", and refusal evidence is attributed to
+  `walkthrough.smartAccount` alone, so the pinned account could never have shown
+  a refusal table at all. Both detail routes were rendering empty states while
+  the file's own comment claimed they were populated — this suite's failure mode,
+  reproduced inside the suite. They are now read from `deployments/testnet.json`.
+  And `every screen states where its numbers came from` was spending its full
+  180s timeout on `main`, because the docs shell has no such landmark.
 - **`PolicyTable` and `ObservedSection` carry inline column widths.** `w-[13rem]`
   and friends, where the column tokens exist so a width is stated once. Left as
   its own commit with its own before-and-after, because converting them shifts

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import recorded from '../../../packages/chain/deployments/testnet.json';
 
 /**
  * PLAN-V4 §11's two cheap conditions, which were open for the same reason the
@@ -37,13 +38,28 @@ const WIDTHS = [1280, 1024, 768, 390] as const;
 /**
  * Every route with a page, plus the two that need an id.
  *
- * The detail routes use the recorded `v4ChainRun` account — a real testnet
- * account with a real rule 1, so those screens render their populated state
- * rather than their empty one. An empty screen is a much easier layout than a
- * table of 56-character addresses, and checking only the easy one would be
- * checking nothing.
+ * The detail routes use the recorded **walkthrough** account and its context
+ * rule, so those screens render their populated state rather than their empty
+ * one. An empty screen is a much easier layout than a table of 56-character
+ * addresses, and checking only the easy one would be checking nothing.
+ *
+ * ## Read from the recording, not typed
+ *
+ * This was a typed `v4ChainRun` address and a typed `1` until the V6 rebuild,
+ * and both had gone stale without anything going red. That run *revokes* its own
+ * rule in its last step, so the chain answers "no rule 1" — correctly — and the
+ * screen renders its empty state. Worse, refusal evidence is attributed by
+ * `recorded-runs.ts` to `walkthrough.smartAccount` alone, so the account that was
+ * pinned here could never have shown a refusal table at all. The comment above
+ * claimed a populated screen while the test measured an empty one, which is the
+ * failure mode this whole file exists to catch, reproduced in the file itself.
+ *
+ * So it is read from the evidence file, like everything else on the site. A
+ * recording that moves to another account or renumbers its rule now moves this
+ * suite with it instead of quietly hollowing it out.
  */
-const ACCOUNT = 'CBYJPUD4Q2EPT6TYNIPLYSBOEMTK5JVQNNE5KYOAW243NDGL4VPO5GKW';
+const ACCOUNT = recorded.walkthrough.smartAccount;
+const RULE = recorded.walkthrough.contextRuleId;
 
 const ROUTES = [
   '/',
@@ -54,7 +70,7 @@ const ROUTES = [
   '/app/simulator',
   '/app/policies/new',
   `/app/accounts/${ACCOUNT}`,
-  `/app/policies/${ACCOUNT}-1`,
+  `/app/policies/${ACCOUNT}-${RULE}`,
 ] as const;
 
 /**
@@ -138,98 +154,106 @@ test.describe('no page scrolls the body sideways', () => {
 });
 
 /**
- * The evidence band's two panels are one exhibit, and share both edges.
+ * The refusal table's surface is the table's width, not the section's.
  *
- * 1440 is in this list and not in `WIDTHS` above because it is the width where
- * the band has slack to give away: `--bleed-max` is 96rem, so at 1440 the band
- * spans the viewport while the exhibit stops at the sum of the table's columns
- * and about 286px collects on the right. That slack is the point of the
- * arrangement and also the only place a stretched panel could hide.
+ * ## What this replaced, and why it is not the same test
  *
- * Measured rather than asserted from the source because nothing in the CSS
- * forces it. `Exhibit` is `w-max`, so it takes the width of its widest child
- * and the table is expected to be that child — an expectation about rendered
- * text metrics, which is exactly the kind of claim the Node suite cannot make.
- * If the panel's prose ever outgrew the table's columns, the panel would size
- * the exhibit, the table would sit inside it one edge short, and every source
- * file involved would still read correctly.
+ * Through V5 this block measured `Exhibit` — the `w-max` container that made the
+ * landing's permitted panel and refusal table share both edges on the evidence
+ * band. Five cases located `[data-exhibit]` inside `#evidence` on `/`. Step 3 of
+ * the V6 rebuild deleted the landing, and `RefusalTable.tsx` records the decision
+ * not to carry `Exhibit` forward: `/app` stacks the permitted row above the table
+ * inside a `Section`, so there is no second panel to align against and a
+ * two-panel edge-sharing test has nothing left to assert.
  *
- * The lower bound matters too: below the sum the exhibit is bounded by the
- * band, both panels stop at the gutter, and the table scrolls inside its own
- * `.scroll-x` box. A panel that overflowed instead would put the whole page on
- * a horizontal scroll, which the suite above catches from the other side.
+ * Those five cases were removed rather than re-pointed. Re-pointing them at the
+ * policy screen would have kept the name and lost the claim — the two elements
+ * there are stacked, not set side by side, and any pair of stacked blocks shares
+ * its left and right edges trivially.
+ *
+ * ## What survived, and does still need measuring
+ *
+ * `RefusedTable` is `w-max max-w-full` around a `.tbl-fit` table, and that pair
+ * is a claim about rendered text metrics that nothing in the CSS enforces —
+ * exactly the kind the Node suite cannot make, and the reason the V5 test existed
+ * at all. The panel takes the width of its widest child and the table is expected
+ * to be that child. If the caption or a prose cell ever outgrew the sum of the
+ * column tokens, the panel would size to the prose instead, the table would sit
+ * inside it one edge short, and every source file involved would still read
+ * correctly.
+ *
+ * Stated as one identity rather than two regimes, because `w-max max-w-full` is
+ * one rule: the panel is the narrower of the table and the space it is given.
+ * Above the sum that pins the panel to the table — the stretch this is really
+ * about. Below it, the panel stops at the content column and the table keeps its
+ * full width and scrolls inside `.scroll-x`, which is the designed answer and
+ * the reason the suite above measures overflow on the document rather than here.
+ *
+ * 1440 is in this list and not in `WIDTHS` because it is the width with slack to
+ * give away, and slack is the only place a stretched panel can hide.
  */
-const EXHIBIT_WIDTHS = [1440, 1280, 1024, 768, 390] as const;
+const PANEL_WIDTHS = [1440, 1280, 1024, 768, 390] as const;
 
-test.describe('the permitted panel and the refusal table are one width', () => {
-  for (const width of EXHIBIT_WIDTHS) {
+test.describe('the refusal table sizes its own surface', () => {
+  for (const width of PANEL_WIDTHS) {
     test(`at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`/app/policies/${ACCOUNT}-${RULE}`, { waitUntil: 'domcontentloaded' });
 
-      const band = page.locator('#evidence');
-      // `[data-exhibit]`, not the `w-max` class that does the work: the table's
-      // own box carries that class too, so a class selector would survive the
-      // container being deleted by matching the table and comparing it to
-      // itself. See `Exhibit`.
-      const exhibit = band.locator('[data-exhibit]');
-      // By what makes it the permitted panel, not by being the first child.
-      // A positional selector passes for the wrong reason if the panel is ever
-      // moved out of the exhibit: the table's own wrapper becomes the first
-      // child, and the test compares it to the table inside it — two elements
-      // that share edges trivially, while the panel this is about sits outside
-      // stretched to the band.
+      // By the table it holds, not by `.scroll-x` alone — the policy screen has
+      // other scroll boxes, and a positional selector would pass for the wrong
+      // reason the moment one is added above this one.
       //
-      // `>` because the permitted `Verdict` badge inside the panel is drawn
-      // with the same border token, so an unscoped match finds two elements.
-      const panel = exhibit.locator('> .border-permit-line');
-      // The table's *bordered box*, not the table: the box is the edge a reader
-      // sees, and below the sum it is the one that stops at the band while the
-      // table keeps its full width and scrolls.
-      const box = exhibit.locator('.scroll-x').first();
+      // `RefusedTable` renders off `surveyFor()`, a shipped recording, not off
+      // the chain read — so this does not depend on the RPC being reachable and
+      // does not degrade to the pending state the way the rule panel above it
+      // does.
+      const panel = page.locator('.scroll-x:has(> table.tbl-fit)');
+      const table = panel.locator('> table.tbl-fit');
 
-      // Named separately so deleting the container fails as "there is no
-      // exhibit" rather than as a timeout on one of its descendants.
-      await expect(exhibit, 'the evidence band should hold exactly one exhibit').toHaveCount(1);
-      await expect(
-        panel,
-        'the permitted panel should be inside the exhibit — outside it, it is sized by the ' +
-          'band rather than by the table',
-      ).toHaveCount(1);
+      // Named separately so deleting the surface fails as "there is no panel"
+      // rather than as a timeout on one of its descendants.
+      await expect(panel, 'the policy screen should hold exactly one refusal table').toHaveCount(1);
 
-      const [panelBox, tableBox, bandBox] = await Promise.all([
-        panel.boundingBox(),
-        box.boundingBox(),
-        band.boundingBox(),
-      ]);
+      await expect(table, 'the refusal table should render').toHaveCount(1);
 
-      expect(panelBox, 'the permitted panel should render').not.toBeNull();
-      expect(tableBox, 'the refusal table should render').not.toBeNull();
-      expect(bandBox, 'the evidence band should render').not.toBeNull();
-      if (panelBox === null || tableBox === null || bandBox === null) return;
+      // Measured in one pass in the page rather than as three `boundingBox()`
+      // calls, because the border below has to come from the same element in the
+      // same layout as the width it is being subtracted from.
+      const m = await panel.evaluate((el) => {
+        const inner = el.querySelector(':scope > table');
+        const style = getComputedStyle(el);
+        return {
+          panel: el.getBoundingClientRect().width,
+          table: inner === null ? null : inner.getBoundingClientRect().width,
+          // The width the panel is *offered*. A panel sized by this rather than
+          // by its table is the regression.
+          slot: el.parentElement === null ? null : el.parentElement.getBoundingClientRect().width,
+          // `.scroll-x` is a bordered box and `boundingBox()` is the border box,
+          // so the panel is legitimately its table plus one border on each side.
+          // Read rather than written as `2`: the border is a token, and a test
+          // that hardcodes its width goes quietly wrong the day the token moves.
+          borderX: parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth),
+        };
+      });
 
-      const left = panelBox.x - tableBox.x;
-      const right = panelBox.x + panelBox.width - (tableBox.x + tableBox.width);
+      expect(m.table, 'the refusal table should be a direct child of the panel').not.toBeNull();
+      expect(m.slot, 'the panel should have a parent to be bounded by').not.toBeNull();
+      if (m.table === null || m.slot === null) return;
 
-      // Sub-pixel, because both edges are laid out from the same resolved
-      // container width and a fractional container splits the same way twice.
+      const expected = Math.min(m.table + m.borderX, m.slot);
+      const drift = m.panel - expected;
+
+      // Sub-pixel, because the panel and its bound resolve from the same
+      // fractional container width and split it the same way twice.
       expect(
-        Math.abs(left),
-        `at ${width}px the panel's left edge is ${left.toFixed(1)}px off the table's — ` +
-          'the two are one exhibit and share both edges',
+        Math.abs(drift),
+        `at ${width}px the refusal panel is ${m.panel.toFixed(1)}px where the narrower of its ` +
+          `table plus its ${m.borderX}px border (${(m.table + m.borderX).toFixed(1)}px) and its ` +
+          `slot (${m.slot.toFixed(1)}px) is ${expected.toFixed(1)}px — a panel wider than its ` +
+          'table is the surface stretching to the section, which is the mismatch ' +
+          '`w-max max-w-full` exists to remove',
       ).toBeLessThanOrEqual(0.5);
-      expect(
-        Math.abs(right),
-        `at ${width}px the panel's right edge is ${right.toFixed(1)}px off the table's — ` +
-          'a panel wider than the table is the panel sizing the exhibit, which is the ' +
-          'mismatch this arrangement exists to remove',
-      ).toBeLessThanOrEqual(0.5);
-
-      // Bounded by the band, not overflowing it, at every width below the sum.
-      expect(
-        panelBox.x + panelBox.width,
-        `at ${width}px the exhibit runs past the band's right edge`,
-      ).toBeLessThanOrEqual(bandBox.x + bandBox.width + 0.5);
     });
   }
 });
@@ -246,7 +270,21 @@ test('every screen states where its numbers came from', async ({ page }) => {
     await page.goto(route, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle').catch(() => {});
 
-    const text = await page.locator('main').innerText();
+    // `main` where there is one, `.screen` where there is not. Every `/app`
+    // route renders `<main className="screen">` and `/` renders a bare `<main>`,
+    // but the docs shell wraps its sidebar and content column in a plain
+    // `<div className="screen">` — so a bare `main` locator does not resolve on
+    // `/docs` and this test spent its whole 180s timeout waiting for one.
+    //
+    // Scoped to a region rather than widened to `body` on purpose: `body` would
+    // let the header's own chrome answer for a screen, and the top bar carries a
+    // live ledger reading. The docs shell's sidebar comes along with `.screen`,
+    // which is acceptable — it is navigation, and it states no figures.
+    //
+    // That missing landmark is a real gap and is not this file's to close: the
+    // docs pages are the only ones on the site with no `main` landmark, so a
+    // screen reader lands in the sidebar. Fixing it belongs in `docs/layout.tsx`.
+    const text = await page.locator('main, .screen').first().innerText();
     const labelled = PROVENANCE.some((label) => text.includes(label));
     const noData = NO_DATA_STATES.some((state) => text.includes(state));
 
