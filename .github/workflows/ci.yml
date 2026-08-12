@@ -77,42 +77,25 @@ jobs:
       - name: Build @limen/web
         run: npm run build -w @limen/web
 
-      # The landing's product screenshots are the one claim on the page that
-      # `caveats.test.ts` cannot read. Every hash inside them comes from
-      # `deployments/testnet.json`; when that file moves, the text updates itself
-      # and the images quietly become pictures of transactions that are no longer
-      # this project's. Images are also the one artefact nobody reviews line by
-      # line, so this is precisely the drift a human check will miss.
+      # There is no browser step here any more.
       #
-      # A check that only runs when somebody remembers is not a check, which is
-      # the same argument that put `evidence:check` above. So it runs here, and
-      # it is allowed to fail on its own.
+      # `shots:check` used to run at this point, guarding four generated product
+      # screenshots against the hashes in `deployments/testnet.json` drifting
+      # underneath them. The screenshots are gone — the V6 narrative argues in
+      # live markup and inline SVG, which is selectable, reaches a screen reader,
+      # and cannot go stale, so the images had no reader left and were strictly
+      # the worse copy of what the page already renders.
       #
-      # After the build on purpose: the script serves the app with `next start`,
-      # so it needs `.next` to exist. It starts and stops that server itself.
+      # The one thing that script asserted about the *application* rather than
+      # about its own PNGs was `assertNothingScrolls`. That moved into
+      # `e2e/viewports.spec.ts` before the deletion, widened from the four crops
+      # it used to run inside to every route — where it immediately found a
+      # column overlap on the account detail screen that no shot could ever have
+      # photographed. It is not run here for the reason the rest of the e2e suite
+      # is not: that job shares a server with the suite that spends testnet funds.
       #
-      # The browser is cached by lockfile hash — a Playwright bump changes the
-      # key and pays for one cold download. Warm, the restore plus the install's
-      # own no-op check is seconds; cold it is a download of about 650MB.
-      - name: Cache the Playwright browser
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: playwright-${{ runner.os }}-
-
-      # Deliberately not `--with-deps`. That flag runs `apt-get update` and an
-      # install on every run, cached browser or not, which is the one part of
-      # this that would cost real minutes. The runner image ships Chrome, so
-      # Chromium's shared libraries are already present. If that ever stops
-      # being true this does not fail silently: Playwright's launch error names
-      # the missing libraries and the command that installs them.
-      - name: Install Chromium
-        run: npx playwright install chromium
-
-      - name: Prove the landing's screenshots still show the product
-        run: npm run shots:check
+      # The Playwright browser cache and the Chromium install went with it. They
+      # existed only to serve this step.
 
       # The demo signer is the only code in the repo that can move funds. It is
       # fenced by `import 'server-only'` and by a hard testnet throw, but both

@@ -1,6 +1,0 @@
-{
-  "name": "step-derive",
-  "route": "/app/simulator",
-  "select": "ol > li:nth-child(3)",
-  "text": "03\nDerive the boundary\nCOMPUTED LOCALLY\nThe minimum context rule and policy set that permits exactly that flow, composed from audited OpenZeppelin primitives.\nCONTEXT RULE\nALLOWED CONTRACTS\nCBTQZ4…SMKK\n⧉\ncopy address\nALLOWED FUNCTIONS\nCBTQZ4…SMKK\n⧉\ncopy address\n→\ntransfer()\nVALIDITY ledger 51234 → 172194 (≈ 7 days)\nPOLICIES\n(2 of 5 max)\nPRIMITIVE TARGET CONFIGURATION\nspending_limit\nCBTQZ4…SMKK\n⧉\ncopy address\n500000000\n(50)\nper 120960 ledgers\n(≈ 7 days)\nfunction_allowlist\nCBTQZ4…SMKK\n⧉\ncopy address\ntransfer()\nRATIONALE\nlimit:CBTQZ4SPM5SCOURTGKNOYATOXTFJ5UG3YQAUG65NWOQL3QW5CDOUSMKK:500000000:observed_gross_outflow=500000000:headroom=10000bps:window=120960\nallowlist:CBTQZ4SPM5SCOURTGKNOYATOXTFJ5UG3YQAUG65NWOQL3QW5CDOUSMKK:transfer\ncontracts:CBTQZ4SPM5SCOURTGKNOYATOXTFJ5UG3YQAUG65NWOQL3QW5CDOUSMKK\nwindow:51234-172194\nTry to exceed it"
-}
