@@ -54,37 +54,32 @@ export function ObservedSection({ observed }: { observed: ObservedTransaction })
       </dl>
 
       <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-        <table className="w-full min-w-[44rem] border-collapse text-left">
+        <table className="tbl w-full min-w-[44rem]">
           <thead>
-            <tr className="border-b border-border-bright bg-surface-raised text-muted-dim">
-              <th scope="col" className="col-head w-[3rem] px-4 py-2.5">
+            <tr className="bg-surface-raised text-muted-dim">
+              <th scope="col" className="col-head col-index">
                 #
               </th>
-              <th scope="col" className="col-head w-[11rem] px-4 py-2.5">
+              <th scope="col" className="col-head col-addr">
                 Contract
               </th>
-              <th scope="col" className="col-head w-[10rem] px-4 py-2.5">
+              <th scope="col" className="col-head col-fn">
                 Function
               </th>
-              <th scope="col" className="col-head px-4 py-2.5">
+              <th scope="col" className="col-head">
                 Arguments
               </th>
             </tr>
           </thead>
           <tbody>
             {observed.invocations.map((invocation, index) => (
-              <tr
-                key={`${invocation.contractId}-${invocation.functionName}-${index}`}
-                className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover"
-              >
-                <td className="value px-4 py-3.5 align-top text-faint">{index}</td>
-                <td className="px-4 py-3.5 align-top">
+              <tr key={`${invocation.contractId}-${invocation.functionName}-${index}`}>
+                <td className="col-index num text-faint">{index}</td>
+                <td className="col-addr">
                   <Address value={invocation.contractId} />
                 </td>
-                <td className="value px-4 py-3.5 align-top text-foreground">
-                  {invocation.functionName}()
-                </td>
-                <td className="px-4 py-3.5 align-top">
+                <td className="col-fn value text-foreground">{invocation.functionName}()</td>
+                <td>
                   {invocation.args.length === 0 ? (
                     <span className="text-[12.5px] text-muted-dim">none</span>
                   ) : (

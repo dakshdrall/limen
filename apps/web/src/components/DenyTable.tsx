@@ -84,33 +84,52 @@ export function DenyTable({
         </span>
       </p>
 
+      {/* `.tbl w-full min-w-[58rem]`, the house pattern, joined here off
+          `w-[9rem]` and `w-[7rem]` — the last two inline column widths in
+          `/app`, and the ones nobody named while the proposal tables were being
+          converted.
+
+          `w-[9rem]` was not even the width it stated. Under the auto layout this
+          table had, a column is at least its widest cell, and the `lg` verdict
+          badge's own `min-w-[7rem]` plus the old `px-5` came to 152px — so the
+          declared 144px had been losing to the content since the badge grew.
+          That is the failure mode an inline width has and a token does not: it
+          reads as a decision and behaves as a suggestion.
+
+          `min-w` is kept, unlike on `RefusalTable`. That table is `.tbl-fit`
+          because every one of its columns carries a token; two of these four are
+          prose with no token, so this one is `width: 100%` with a floor, and the
+          two prose columns share the leftover. */}
       <div className="scroll-x rounded-[5px] border border-border-default bg-surface">
-        <table className="w-full min-w-[58rem] border-collapse text-left">
+        <table className="tbl w-full min-w-[58rem]">
           <thead>
             <tr className="border-b border-border-bright bg-surface-raised text-muted-dim">
-              <th scope="col" className="col-head w-[9rem] px-5 py-3">
+              <th scope="col" className="col-head col-verdict-lg">
                 Verdict
               </th>
-              <th scope="col" className="col-head w-[7rem] px-4 py-3">
+              <th scope="col" className="col-head col-axis">
                 Axis
               </th>
-              <th scope="col" className="col-head px-4 py-3">
+              <th scope="col" className="col-head">
                 Transaction
               </th>
-              <th scope="col" className="col-head px-4 py-3">
+              <th scope="col" className="col-head">
                 Reason
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b-2 border-border-bright bg-permit-dim/25">
-              <td className="px-5 py-4 align-top">
+            {/* `row-tinted` opts out of `.tbl`'s hover background, which is set
+                on the cell and would otherwise paint over the tint set here on
+                the row. */}
+            <tr className="row-tinted border-b-2 border-border-bright bg-permit-dim/25">
+              <td>
                 <Verdict state={observedDecision.permitted ? 'permitted' : 'denied'} size="lg" />
               </td>
-              <td className="px-4 py-4 align-top">
+              <td>
                 <span className="value text-muted-dim">observed</span>
               </td>
-              <td className="px-4 py-4 align-top">
+              <td>
                 <div className="text-[13px] text-foreground">
                   the transaction the policy was derived from
                 </div>
@@ -119,7 +138,7 @@ export function DenyTable({
                   {observed.invocations.length === 1 ? '' : 's'} at ledger {observed.ledger}
                 </div>
               </td>
-              <td className="px-4 py-4 align-top text-[12.5px] text-muted">
+              <td className="text-[12.5px] text-muted">
                 {observedDecision.permitted
                   ? 'within every derived constraint'
                   : observedDecision.reasons.join('; ')}
@@ -132,31 +151,33 @@ export function DenyTable({
                 <tr
                   key={denyCase.axis}
                   className={`border-b border-border-subtle transition-colors last:border-b-0 ${
-                    wrong ? 'bg-deny-dim/40' : 'hover:bg-surface-hover'
+                    wrong ? 'row-tinted bg-deny-dim/40' : ''
                   }`}
                 >
-                  <td className="px-5 py-4 align-top">
+                  <td>
                     <Verdict state={decision.permitted ? 'permitted' : 'denied'} size="lg" />
                   </td>
-                  <td className="px-4 py-4 align-top">
+                  <td>
                     <span className="value text-muted-dim">{denyCase.axis}</span>
                   </td>
-                  <td className="px-4 py-4 align-top">
+                  <td>
                     <div className="text-[13px] text-foreground">{denyCase.label}</div>
                     <div className="mt-1 max-w-[46ch] text-[12.5px] leading-relaxed text-muted-dim">
                       {denyCase.why}
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-top">
+                  <td>
                     {decision.reasons.length > 0 ? (
                       <ul className="flex flex-col gap-1.5">
                         {decision.reasons.map((reason) => (
                           <li
                             key={reason}
                             // Reasons quote 56-character contract addresses.
-                            // Without an explicit break they push the column
-                            // past the viewport and the table has to be
-                            // scrolled sideways to be read at all.
+                            // `.tbl` sets `overflow-wrap: anywhere`, which is
+                            // the same backstop this `break-all` was, but it is
+                            // kept: `anywhere` breaks only when the line cannot
+                            // fit, and an address is one unbreakable token that
+                            // has to break mid-string every time.
                             className="value max-w-[52ch] leading-relaxed break-all text-muted"
                           >
                             {reason}

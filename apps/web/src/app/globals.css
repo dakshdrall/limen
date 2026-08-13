@@ -925,6 +925,29 @@ body::before {
        wider than `DENY` reads. This was 11ch until the refusal screen became the
        first table to put a badge in it. */
     --col-verdict: 14ch;
+
+    /* The same column holding the `lg` badge, which is a different object:
+       `Verdict` renders `min-w-[7rem]` at `lg` against `min-w-[6.25rem]` at
+       `md`, and a `min-width` on an inline-flex child is a floor no wrapping can
+       get under. So this is the second token on the site whose binding
+       constraint is not the text in the column — see `--col-rowhead` below for
+       the first — and it is read off `Verdict.tsx` rather than off the longest
+       label, because the floor is wider than `REFUSED` sets.
+
+       It is a separate token rather than a wider `--col-verdict` because the
+       refusal table's `md` badge would then sit in 30px of column it does not
+       use. Two badge sizes are two column widths; that is what a token per
+       content type means.
+
+       20ch and not the 19 the floor implies, and the extra character is not
+       padding-by-feel. The floor is stated in `rem` and the column in `ch`, and
+       those two units only agree for as long as the mono face's advance stays
+       0.6em — a fallback face with a wider advance moves the column and leaves
+       the badge where it is. 19ch measured 114px against a 112px badge, which
+       is a 2px margin on a quantity that is only fixed while the font loads.
+       At 20ch it is 120px, and the failure needs a 7% metric change rather than
+       a 2% one. */
+    --col-verdict-lg: 20ch;
     --col-label: 10ch;
 
     /* A signer is a kind and a key — an `EXTERNAL` status label beside a
@@ -935,6 +958,25 @@ body::before {
        This was the fourth instance of the fixed-layout overlap, and the first
        one no amount of wrapping could have fixed. */
     --col-signer: 26ch;
+
+    /* The rules table's `policies` column: a cap line over the address of the
+       contract it bounds. Like `--col-signer` above, the binding half is the
+       address — `Address` renders a truncated key beside a copy button, and
+       neither yields, so the pair is a 112px unit no wrapping gets under.
+
+       It had no token until the deny table's conversion put a check on cell
+       overflow, which caught it on the first run against live chain data. This
+       is the fifth instance of the fixed-layout overlap and the first one found
+       by something other than a person looking at it: the column was one of four
+       with no width in a seven-column table, so it was taking a quarter of
+       whatever was left — 92px at 900px, holding 112px of address, painting the
+       difference over `signers`.
+
+       That it went unseen this long is the screenshot check's blind spot rather
+       than bad luck. No shot was ever taken of an account detail screen, because
+       that screen renders a live chain read and photographing one would commit a
+       picture of one account at one ledger. */
+    --col-policy: 15ch;
 
     /* A contract error code — `ContextRuleIdsLengthMismatch#3014` is the longest
        the pinned OpenZeppelin sources define, at 33 characters. The wrap rule
@@ -951,9 +993,69 @@ body::before {
 
        Both are read off the recording rather than guessed. The longest axis is
        `invocation` at 10 characters and the longest attempt is `approve on the
-       permitted token contract` at 39. */
-    --col-axis: 12ch;
+       permitted token contract` at 39.
+
+       `--col-axis` is 14ch and not the 12 it was, because the deny table became
+       the second table to use it and applies it in a different metric. `ch` is
+       resolved against the element the width lands on, and the refusal table
+       puts these tokens on a bare `th` — 12.5px, so `ch` is 8px — while every
+       table that came through the proposal conversion puts them on
+       `th.col-head`, which is 10px mono, so `ch` is 6px. The same 12ch is 96px
+       of content on the refusal table and 72px on this one.
+
+       `invocation` is ten characters of 12.5px mono at 7.88px each, so it wants
+       78.8px in both. It had 96px there and 72px here, and wrapped to two lines
+       here — nine characters on the first and the tenth alone on the second.
+       14ch is 84px in the narrower metric, which holds it with 5px to spare,
+       and costs the refusal table 16px it was not using.
+
+       Note what the unit is doing: 14ch buys 10.6 characters of the text the
+       column actually holds. `ch` states the column in the *header's* font and
+       the cells are set in another, so these tokens are only widths in
+       characters where the two fonts agree — and across tables they are only
+       equal widths at all where the headers agree. Nothing checks either.
+       Widening the token fixes this column; it does not fix that. */
+    --col-axis: 14ch;
     --col-attempt: 40ch;
+
+    /* The four the proposal tables introduced when they were moved over off
+       inline `w-[13rem]`-style widths. Sized to their longest content, like
+       every token above, and every one of them read out of the type rather than
+       guessed at from the rendered page:
+
+       - `--col-primitive` holds a `PolicyConfig` kind. The union in
+         `packages/core/src/types.ts` has exactly two members and
+         `function_allowlist` is 18 characters.
+       - `--col-fn` holds a function name with its parentheses. `rebalance()` is
+         the longest the shipped flows invoke, at 11.
+       - `--col-index` holds an invocation's position in its transaction. Two
+         digits is already generous — the observed flows run to five calls — but
+         a column this narrow costs nothing to leave room in.
+       - `--col-rowhead` holds a `<th scope="row">` label in the context-rule
+         table: `allowed contracts` and `allowed functions`, both 17.
+
+       These are the widths that were 12rem, 10rem, 3rem and 13rem when they
+       were stated per table. Three of the six converted columns needed no token
+       at all — they hold addresses, and `--col-addr` already existed. That is
+       the whole argument for the system: an address column is now the same
+       width here as on the rules table and the install plan, which it was not
+       while these two files each named their own.
+
+       `--col-rowhead` is 19ch and not the 18 its content implies, and it is the
+       one token here whose binding constraint is its *heading* rather than its
+       cells. Every other column on the site carries a short `.col-head` over
+       longer data, so the data decides. This one is the reverse: the label is
+       the longest string in the column, and `.col-head` renders it uppercase at
+       10px with `0.12em` of tracking and `white-space: nowrap` — so it cannot
+       wrap and it is materially wider than 17 characters of the 12.5px mono the
+       `ch` unit is measured against here. At 18ch the label wanted 134px in a
+       132px column, and `assertNothingScrolls` failed the screenshot run rather
+       than shipping a clipped heading. This is the fixed-layout overlap the
+       `--col-pad` note above describes, arriving from the header side. */
+    --col-primitive: 20ch;
+    --col-fn: 14ch;
+    --col-index: 3ch;
+    --col-rowhead: 19ch;
 
     /* `.tbl` cells carry 0.75rem of padding on each side. The tokens above state
        how much *content* a column holds, so the padding is added by the classes
@@ -972,11 +1074,17 @@ body::before {
   .col-amount { width: calc(var(--col-amount) + var(--col-pad)); text-align: right; }
   .col-ledger { width: calc(var(--col-ledger) + var(--col-pad)); text-align: right; }
   .col-verdict { width: calc(var(--col-verdict) + var(--col-pad)); }
+  .col-verdict-lg { width: calc(var(--col-verdict-lg) + var(--col-pad)); }
   .col-label { width: calc(var(--col-label) + var(--col-pad)); }
   .col-signer { width: calc(var(--col-signer) + var(--col-pad)); }
+  .col-policy { width: calc(var(--col-policy) + var(--col-pad)); }
   .col-error { width: calc(var(--col-error) + var(--col-pad)); }
   .col-axis { width: calc(var(--col-axis) + var(--col-pad)); }
   .col-attempt { width: calc(var(--col-attempt) + var(--col-pad)); }
+  .col-primitive { width: calc(var(--col-primitive) + var(--col-pad)); }
+  .col-fn { width: calc(var(--col-fn) + var(--col-pad)); }
+  .col-index { width: calc(var(--col-index) + var(--col-pad)); }
+  .col-rowhead { width: calc(var(--col-rowhead) + var(--col-pad)); }
 
   /* ---------------------------------------------------------------------------
      Tables.
@@ -1039,11 +1147,43 @@ body::before {
     overflow-wrap: anywhere;
   }
 
-  .tbl tbody tr:last-child td {
+  /* Row headers. `.tbl` styled `thead th` and `tbody td` and nothing else, which
+     held for as long as every table on the site was a column-headed grid. The
+     context-rule table is not one: it is a two-column list whose left column is
+     `<th scope="row">`, which is the correct element for it and was getting
+     neither the padding nor the rule that its `<td>` sibling got.
+
+     Same padding as a `td` rather than a `thead th`'s, because it sits in a body
+     row and is read across to its value — a row header on the header's tighter
+     padding sits visibly high against the cell beside it. It keeps the heading
+     voice through `.col-head`, which the markup applies. */
+  .tbl tbody th {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .tbl tbody tr:last-child td,
+  .tbl tbody tr:last-child th {
     border-bottom: none;
   }
 
-  .tbl tbody tr:hover td {
+  /* A row that carries its own verdict tint keeps it under the cursor.
+
+     The tint is set on the `tr` and the hover background on the `td`, so the
+     cell paints over the row and a hovered deny row loses exactly the colour
+     that marks it. The deny table is the first `.tbl` table with tinted rows, so
+     this is the first time the two rules have met; before it, every row was
+     untinted and the hover was unambiguous.
+
+     Written as an exclusion here rather than as a louder tint on the row,
+     because the rows opting out are the ones being pointed at — an
+     over-permissive result and the observed flow it is being compared against.
+     Losing the mark on hover would be losing it exactly when a reader has put
+     the cursor on the row to read it. */
+  .tbl tbody tr:not(.row-tinted):hover td {
     background: var(--surface-hover);
   }
 
