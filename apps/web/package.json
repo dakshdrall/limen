@@ -10,7 +10,8 @@
     "lint": "eslint",
     "pretest": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:ci": "playwright test --config playwright.ci.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
