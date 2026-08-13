@@ -77,8 +77,6 @@ jobs:
       - name: Build @limen/web
         run: npm run build -w @limen/web
 
-      # There is no browser step here any more.
-      #
       # `shots:check` used to run at this point, guarding four generated product
       # screenshots against the hashes in `deployments/testnet.json` drifting
       # underneath them. The screenshots are gone — the V6 narrative argues in
@@ -91,11 +89,12 @@ jobs:
       # `e2e/viewports.spec.ts` before the deletion, widened from the four crops
       # it used to run inside to every route — where it immediately found a
       # column overlap on the account detail screen that no shot could ever have
-      # photographed. It is not run here for the reason the rest of the e2e suite
-      # is not: that job shares a server with the suite that spends testnet funds.
+      # photographed.
       #
-      # The Playwright browser cache and the Chromium install went with it. They
-      # existed only to serve this step.
+      # The browser step is now at the end of this job rather than here, and it
+      # runs that check among others. It is last because the greps below are
+      # near-instant and the browser suite is minutes: a bundle fence that has
+      # broken should say so before a runner spends that time.
 
       # The demo signer is the only code in the repo that can move funds. It is
       # fenced by `import 'server-only'` and by a hard testnet throw, but both
@@ -238,6 +237,51 @@ jobs:
             exit 1
           fi
           echo "no secret key literal in the client bundle"
+
+      # The browser half, minus the half that costs money.
+      #
+      # `apps/web/playwright.config.ts` drives `account-lifecycle.spec.ts`, which
+      # submits a real transaction to Stellar testnet on every run and rate-limits
+      # itself to one per address per five minutes. That cannot be a per-push gate
+      # and is not one. But the argument for keeping it out was being applied to a
+      # whole directory on the strength of a shared `webServer`, and two suites in
+      # `viewports.spec.ts` only ever read pages.
+      #
+      # So they got a server of their own. `playwright.ci.config.ts` boots `next
+      # start` on 3001 with the RPC variables pinned empty, and selects by the
+      # `@ci` tag rather than by filename or title — a renamed describe would drop
+      # out of a title grep silently, and Playwright exits non-zero on a filter
+      # that matches nothing, so removing the tag turns this red instead of empty.
+      #
+      # What it gates: no route pans the body sideways at 1280/1024/768/390, and
+      # no table column is painted over by the one beside it. The second is the
+      # reason this step exists — it found a live defect the first time anything
+      # ran it, and until now it ran when somebody remembered.
+      #
+      # It reuses the `.next` built above rather than building its own.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Check layout in a browser (overflow, column overlap)
+        run: npm run e2e:ci -w @limen/web
+
+      # Only on failure, and only the trace: a layout assertion that fires on a
+      # runner is describing a paint nobody watching the log can see.
+      - name: Upload the Playwright trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: apps/web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       # Runs last so build and test results are always visible even when this
       # fails.

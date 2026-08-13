@@ -11,10 +11,26 @@ import recorded from '../../../packages/chain/deployments/testnet.json';
  * Both are properties of rendered layout and rendered copy, so neither can be
  * checked from Node, and both were listed as unrun rather than waived. Unlike
  * `account-lifecycle.spec.ts` this costs nothing: it reads pages, submits
- * nothing, and spends no testnet fee. It is out of the default CI job only
- * because it shares a `webServer` with the suite that does.
+ * nothing, and spends no testnet fee.
  *
  *     npm run e2e -w @limen/web -- viewports
+ *
+ * ## Two of these suites now gate every push
+ *
+ * The whole file used to sit outside CI, on the accurate but too-broad ground
+ * that it shared a `webServer` with the suite that spends testnet funds. What
+ * that reasoning actually indicted was the shared server, not these tests — so
+ * the server was what got replaced. `playwright.ci.config.ts` boots its own on
+ * port 3001 and selects by tag, and the two suites marked `@ci` below run on
+ * every push.
+ *
+ * They are the two that hold up on an unconfigured server: **document
+ * overflow** and **column overlap**. The other two stay on demand, for reasons
+ * that are theirs rather than the server's — see each.
+ *
+ * Worth the trouble because the column check found a live defect the first time
+ * anything ran it, on a screen no screenshot had ever photographed. A check
+ * with that hit rate should not depend on someone remembering it exists.
  *
  * ## Why the horizontal check is written the way it is
  *
@@ -129,7 +145,17 @@ async function documentOverflow(page: Page): Promise<number> {
   });
 }
 
-test.describe('no page scrolls the body sideways', () => {
+/**
+ * `@ci` — this one is whole on an unconfigured server.
+ *
+ * It measures the document, and every route renders a document. A screen whose
+ * chain read failed lays out its `ScreenState` instead of its table, which is
+ * still a layout and still must not pan sideways. Coverage narrows a little
+ * without the RPC — a populated table is the likeliest thing to overflow — but
+ * nothing here goes vacuous, and the defect that made the suite worth writing
+ * was an `sr-only` span, which no read configures away.
+ */
+test.describe('no page scrolls the body sideways', { tag: '@ci' }, () => {
   for (const width of WIDTHS) {
     test(`at ${width}px`, async ({ page }) => {
       test.setTimeout(180_000);
@@ -194,6 +220,19 @@ test.describe('no page scrolls the body sideways', () => {
  */
 const PANEL_WIDTHS = [1440, 1280, 1024, 768, 390] as const;
 
+/**
+ * Not tagged `@ci`, and this is the one exclusion that is a judgement rather
+ * than a constraint.
+ *
+ * It would work as a gate. It reads one fixture-backed route, needs no RPC, and
+ * costs five page loads. What keeps it out for now is that it asserts a
+ * sub-pixel identity over rendered text metrics at five widths, and the thing
+ * it is most sensitive to is font rasterisation — which is a property of the
+ * machine, and a GitHub runner is not the machine it was proven on. Promoting
+ * it is a small change and a reasonable one; it wants its own run and its own
+ * evidence that 0.5px holds on a runner, rather than being carried in on the
+ * back of a suite that was measured.
+ */
 test.describe('the refusal table sizes its own surface', () => {
   for (const width of PANEL_WIDTHS) {
     test(`at ${width}px`, async ({ page }) => {
@@ -335,7 +374,48 @@ async function simulatorThroughDenyTable(page: Page): Promise<void> {
  * visually-hidden idiom is a 1px box clipped around real text, so it always
  * overflows and always should. Scoping to table cells excludes it.
  */
-test.describe('no table column is narrower than what it holds', () => {
+/**
+ * The routes that must have a table to measure no matter how the server is
+ * configured — and the reason this suite can be a gate at all.
+ *
+ * ## The hole this closes
+ *
+ * The check is a filter over table cells, so a route with no cells contributes
+ * nothing and reports no failures. That is indistinguishable, from the outside,
+ * from a route that was measured and found clean. On an unconfigured server —
+ * which is exactly what `playwright.ci.config.ts` boots — the account detail
+ * screen answers `rpc_unconfigured`, renders `read failed`, and lays out no
+ * table at all. Measured on the built app: 49 cells with an RPC configured, 0
+ * without. Every other route is identical either way.
+ *
+ * So the naive move, taking this suite into CI as it stood, would have gated
+ * the site with a check that silently skipped the one screen where it found a
+ * real defect — `--col-rowhead` at 18ch, a 134px heading in a 132px column.
+ * A check that passes by finding nothing to look at is the failure this file
+ * was written to catch, and it would have been reintroduced by the act of
+ * making the file run more often.
+ *
+ * ## What is listed, and what is deliberately not
+ *
+ * These four are fixture-backed: they render from shipped recordings and local
+ * derivation, so they are populated on any server, and if one of them ever
+ * comes up empty something is broken rather than unconfigured. Notably the two
+ * widest tables in `/app` are both here — the refusal table and the deny table,
+ * the two no screenshot ever reached.
+ *
+ * The RPC-backed routes are absent by intent, not oversight. Requiring them
+ * would mean pointing the gate at a public testnet endpoint and going red
+ * whenever that endpoint has a bad afternoon. They keep their coverage in the
+ * on-demand suite, which has the RPC and does not run on every push.
+ */
+const TABLES_EXPECTED_ANYWHERE = [
+  '/',
+  '/app/policies/new',
+  `/app/policies/${ACCOUNT}-${RULE}`,
+  '/app/simulator beat 4',
+] as const;
+
+test.describe('no table column is narrower than what it holds', { tag: '@ci' }, () => {
   test(`at ${SHOT_WIDTH}px`, async ({ page }) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: SHOT_WIDTH, height: 1100 });
@@ -362,7 +442,16 @@ test.describe('no table column is narrower than what it holds', () => {
     // Every route, then one assertion — so a run names every overlapping column
     // on the site rather than the first one and whatever it hid.
     const found: string[] = [];
+    // How many cells each route actually offered up. `found` being empty is
+    // only evidence if this is not.
+    const measured = new Map<string, number>();
     const collect = async (where: string) => {
+      measured.set(
+        where,
+        await page.evaluate(
+          () => document.querySelectorAll('table.tbl td, table.tbl th').length,
+        ),
+      );
       for (const c of await overflowing()) {
         found.push(
           `${where}: <${c.tag} class="${c.cls}"> shows ${c.shows}px of ${c.needs}px — "${c.text}"`,
@@ -390,6 +479,19 @@ test.describe('no table column is narrower than what it holds', () => {
     await simulatorThroughDenyTable(page);
     await collect('/app/simulator beat 4');
 
+    // Asserted before the overlaps, and the order is the point. If the run went
+    // hollow, `found` is empty for a reason that has nothing to do with columns,
+    // and reporting "no overlapping columns" first would answer a question this
+    // run did not ask.
+    const hollow = TABLES_EXPECTED_ANYWHERE.filter((route) => (measured.get(route) ?? 0) === 0);
+    expect(
+      hollow,
+      `nothing was measured on ${hollow.join(', ')} — these routes render from shipped ` +
+        'recordings and are populated on any server, so an empty one is a broken page or a ' +
+        'broken selector, not a clean one. This suite is a filter over table cells: with no ' +
+        'cells it reports no overlaps and passes, which is the failure it exists to catch',
+    ).toEqual([]);
+
     expect(
       found,
       `a column is painting over the one beside it —\n${found.join('\n')}\n` +
@@ -399,6 +501,23 @@ test.describe('no table column is narrower than what it holds', () => {
   });
 });
 
+/**
+ * Not tagged `@ci`, because an unconfigured server is where this one is weakest
+ * rather than merely narrower.
+ *
+ * `NO_DATA_STATES` is the escape hatch that makes the check honest — a screen
+ * showing `read failed` has no numbers, so it owes no provenance label. On a
+ * server with no RPC every read-backed route takes that branch, so the suite
+ * would run green while asking almost nothing: the routes whose labelling is
+ * worth pinning are exactly the ones that would answer through the exemption.
+ *
+ * That is the same hollowing `TABLES_EXPECTED_ANYWHERE` refuses above, and it
+ * could be refused the same way. It has not been, because unlike a table cell
+ * count there is no cheap census here that separates "labelled" from "excused",
+ * and inventing one for the sake of a per-push gate is a bigger change than
+ * this commit is. Stays on demand, where the RPC is configured and the
+ * exemption is load-bearing for three screens instead of most of them.
+ */
 test('every screen states where its numbers came from', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 900 });
