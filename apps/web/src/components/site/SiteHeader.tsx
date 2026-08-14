@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LedgerCounter } from '@/components/LedgerCounter';
 import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
+import { HeaderSiteLinks } from '@/components/site/SiteLinks';
 import { NETWORK } from '@/lib/network';
 
 /**
@@ -86,6 +87,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
+          <HeaderSiteLinks />
           <LedgerCounter sequence={sequence} />
           <span
             className="status-label"

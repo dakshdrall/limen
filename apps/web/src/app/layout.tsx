@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { LedgerSource } from "@/components/LedgerSource";
+import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import "./globals.css";
 
@@ -64,6 +65,20 @@ export const metadata: Metadata = {
  * sits beside, so the header's counter and any screen's closing window read the
  * same sequence and cannot disagree about what the present is. `children` is
  * passed through as a prop, so the pages under it stay server components.
+ *
+ * `SiteFooter` is here rather than on the landing page, which is where it used to
+ * live and where it was the only footer on the site — `/docs` and every `/app/*`
+ * screen simply ended. It is also now a sibling of the page's `<main>` rather
+ * than a child of it; see that component for why that was worth the move on its
+ * own.
+ *
+ * The wrapper around `children` earns its place: `body` is a flex column, so
+ * without something growing to fill it a short page — a read failure, an empty
+ * account list — leaves the footer floating halfway up the viewport with ground
+ * below it. `flex-1` on the wrapper rather than on the pages, because a page
+ * cannot know what is under it. It is a plain `div` and not a shell, so the
+ * `.screen` and `.scene` grids inside it are unaffected: each is still the grid
+ * parent of its own children, which is what `.bleed` addresses.
  */
 export default function RootLayout({
   children,
@@ -78,7 +93,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <LedgerSource>
           <SiteHeader />
-          {children}
+          <div className="flex-1">{children}</div>
+          <SiteFooter />
         </LedgerSource>
       </body>
     </html>

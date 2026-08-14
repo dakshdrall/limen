@@ -268,8 +268,12 @@ paraphrased.
 **The honest note about checking this refactor.** It is a behaviour-preserving
 extraction across four files whose only end-to-end check is
 `e2e/account-lifecycle.spec.ts`, which submits real testnet transactions and is
-deliberately not in CI. It gets run by hand once, and its result is reported here
-rather than assumed. The unit suites do not cover this.
+deliberately not in CI. The unit suites do not cover it.
+
+So it runs **twice: once before the extraction and once after**, and both results
+are reported. A green run against an unknown baseline proves less than it looks
+like — if that suite is already red for an unrelated reason, a green "after" is
+the more suspicious of the two outcomes, and there would be no way to tell.
 
 ### 3.5 The layout gate
 
@@ -368,9 +372,17 @@ does not support it" are different statements.
 - **And the part that must not be soft-pedalled.** A passkey cannot be handed to
   an agent, so the *agent* key on a passkey account is still a generated ed25519
   key in browser storage, still carrying `TESTNET ONLY · LOCAL KEY`. The passkey
-  protects the owner, not the agent. Clearing site data on a passkey account no
-  longer strands the account — that is the real gain, and it is the whole of it —
-  but it still destroys the agent key. The screen says so.
+  protects the owner, not the agent.
+
+  **This goes on screen, not only in this plan** — wherever a passkey account is
+  created and wherever one is used, in the register of:
+
+  > Clearing site data no longer strands your account. It still destroys the
+  > agent key, and with it this browser's ability to act as the agent.
+
+  The gain is real and it is the whole of the gain. A passkey account that let a
+  reader infer their agent key was safe too would be this plan's own version of
+  the caveat that stopped applying.
 - `local-key-label.test.ts`'s tripwire is extended deliberately to cover the new
   module rather than being satisfied by the passkey path simply not matching its
   detectors.

@@ -433,28 +433,6 @@ export default function Home() {
         </SceneBlock>
       </Scene>
 
-      <footer className="scene border-t border-border-subtle">
-        <div className="flex flex-col gap-4">
-          <StatusLabels names={['OPEN SOURCE', 'MIT', 'IN DEVELOPMENT', 'TESTNET ONLY']} />
-          <p className="text-[12.5px] leading-relaxed text-muted-dim measure">
-            Every figure on this site is read from{' '}
-            <span className="value">deployments/testnet.json</span>{' '}or from a generated evidence
-            file, and a check fails the build when either drifts. Nothing on this page is typed by
-            hand.
-          </p>
-          <nav className="flex flex-wrap gap-4 text-[13px]" aria-label="Footer">
-            <Link href="/docs" className="link">
-              Documentation
-            </Link>
-            <Link href="/app/simulator" className="link">
-              Simulator
-            </Link>
-            <Link href="/app/accounts" className="link">
-              Accounts
-            </Link>
-          </nav>
-        </div>
-      </footer>
     </main>
   );
 }
