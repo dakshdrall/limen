@@ -47,7 +47,7 @@
  */
 
 import type { InstallPlan } from '@limen/chain/plan';
-import type { LocalKey } from '@/lib/local-key';
+import { LOCAL_KEY_LABEL, type LocalKey } from '@/lib/local-key';
 import type { SnapshotRule } from '@/lib/account-contract';
 import {
   ACCOUNT_WASM_HASH,
@@ -74,6 +74,20 @@ export const SEED_AMOUNT = 1_000_000_000n;
 
 /** 0.1 XLM. The flow the boundary is derived from — deliberately small. */
 export const OBSERVED_AMOUNT = 1_000_000n;
+
+/**
+ * This module names {@link LOCAL_KEY_LABEL} because it imports the key module,
+ * and `test/local-key-label.test.ts` requires every such file to — which it
+ * caught on the first run after this extraction landed.
+ *
+ * The rule is doing more work here than in `use-local-keys.ts`, not less. That
+ * hook hands a screen a key; this module is where the key is *used* — every
+ * signature in the product is produced by one of the functions below. Extracting
+ * the write logic out of the screens moved that act from four files that render
+ * the label to one file that cannot render anything, and a label that travels
+ * with the key everywhere except the place it signs is not travelling with it.
+ */
+export const CHAIN_ACTION_KEY_LABEL = LOCAL_KEY_LABEL;
 
 /** Both keys, as `useSigners()` hands them over. */
 export interface Keys {
