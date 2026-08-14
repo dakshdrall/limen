@@ -429,6 +429,61 @@ describe('controls are a closed set', () => {
   });
 });
 
+describe('the section nav points at routes that exist', () => {
+  /**
+   * `SiteHeader.tsx` has claimed since V6 that this check existed. It did not.
+   *
+   * The claim is in its own header — "`design-system.test.ts` pins both the flag
+   * and the state it renders, and separately checks that every `built: true`
+   * entry points at a route that exists — the typo case, which is invisible in
+   * review". The first half was true. The second half described a test nobody
+   * had written, which is worse than an unguarded nav: the comment is what a
+   * reviewer reads instead of checking, so the gap was documented as closed.
+   *
+   * Found while adding the `Try` entry PLAN-V7 §3 asks for, on the strength of
+   * that sentence.
+   */
+  const header = read('components/site/SiteHeader.tsx');
+
+  /** `{ href: '…', label: '…', built: true|false }`, as the file writes them. */
+  const entries = [...header.matchAll(/\{\s*href:\s*'([^']+)',\s*label:\s*'([^']+)',\s*built:\s*(true|false)\s*\}/g)].map(
+    ([, href, label, built]) => ({ href, label, built: built === 'true' }),
+  );
+
+  it('finds the sections, so the checks below are about something', () => {
+    // The regex is the whole test's reach. A reformat that breaks it would take
+    // every assertion below with it and report a clean run over an empty list —
+    // the same hollowing `TABLES_EXPECTED_ANYWHERE` refuses in the e2e suite.
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    expect(entries.map((e) => e.label)).toContain('Docs');
+  });
+
+  it('has a page.tsx behind every built section', () => {
+    const missing = entries
+      .filter((entry) => entry.built)
+      // App Router: `/app/try` is `app/app/try/page.tsx`. Route groups and
+      // dynamic segments are deliberately not resolved — no nav entry uses one,
+      // and a resolver that guessed would be the thing going quietly wrong.
+      .filter((entry) => !present(`app${entry.href}/page.tsx`))
+      .map((entry) => `${entry.label} → ${entry.href}`);
+
+    // If this fails: either the route was never built and `built` should be
+    // false, or the href has a typo. Both ship as a 404 from the top bar of
+    // every page on the site.
+    expect(missing).toEqual([]);
+  });
+
+  it('does not mark a section unbuilt while its route exists', () => {
+    // The other direction, which fails quietly rather than loudly: a route that
+    // works, rendered as greyed-out text nobody can click.
+    const stale = entries
+      .filter((entry) => !entry.built && present(`app${entry.href}/page.tsx`))
+      .map((entry) => `${entry.label} → ${entry.href}`);
+
+    expect(stale).toEqual([]);
+  });
+});
+
 describe('the palette has one definition, and every consumer reads it', () => {
   // PLAN-V5 F4. `opengraph-image.tsx` renders through satori with inline styles
   // and no cascade, so `var(--permit)` resolves to nothing and its eleven

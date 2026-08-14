@@ -67,6 +67,27 @@ export interface StoredAccount {
   deployTxHash?: string;
   /** Provenance for policies installed through this browser, by rule id. */
   provenance: Record<string, StoredProvenance>;
+  /**
+   * The transaction `/app/try` observed, so a reload can resume mid-flow.
+   *
+   * The one thing in that flow the chain cannot answer. Everything else about
+   * where a person has got to is read back from the ledger — whether the account
+   * exists, whether a boundary is installed, what its cap is, whether it has been
+   * revoked — but *which* transaction the flow derived from is a fact about this
+   * session and exists nowhere on chain.
+   *
+   * **A bookmark, not an answer**, and the distinction is the whole reason this
+   * is allowed to sit beside a store that documents itself as holding no claim
+   * about chain state. On resume the hash goes back through `/api/ingest` and the
+   * derivation comes from what the ledger recorded — the same path
+   * `/app/policies/new` takes from `?tx=`. This value never reaches a cap.
+   *
+   * The storage-free alternative was scanning the account's own events for its
+   * outgoing transfer, the way `ActivityScreen` does. It was rejected on the
+   * retention window: public RPC event history runs a few days, so an account
+   * created last week would resume as a read failure.
+   */
+  observedTxHash?: string;
   addedAt: string;
 }
 
@@ -202,6 +223,23 @@ export function rememberAccount(contractId: string, deployTxHash?: string): bool
         addedAt: existing?.addedAt ?? new Date().toISOString(),
       },
     },
+  });
+}
+
+/**
+ * Bookmark the transaction the guided flow derived from.
+ *
+ * Returns `false` for an account this browser does not know, for the same reason
+ * {@link rememberProvenance} does: a record with an observed hash and no address
+ * is a half-record, and the flow that wrote it would resume onto nothing.
+ */
+export function rememberObserved(contractId: string, observedTxHash: string): boolean {
+  const current = read();
+  const account = current.accounts[contractId];
+  if (account === undefined) return false;
+  return write({
+    ...current,
+    accounts: { ...current.accounts, [contractId]: { ...account, observedTxHash } },
   });
 }
 

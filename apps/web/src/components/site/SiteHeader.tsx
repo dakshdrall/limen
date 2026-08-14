@@ -38,6 +38,10 @@ interface Section {
 const SECTIONS: Section[] = [
   { href: '/docs', label: 'Docs', built: true },
   { href: '/app/accounts', label: 'App', built: true },
+  // The guided path, PLAN-V7 §3. Distinct from `App`, which is the reference
+  // view: the same nine transactions are reachable there across four screens,
+  // and this is the one that puts them in an order.
+  { href: '/app/try', label: 'Try', built: true },
 ];
 
 export function SiteHeader() {

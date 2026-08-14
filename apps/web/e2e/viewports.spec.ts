@@ -85,6 +85,7 @@ const ROUTES = [
   '/app/activity',
   '/app/simulator',
   '/app/policies/new',
+  '/app/try',
   `/app/accounts/${ACCOUNT}`,
   `/app/policies/${ACCOUNT}-${RULE}`,
 ] as const;
