@@ -234,6 +234,26 @@ export function TryFlow() {
   const SETUP_STEPS = ['fund:OWNER', 'fund:AGENT', 'deploy', 'seed'];
   const setupAttempted = SETUP_STEPS.some((key) => log.stateOf(key).status !== 'idle');
 
+  /**
+   * Step 2 tried and did not land, which is the one case that reopens step 1.
+   *
+   * The flow judges step 1 complete from the chain — the account exists and this
+   * browser owns it — and the chain cannot say whether the smart account holds a
+   * balance. So an account created on `/app/accounts/new`, which deploys but does
+   * not seed, resumes here at step 2 and step 2 fails for want of funds.
+   *
+   * That failure is already a state rather than a dead end, because `WriteResult`
+   * says what happened and at which stage. It was still a dead *end*: the only
+   * thing that would fix it lives in step 1, and step 1 had no control on screen.
+   * This is the narrow condition that puts one back, and it is deliberately not
+   * "step 1 is always retryable" — that would be six buttons wearing a disguise.
+   */
+  const observeFailed = (() => {
+    const state = log.stateOf('observe');
+    if (state.status === 'failed') return true;
+    return state.status === 'onLedger' && !state.ok;
+  })();
+
   let current = 1;
   if (ownsAccount) current = 2;
   if (ownsAccount && observedHash !== null) current = 3;
@@ -507,16 +527,25 @@ export function TryFlow() {
             </div>
           )}
 
-          {current === 1 && (
-            <button
-              type="button"
-              disabled={log.busy}
-              onClick={() => void runSetup()}
-              className="btn self-start"
-              data-variant="primary"
-            >
-              {setupAttempted ? 'Retry from here' : 'Set everything up'}
-            </button>
+          {(current === 1 || observeFailed) && (
+            <div className="flex flex-col gap-2">
+              {observeFailed && current > 1 && (
+                <p className="measure text-[12.5px] leading-relaxed text-muted">
+                  Step 2 did not land. If this account was created somewhere that deploys without
+                  funding it, the transfer below has nothing to spend — running this again funds
+                  what is unfunded and skips what already worked.
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={log.busy}
+                onClick={() => void runSetup()}
+                className="btn self-start"
+                data-variant={current === 1 ? 'primary' : 'secondary'}
+              >
+                {setupAttempted || current > 1 ? 'Retry from here' : 'Set everything up'}
+              </button>
+            </div>
           )}
 
           {keyProblem !== null && (
