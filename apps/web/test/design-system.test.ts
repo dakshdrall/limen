@@ -31,12 +31,14 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { MARK_RECTS } from '../src/lib/mark';
+import { MARK_GRID, MARK_RECTS } from '../src/lib/mark';
 import { THEME } from '../src/lib/theme';
 
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(src(relative), 'utf8');
 const present = (relative: string) => existsSync(src(relative));
+/** `public/`, which is beside `src/` rather than inside it — the avatars live there. */
+const pub = (relative: string) => fileURLToPath(new URL(`../public/${relative}`, import.meta.url));
 
 const css = read('app/globals.css');
 const layout = read('app/layout.tsx');
@@ -518,6 +520,58 @@ describe('the mark has one definition, and every consumer reads it', () => {
     // bytes of someone else's icon, and shipping it is the clearest possible
     // signal that nobody looked at the tab.
     expect(committed.equals(iconIco())).toBe(true);
+  });
+
+  it('regenerates the committed avatars exactly', async () => {
+    const { avatarPngs } = await import('../../../scripts/mark.mjs');
+    for (const { name, bytes } of avatarPngs()) {
+      expect(readFileSync(pub(name)).equals(bytes), `${name} has drifted`).toBe(true);
+    }
+  });
+
+  it('keeps the avatar mark clear of the circular crop', async () => {
+    // The reason the avatars are not just bigger favicons. Every platform that
+    // shows an avatar crops it to a circle, so the check that matters is not
+    // whether the mark fits the square — it is how much of the inscribed
+    // circle's radius the farthest ink reaches.
+    //
+    // Measured from `MARK_RECTS` rather than written down, so redrawing the
+    // mark or changing a scale re-runs the arithmetic instead of leaving a
+    // stale number here. 83% is what was looked at, at 48px and at 24px.
+    const { AVATARS } = await import('../../../scripts/mark.mjs');
+    for (const { size, scale } of AVATARS) {
+      const centre = size / 2;
+      const offset = (size - MARK_GRID * scale) / 2;
+      let farthest = 0;
+      for (const rect of MARK_RECTS) {
+        for (const x of [rect.x, rect.x + rect.width]) {
+          for (const y of [rect.y, rect.y + rect.height]) {
+            farthest = Math.max(
+              farthest,
+              Math.hypot(x * scale + offset - centre, y * scale + offset - centre),
+            );
+          }
+        }
+      }
+      expect(farthest / centre, `avatar-${size}.png reaches too far into the crop`).toBeLessThan(
+        0.86,
+      );
+      // And a floor, because an avatar that is mostly margin reads as a dot.
+      expect(farthest / centre).toBeGreaterThan(0.75);
+    }
+  });
+
+  it('refuses to anti-alias an avatar rather than rounding it', async () => {
+    // One bit per pixel is lossless only while every edge lands on a whole
+    // pixel. That is an assumption, so it is a fence: a scale that breaks it
+    // throws instead of quietly producing a soft mark, which would be invisible
+    // in a byte comparison against a file built by the same broken arithmetic.
+    const { avatarBits } = await import('../../../scripts/mark.mjs');
+    // A scale that is not a multiple of 2/3: the jambs start at x = 4.5, which
+    // lands on a half pixel at 11 and would need an anti-aliased edge.
+    expect(() => avatarBits(400, 11)).toThrow(/multiple of 2\/3/);
+    // A legal scale in a box that cannot be centred on a whole pixel.
+    expect(() => avatarBits(401, 12)).toThrow(/half-pixel/);
   });
 
   it('keeps the geometry on the grid that makes every icon size crisp', () => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * The mark's two file-shaped consumers: `app/icon.svg` and `app/favicon.ico`.
+ * The mark's file-shaped consumers: `app/icon.svg`, `app/favicon.ico`, and the
+ * two avatars in `public/`.
  *
  * PLAN-V5 §3.2. The geometry lives in `apps/web/src/lib/mark.ts` and the colours
  * in `apps/web/src/lib/theme.ts`; this script is what turns them into the two
@@ -35,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const APP = join(root, 'apps', 'web', 'src', 'app');
+const PUBLIC = join(root, 'apps', 'web', 'public');
 
 const { MARK_GRID, MARK_RECTS, markSvg } = await import(
   join(root, 'apps', 'web', 'src', 'lib', 'mark.ts')
@@ -77,6 +79,46 @@ export function iconIco() {
   return ico(ICO_SIZES, TEXT.foreground, GROUND.background);
 }
 
+/**
+ * The avatars, which are a different artefact from a favicon and not a bigger
+ * one.
+ *
+ * Three things differ, and each is forced by where an avatar is shown.
+ *
+ *  - **It carries its ground.** Every platform composites an avatar onto a
+ *    background nobody controls, so transparency is not restraint here, it is
+ *    an unknown backdrop. Paper, like the `.ico` and for a stronger reason.
+ *
+ *  - **It has real margin.** A favicon fills its box. An avatar is cropped to a
+ *    circle by every platform that shows one, so the mark has to sit inside the
+ *    inscribed circle with room to spare. The mark's farthest ink is the sill's
+ *    corner, 13.83 grid units from centre; at these scales that lands at 83% of
+ *    the circle's radius, leaving a sixth of it clear.
+ *
+ *  - **The scale is chosen, not derived.** `size / MARK_GRID` is what fills the
+ *    box; these are deliberately smaller, and each has to keep every coordinate
+ *    on a whole pixel. `avatarBits` enforces that rather than trusting the table
+ *    below — see the two fences there.
+ *
+ * 1000 is for the platforms that ask for it. 400 is the one that gets looked at,
+ * and both were checked at 48px and 24px, which is the size an avatar is
+ * actually seen at in a timeline.
+ */
+export const AVATARS = [
+  // 24 × 12 = 288 in a 400 box: 56px inset, 252 × 216 of ink.
+  { size: 400, scale: 12 },
+  // 24 × 30 = 720 in a 1000 box: 140px inset, 630 × 540 of ink. The same
+  // geometry as above, so the two cannot disagree about how the mark is placed.
+  { size: 1000, scale: 30 },
+];
+
+export function avatarPngs() {
+  return AVATARS.map(({ size, scale }) => ({
+    name: `avatar-${size}.png`,
+    bytes: png1(size, scale, TEXT.foreground, GROUND.background),
+  }));
+}
+
 /* --- rasteriser ----------------------------------------------------------- */
 
 /** `#rrggbb` to three bytes. The palette is written one way; this reads that way. */
@@ -88,13 +130,42 @@ function rgb(hex) {
 }
 
 /**
- * The mark at `size`, as raw RGB.
+ * How much of one pixel the mark covers, drawn at `scale` pixels per grid unit
+ * and inset `offset` pixels into the image. 0 to 1.
  *
  * Coverage is summed rather than unioned, which is correct only because
- * `MARK_RECTS` is non-overlapping — see the note in `lib/mark.ts`. At these
- * sizes every coverage value comes out 0 or 1 anyway; the area arithmetic is
- * here so that a size off the grid degrades to a soft edge rather than to a
- * wrong one.
+ * `MARK_RECTS` is non-overlapping — see the note in `lib/mark.ts`. At every
+ * size this file produces, each value comes out exactly 0 or 1; the area
+ * arithmetic is here so that a size off the grid degrades to a soft edge rather
+ * than to a wrong one.
+ *
+ * `offset` exists for the avatars, which draw the mark smaller than their own
+ * box so it survives a circular crop. The favicon passes 0 and is unaffected —
+ * that this refactor moved no favicon byte is not an argument, it is what
+ * `mark:check` and `design-system.test.ts` compare.
+ */
+function coverage(px, py, scale, offset) {
+  let covered = 0;
+  for (const { x, y, width, height } of MARK_RECTS) {
+    const w = Math.max(
+      0,
+      Math.min((x + width) * scale + offset, px + 1) - Math.max(x * scale + offset, px),
+    );
+    const h = Math.max(
+      0,
+      Math.min((y + height) * scale + offset, py + 1) - Math.max(y * scale + offset, py),
+    );
+    covered += w * h;
+  }
+  return Math.min(1, covered);
+}
+
+/**
+ * The mark at `size`, filling its box, as raw RGBA.
+ *
+ * The favicon's rasteriser. Ink composited onto paper, opaque throughout, so
+ * the icon carries its own ground rather than inheriting a tab strip's colour —
+ * see `iconIco`.
  */
 function rasterise(size, ink, paper) {
   const scale = size / MARK_GRID;
@@ -104,19 +175,11 @@ function rasterise(size, ink, paper) {
 
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
-      let covered = 0;
-      for (const { x, y, width, height } of MARK_RECTS) {
-        const w = Math.max(0, Math.min((x + width) * scale, px + 1) - Math.max(x * scale, px));
-        const h = Math.max(0, Math.min((y + height) * scale, py + 1) - Math.max(y * scale, py));
-        covered += w * h;
-      }
-      const a = Math.min(1, covered);
+      const a = coverage(px, py, scale, 0);
       const at = (py * size + px) * 4;
       out[at] = Math.round(pr + (ir - pr) * a);
       out[at + 1] = Math.round(pg + (ig - pg) * a);
       out[at + 2] = Math.round(pb + (ib - pb) * a);
-      // Opaque throughout. The ink is composited onto the paper here rather
-      // than left to whatever is behind the icon — see `iconIco`.
       out[at + 3] = 255;
     }
   }
@@ -175,6 +238,100 @@ function stored(raw) {
   check.writeUInt32BE(adler32(raw), 0);
   parts.push(check);
   return Buffer.concat(parts);
+}
+
+/**
+ * The mark as one bit per pixel, centred in a square with margin around it.
+ *
+ * Returns packed rows: `ceil(size / 8)` bytes each, most significant bit
+ * leftmost, 1 for ink and 0 for paper. That is the PNG scanline format for a
+ * bit depth of 1, so nothing repacks it afterwards.
+ *
+ * ## Two fences, and they are the reason this is safe to compare byte for byte
+ *
+ * `scale` has to be a multiple of ⅔ and the resulting `offset` a whole number,
+ * or a coordinate that is a multiple of 1.5 stops landing on a pixel boundary.
+ * When that holds, every pixel is fully inside the ink or fully outside it, and
+ * one bit per pixel is lossless rather than a rounding.
+ *
+ * When it does not hold, this throws. It does not round. A silently
+ * anti-aliased avatar is exactly the drift the whole module exists to prevent,
+ * and it would be invisible in a byte comparison against a file generated by
+ * the same broken arithmetic.
+ */
+export function avatarBits(size, scale) {
+  if ((scale * 3) % 2 !== 0) {
+    throw new Error(
+      `mark: avatar scale ${scale} is not a multiple of 2/3, so a coordinate at a multiple of 1.5 would not land on a whole pixel`,
+    );
+  }
+  const offset = (size - MARK_GRID * scale) / 2;
+  if (!Number.isInteger(offset)) {
+    throw new Error(
+      `mark: avatar ${size}px at scale ${scale} centres on a half-pixel (offset ${offset})`,
+    );
+  }
+
+  const stride = Math.ceil(size / 8);
+  const rows = Buffer.alloc(size * stride);
+
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const a = coverage(px, py, scale, offset);
+      if (a !== 0 && a !== 1) {
+        throw new Error(
+          `mark: avatar ${size}px at scale ${scale} anti-aliases at (${px}, ${py}) — coverage ${a}. One bit per pixel cannot hold that, and rounding it would make this file a lie about the geometry.`,
+        );
+      }
+      if (a === 1) rows[py * stride + (px >> 3)] |= 0x80 >> (px & 7);
+    }
+  }
+  return { rows, stride };
+}
+
+/**
+ * A two-colour palette PNG, stored-deflate, exactly reproducible.
+ *
+ * The favicon is truecolour-with-alpha because Next.js decodes `favicon.ico` at
+ * build time and its decoder rejects a PNG inside an ICO that is not RGBA. That
+ * constraint is about the container, not about the image — these avatars are
+ * standalone files with no such consumer, and the picture has exactly two
+ * colours in it.
+ *
+ * Which matters more than it sounds. Stored blocks are what make these files
+ * the same bytes under every zlib there is, and at 1000×1000 an RGBA payload
+ * stored uncompressed is about **4MB**. One bit per pixel with a two-entry
+ * palette is ~126KB for the same image, byte-identical forever, and still no
+ * image library anywhere near it.
+ */
+function png1(size, scale, ink, paper) {
+  const { rows, stride } = avatarBits(size, scale);
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header[8] = 1; // one bit per pixel
+  header[9] = 3; // indexed colour
+  // 10, 11, 12 stay zero: deflate, adaptive filtering, no interlace.
+
+  // Index 0 is paper and index 1 is ink, matching the bit sense in
+  // `avatarBits`. Order is the palette, not a convention to remember.
+  const palette = Buffer.concat([Buffer.from(rgb(paper)), Buffer.from(rgb(ink))]);
+
+  // One filter byte per row, always zero — filtering exists to help a
+  // compressor and there is no compressor here.
+  const raw = Buffer.alloc(size * (stride + 1));
+  for (let row = 0; row < size; row++) {
+    rows.copy(raw, row * (stride + 1) + 1, row * stride, (row + 1) * stride);
+  }
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('PLTE', palette),
+    chunk('IDAT', stored(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 function png(size, pixels) {
@@ -244,6 +401,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const files = [
     [join(APP, 'icon.svg'), Buffer.from(iconSvg(), 'utf8')],
     [join(APP, 'favicon.ico'), iconIco()],
+    // `public/` rather than `app/`: these are not an icon convention Next.js
+    // serves from the route tree, they are files to hand to a platform. Being
+    // served at `/avatar-400.png` is the convenience of putting them there.
+    ...avatarPngs().map(({ name, bytes }) => [join(PUBLIC, name), bytes]),
   ];
   const check = process.argv.includes('--check');
   const stale = [];
