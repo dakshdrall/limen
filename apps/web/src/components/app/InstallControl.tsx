@@ -8,9 +8,7 @@ import { WriteResult } from '@/components/app/WriteResult';
 import { StatusLabel } from '@/components/StatusLabel';
 import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 import type { InstallPlan } from '@limen/chain/plan';
-import { ED25519_VERIFIER, RPC_URL, SPENDING_LIMIT_POLICY } from '@/lib/chain-config';
-import { loadChain } from '@/lib/chain-write';
-import { NETWORK_PASSPHRASE } from '@/lib/network';
+import { installBoundary } from '@/lib/chain-actions';
 import { formatPolicyId } from '@/lib/policy-id';
 import { rememberProvenance } from '@/lib/store';
 import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';
@@ -76,65 +74,15 @@ export function InstallControl({
     const outcome = await log.run(
       'install',
       `Installing the boundary — add_context_rule on ${accountId}`,
-      async () => {
-        const chain = await loadChain();
-        const { rpc } = await import('@stellar/stellar-sdk');
-        const server = new rpc.Server(RPC_URL);
-
-        // The account's Default rule, read back rather than assumed to be 0.
-        // The owner signs under it, and its id comes from the same on-chain
-        // counter every other rule's does.
-        const rules = await chain.readAllContextRules(
-          { rpcUrl: RPC_URL, simulationSource: keys.owner.publicKey },
+      () =>
+        installBoundary({
+          keys,
           accountId,
-        );
-        const defaultRule = rules.find((r) => r.contextType === 'Default');
-        if (defaultRule === undefined) {
-          throw new Error(
-            'this account has no Default rule, so there is no rule the owner could sign under',
-          );
-        }
-
-        const [func, ...rest] = chain.installFunctions(plan, {
-          smartAccount: accountId,
-          verifier: ED25519_VERIFIER,
-          spendingLimitPolicy: SPENDING_LIMIT_POLICY,
-          agentPublicKey: keys.agent.rawPublicKey,
-          ownerPublicKey: keys.owner.rawPublicKey,
-        });
-        if (func === undefined) throw new Error('the plan lowered to no rules');
-        if (rest.length > 0) {
-          // Stated rather than silently installing the first of several. The
-          // synthesizer can produce a multi-rule plan; this screen installs one
-          // and must not imply it installed them all.
-          throw new Error(
-            `this plan lowered to ${rest.length + 1} context rules, and this screen installs one. Nothing was submitted.`,
-          );
-        }
-
-        const latest = await server.getLatestLedger();
-
-        const result = await chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: keys.owner.publicKey,
-          signEnvelope: keys.owner.signEnvelope,
-          func,
-          signAuthEntry: chain.signAs({
-            signer: keys.owner.signer,
-            verifier: ED25519_VERIFIER,
-            contextRuleIds: [defaultRule.id],
-            expirationLedger: latest.sequence + 200,
-            passphrase: NETWORK_PASSPHRASE,
-          }),
-          label: 'install',
-        });
-
-        if (result.stage === 'ledger' && result.ok) {
-          ruleId = chain.contextRuleIdFrom(result.returnValue);
-        }
-        return result;
-      },
+          plan,
+          onInstalled: (id) => {
+            ruleId = id;
+          },
+        }),
     );
 
     if (outcome?.status === 'onLedger' && outcome.ok && ruleId !== null) {

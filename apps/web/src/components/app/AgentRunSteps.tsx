@@ -2,20 +2,27 @@
 
 import { useRef } from 'react';
 import Link from 'next/link';
-import { isBoundaryRefusal, isRevokedRule } from '@limen/chain/errors';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
 import { StatusLabel } from '@/components/StatusLabel';
 import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
 import { Verdict } from '@/components/Verdict';
 import type { SnapshotRule } from '@/lib/account-contract';
-import { ED25519_VERIFIER, RPC_URL } from '@/lib/chain-config';
-import { loadChain, type ChainBrowser } from '@/lib/chain-write';
+import {
+  NO_FOOTPRINT_YET,
+  agentRepeats,
+  agentRevokes,
+  agentSpends,
+  agentSpendsOver,
+  ownerRevokes,
+  prepareRun,
+  type PermittedCall,
+} from '@/lib/chain-actions';
 import { decimalise } from '@/lib/format';
-import { NETWORK_PASSPHRASE } from '@/lib/network';
 import { useLastRead } from '@/lib/use-last-read';
 import { useLocalKeyPublics, useLocalKeyRawPublics, useSigners } from '@/lib/use-local-keys';
 import { useWriteLog, type WriteState } from '@/lib/use-write';
+import { verdictFor } from '@/lib/verdict';
 
 /**
  * The part that is actually the product: an agent inside its boundary, outside
@@ -58,26 +65,6 @@ import { useWriteLog, type WriteState } from '@/lib/use-write';
  * gets its own verdict state, drawn in the neutral ramp.
  */
 
-/** Ledgers of validity for each signed auth entry. ~10 minutes. */
-const AUTH_VALIDITY_LEDGERS = 200;
-
-/**
- * The artifacts of the permitted call, which steps 02 and 05 borrow.
- *
- * Typed off the chain module rather than by importing the SDK's XDR types, so
- * this file names them without pulling the SDK into its own module graph.
- */
-type SubmitLedgerResult = Extract<
-  Awaited<ReturnType<ChainBrowser['submitAuthorized']>>,
-  { stage: 'ledger' }
->;
-
-interface PermittedCall {
-  amount: bigint;
-  transactionData: SubmitLedgerResult['transactionData'];
-  signedAuth: SubmitLedgerResult['signedAuth'];
-}
-
 export function AgentRunSteps({
   contractId,
   rule: readRule,
@@ -114,11 +101,7 @@ export function AgentRunSteps({
   const permitted = useRef<PermittedCall | null>(null);
 
   const requirePermitted = (): PermittedCall => {
-    if (permitted.current === null) {
-      throw new Error(
-        'run step 01 first: this attempt is refused by the network, so it cannot produce a footprint of its own and has to borrow one from the call that works',
-      );
-    }
+    if (permitted.current === null) throw new Error(NO_FOOTPRINT_YET);
     return permitted.current;
   };
 
@@ -149,75 +132,8 @@ export function AgentRunSteps({
 
   const ownsThisAccount = owner !== undefined;
 
-  /**
-   * Everything the five steps share, resolved once per click.
-   *
-   * The auth-entry signers are built here rather than in each step because they
-   * must name the same rule and the same expiry across all five — a step that
-   * quietly signed under a different rule would produce a refusal that looked
-   * like the boundary working and was not.
-   */
-  const prepare = async () => {
-    const keys = signers();
-    // `rule` is retained across the revoke on purpose — step 05 submits under a
-    // rule id that no longer exists, which is the only way to produce
-    // `ContextRuleNotFound` — so it is checked here rather than assumed.
-    if (keys === null || rule === null || token === null || cap === null) return null;
-
-    const chain = await loadChain();
-    const { rpc, xdr } = await import('@stellar/stellar-sdk');
-    const server = new rpc.Server(RPC_URL);
-    const latest = await server.getLatestLedger();
-    const expiry = latest.sequence + AUTH_VALIDITY_LEDGERS;
-
-    const rules = await chain.readAllContextRules(
-      { rpcUrl: RPC_URL, simulationSource: keys.owner.publicKey },
-      contractId,
-    );
-    const defaultRule = rules.find((r) => r.contextType === 'Default');
-
-    return {
-      chain,
-      xdr,
-      keys,
-      expiry,
-      // Carried on the context rather than read off `rule` at each call site.
-      // `rule` is nullable now that this component outlives the revoke, and the
-      // one place that has already established it is not null is here.
-      ruleId: rule.id,
-      defaultRuleId: defaultRule?.id ?? null,
-      agentSigns: chain.signAs({
-        signer: keys.agent.signer,
-        verifier: ED25519_VERIFIER,
-        contextRuleIds: [rule.id],
-        expirationLedger: expiry,
-        passphrase: NETWORK_PASSPHRASE,
-      }),
-      ownerSigns:
-        defaultRule === undefined
-          ? null
-          : chain.signAs({
-              signer: keys.owner.signer,
-              verifier: ED25519_VERIFIER,
-              contextRuleIds: [defaultRule.id],
-              expirationLedger: expiry,
-              passphrase: NETWORK_PASSPHRASE,
-            }),
-      // The permitted call, and the one every later step is a variation of.
-      // Spending less than the cap on purpose: step 5 has to fail because the
-      // rule is gone, and if the permitted amount had exhausted the cap it
-      // would fail for two reasons at once and prove neither.
-      permittedAmount: BigInt(cap) / 2n,
-      token,
-      transfer: (amount: bigint) =>
-        chain.transferFunction({
-          token,
-          from: contractId,
-          to: keys.owner.publicKey,
-          amount,
-        }),
-    };
-  };
+  /** Everything the five steps share, resolved once per click. */
+  const prepare = () => prepareRun({ keys: signers(), contractId, rule });
 
   const runPermitted = async () => {
     const ctx = await prepare();
@@ -226,71 +142,25 @@ export function AgentRunSteps({
     await log.run(
       'permitted',
       `The agent spends ${decimalise(ctx.permittedAmount.toString())} — inside the cap, signed and paid for by the agent`,
-      async () => {
-        const result = await ctx.chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          signEnvelope: ctx.keys.agent.signEnvelope,
-          func: ctx.transfer(ctx.permittedAmount),
-          signAuthEntry: ctx.agentSigns,
-          label: 'permitted',
-        });
-
-        // Steps 02 and 05 are attempts the network refuses, so neither can
-        // produce a footprint of its own. Both borrow this one — the enforcing
-        // simulation of the call that *does* work, which is the only thing that
-        // lets a refusal reach a ledger and have a hash worth showing.
-        if (result.stage === 'ledger' && result.ok) {
-          permitted.current = {
-            amount: ctx.permittedAmount,
-            transactionData: result.transactionData,
-            signedAuth: result.signedAuth,
-          };
-        }
-        return result;
-      },
+      () =>
+        agentSpends(ctx, {
+          onPermitted: (call) => {
+            permitted.current = call;
+          },
+        }),
     );
     onWritten();
   };
 
   const runOverLimit = async () => {
     const ctx = await prepare();
-    if (ctx === null || cap === null) return;
-    const over = BigInt(cap) * 2n;
+    if (ctx === null) return;
+    const over = ctx.cap * 2n;
 
     await log.run(
       'over-limit',
       `The agent tries to spend ${decimalise(over.toString())} — over the cap`,
-      async () => {
-        const borrowed = requirePermitted();
-        const permittedFunc = ctx.transfer(borrowed.amount);
-
-        // The entry the permitted call produces, with one argument changed. The
-        // agent signs the modified entry, so this is a real attempt by the
-        // agent's key rather than a malformed transaction.
-        const [recorded] = await ctx.chain.recordAuthEntries({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          func: permittedFunc,
-        });
-        if (recorded === undefined) throw new Error('the permitted call produced no auth entry');
-
-        const overEntry = ctx.xdr.SorobanAuthorizationEntry.fromXDR(recorded.toXDR());
-        overEntry.rootInvocation().function().contractFn().args()[2] = ctx.chain.i128(over);
-
-        return ctx.chain.submitWithBorrowedFootprint({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          signEnvelope: ctx.keys.agent.signEnvelope,
-          func: ctx.transfer(over),
-          transactionData: borrowed.transactionData,
-          auth: [await ctx.agentSigns(overEntry)],
-          label: 'over-limit',
-        });
-      },
+      () => agentSpendsOver(ctx, requirePermitted(), { amount: over }),
     );
     onWritten();
   };
@@ -303,38 +173,9 @@ export function AgentRunSteps({
     // value that decides who is allowed to sign.
     const ownerSigns = ctx.ownerSigns;
 
-    await log.run('agent-revoke', 'The agent tries to remove the boundary that binds it', async () => {
-      const revokeFunc = ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId);
-
-      // Borrowed from the *owner's* revoke, which simulates cleanly. The
-      // agent's own attempt does not, which is the finding.
-      const footprint = await ctx.chain.enforcingFootprint({
-        rpcUrl: RPC_URL,
-        passphrase: NETWORK_PASSPHRASE,
-        feeSource: ctx.keys.owner.publicKey,
-        func: revokeFunc,
-        signAuthEntry: ownerSigns,
-      });
-
-      const [entry] = await ctx.chain.recordAuthEntries({
-        rpcUrl: RPC_URL,
-        passphrase: NETWORK_PASSPHRASE,
-        feeSource: ctx.keys.agent.publicKey,
-        func: revokeFunc,
-      });
-      if (entry === undefined) throw new Error('the revoke call produced no auth entry');
-
-      return ctx.chain.submitWithBorrowedFootprint({
-        rpcUrl: RPC_URL,
-        passphrase: NETWORK_PASSPHRASE,
-        feeSource: ctx.keys.agent.publicKey,
-        signEnvelope: ctx.keys.agent.signEnvelope,
-        func: revokeFunc,
-        transactionData: footprint,
-        auth: [await ctx.agentSigns(entry)],
-        label: 'agent-revoke',
-      });
-    });
+    await log.run('agent-revoke', 'The agent tries to remove the boundary that binds it', () =>
+      agentRevokes(ctx, { ownerSigns }),
+    );
     onWritten();
   };
 
@@ -344,15 +185,7 @@ export function AgentRunSteps({
     const ownerSigns = ctx.ownerSigns;
 
     await log.run('revoke', 'The owner removes the boundary', () =>
-      ctx.chain.submitAuthorized({
-        rpcUrl: RPC_URL,
-        passphrase: NETWORK_PASSPHRASE,
-        feeSource: ctx.keys.owner.publicKey,
-        signEnvelope: ctx.keys.owner.signEnvelope,
-        func: ctx.chain.removeContextRuleFunction(contractId, ctx.ruleId),
-        signAuthEntry: ownerSigns,
-        label: 'revoke',
-      }),
+      ownerRevokes(ctx, { ownerSigns }),
     );
     onWritten();
   };
@@ -364,25 +197,7 @@ export function AgentRunSteps({
     await log.run(
       'post-revoke',
       'The agent repeats the call that worked — the amount is unchanged and still inside the cap',
-      async () => {
-        // Byte for byte what step 01 submitted: the same host function, the
-        // same borrowed footprint, and the *same signed auth entry*. Nothing
-        // about the agent's attempt has changed — the account has. That is what
-        // makes the different outcome attributable to the revoke and to nothing
-        // else, and it is why neither is rebuilt here.
-        const borrowed = requirePermitted();
-
-        return ctx.chain.submitWithBorrowedFootprint({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: ctx.keys.agent.publicKey,
-          signEnvelope: ctx.keys.agent.signEnvelope,
-          func: ctx.transfer(borrowed.amount),
-          transactionData: borrowed.transactionData,
-          auth: borrowed.signedAuth,
-          label: 'post-revoke',
-        });
-      },
+      () => agentRepeats(ctx, requirePermitted()),
     );
     onWritten();
   };
@@ -529,46 +344,6 @@ export function AgentRunSteps({
       </Step>
     </div>
   );
-}
-
-/**
- * The verdict for a settled step, or `null` while there is nothing to judge.
- *
- * `expected` is what a *successful* run of this step looks like: step 01 should
- * be permitted, steps 02, 03 and 05 should be refused. It is not used to decide
- * the verdict — the codes are — but to keep an on-ledger success from rendering
- * as a permit on a step where success would mean the boundary failed.
- */
-function verdictFor(
-  state: WriteState,
-  expected: 'permit' | 'deny',
-): { state: 'permitted' | 'denied' | 'rule-revoked'; note: string } | null {
-  if (state.status !== 'onLedger') return null;
-
-  if (state.ok) {
-    return expected === 'permit'
-      ? { state: 'permitted', note: 'The network ran it and it succeeded.' }
-      : {
-          state: 'permitted',
-          note: 'This succeeded, and on this step that means the boundary did not hold. It is reported as it happened.',
-        };
-  }
-
-  if (isRevokedRule(state.codes)) {
-    return {
-      state: 'rule-revoked',
-      note: 'The rule is gone, so nothing refused this — there was no boundary left to consult. Not counted as a refusal.',
-    };
-  }
-
-  if (isBoundaryRefusal(state.codes)) {
-    return { state: 'denied', note: 'Refused by the policy contract, executed by the host.' };
-  }
-
-  return {
-    state: 'denied',
-    note: 'It failed on a ledger, but no code identifying a boundary refusal was decoded — so it is not attributable to the boundary.',
-  };
 }
 
 function Step({

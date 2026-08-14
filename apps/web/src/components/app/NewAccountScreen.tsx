@@ -8,11 +8,11 @@ import { WriteResult } from '@/components/app/WriteResult';
 import { Section } from '@/components/Section';
 import { StatusLabel } from '@/components/StatusLabel';
 import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
-import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, RPC_URL, WASM_SOURCE } from '@/lib/chain-config';
-import { fundFromFriendbot, loadChain } from '@/lib/chain-write';
+import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, WASM_SOURCE } from '@/lib/chain-config';
+import { deployAccount } from '@/lib/chain-actions';
+import { fundFromFriendbot } from '@/lib/chain-write';
 import { NOT_EXPORTABLE } from '@/lib/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
-import { NETWORK_PASSPHRASE } from '@/lib/network';
 import { rememberAccount } from '@/lib/store';
 import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';
 import { useWriteLog } from '@/lib/use-write';
@@ -118,46 +118,13 @@ export function NewAccountScreen() {
     const outcome = await log.run(
       'deploy',
       'Creating the smart account — createCustomContract, with the owner signer as its only signer',
-      async () => {
-        const chain = await loadChain();
-
-        // Before anything is built. A demonstration where the owner and the
-        // agent are the same key demonstrates nothing, and this is the
-        // mechanism rather than the intention.
-        //
-        // `assertTestnet` is deliberately not called here as well. Level 1 of
-        // the mainnet gate already makes `NETWORK_PASSPHRASE` a one-member
-        // union that cannot hold anything else, and level 2 fires inside
-        // `submitAuthorized` and again in `createLocalKeys`. A third call at
-        // the call site would read as the fence living here, which would make
-        // it deletable from here.
-        chain.assertDistinctSigners(keys.owner.rawPublicKey, keys.agent.rawPublicKey);
-
-        const result = await chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: keys.owner.publicKey,
-          signEnvelope: keys.owner.signEnvelope,
-          func: chain.deployAccountFunction({
-            accountWasmHash: ACCOUNT_WASM_HASH,
-            deployer: keys.owner.publicKey,
-            owner: {
-              kind: 'external',
-              verifier: ED25519_VERIFIER,
-              publicKey: keys.owner.rawPublicKey,
-            },
-          }),
-          label: 'deploy',
-        });
-
-        // Read out of the transaction's return value, never derived from the
-        // deployer and salt. Deriving it would be this repository agreeing with
-        // itself about what the network did instead of asking.
-        if (result.stage === 'ledger' && result.ok) {
-          deployed = chain.deployedContractAddress(result.returnValue);
-        }
-        return result;
-      },
+      () =>
+        deployAccount({
+          keys,
+          onDeployed: (contract) => {
+            deployed = contract;
+          },
+        }),
     );
 
     if (outcome?.status === 'onLedger' && outcome.ok && deployed !== null) {
