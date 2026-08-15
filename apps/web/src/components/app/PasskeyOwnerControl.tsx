@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { StatusLabel } from '@/components/StatusLabel';
 import { PASSKEY_LABEL } from '@/lib/status-labels';
 import { PASSKEY_KEEPS_ACCOUNT, PASSKEY_STILL_LOCAL } from '@/lib/key-roles';
-import { createPasskey, passkeysAvailable } from '@/lib/passkey';
-import { usePasskeyPublic } from '@/lib/use-passkey';
+import { createPasskey } from '@/lib/passkey';
+import { usePasskeyPublic, usePasskeysAvailable } from '@/lib/use-passkey';
 
 /** Which signer owns the account being created. */
 export type OwnerKind = 'local' | 'passkey';
@@ -47,10 +47,18 @@ export function PasskeyOwnerControl({
   const [problem, setProblem] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Read once per render rather than in an effect: this is a capability of the
-  // browser, not state, and the server render has no answer for it. `undefined`
-  // from the hook already covers the not-known-yet pass.
-  const available = passkeysAvailable();
+  // `undefined` until the browser has been asked, which is the only answer the
+  // server can give honestly. Calling `passkeysAvailable()` during render
+  // instead put a React #418 on this screen: the server sent the fallback
+  // sentence and a disabled control, the client sent neither.
+  //
+  // Unknown is treated as available, so the control is offered rather than
+  // withheld for the frame before the answer arrives — and if the answer turns
+  // out to be no, the sentence appears and the control shuts. The reverse
+  // default would flash "this browser does not offer passkeys" at every browser
+  // that does.
+  const available = usePasskeysAvailable();
+  const offerPasskey = available !== false;
 
   const create = async () => {
     setProblem(null);
@@ -87,7 +95,7 @@ export function PasskeyOwnerControl({
           <button
             type="button"
             onClick={() => onChange('passkey')}
-            disabled={disabled || !available}
+            disabled={disabled || !offerPasskey}
             aria-pressed={value === 'passkey'}
             className="btn"
             data-variant={value === 'passkey' ? 'primary' : 'quiet'}
@@ -95,7 +103,7 @@ export function PasskeyOwnerControl({
             A passkey
           </button>
         </div>
-        {!available && (
+        {available === false && (
           <p className="text-[12.5px] leading-relaxed text-muted-dim">
             This browser does not offer passkeys, so the browser key is the only owner path here.
             Nothing below is affected — it is the default either way.
