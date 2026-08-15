@@ -483,6 +483,13 @@ gesture and no biometric anywhere. And it is **Node, not a browser**: whether
 `navigator.credentials.get` returns an assertion this verifier accepts is
 exactly what §5.4's UI would test, and §5.4 is not built.
 
+> **Closed 2026-08-15 by §5.4.2.** The second of those is no longer open: a real
+> Chrome WebAuthn assertion has been accepted by the deployed verifier, driving
+> the shipped UI. The first — a *physical* authenticator — is still open and is
+> restated precisely there. This paragraph is left as written rather than edited,
+> because what it said was true when it was written and the record of a gap
+> being closed is worth more than the appearance of never having had one.
+
 `node:crypto` was named in §5.1 and deliberately not used: `acceptance.mjs`
 forbids `node:` imports and `browser-path.test.ts` enforces it. WebCrypto also
 emits IEEE-P1363 `r‖s` directly rather than DER, which is the encoding the
@@ -561,13 +568,57 @@ label satisfies and vice versa; every file creating, using or importing a
 passkey names `PASSKEY_LABEL`; and the scan is non-vacuous, so the day the
 passkey path is deleted or renamed the test says so rather than passing forever.
 
-**Still not proven in a browser.** §5.2.2's `browserGap` stands: every hash in
-`webauthnRun` came from a synthetic WebCrypto authenticator in Node. Whether a
-real `navigator.credentials.get` assertion — its own `authenticatorData` flags,
-its own DER signature — is accepted by this verifier is untested. The DER
-unpacking and low-S normalisation in `lib/passkey.ts` exist precisely because a
-real assertion differs from what the script produced, and code written for a
-difference nobody has observed is code that has not been checked.
+#### 5.4.2 The browser gap, closed — and measured rather than assumed
+
+`e2e/passkey-owner.spec.ts`, on demand, out of CI. It submits testnet, so it
+lives under the on-demand config beside `account-lifecycle.spec.ts`; the `@ci`
+tag is for suites that spend nothing, and this file does not carry it, so
+`playwright.ci.config.ts` cannot reach it by construction.
+
+A real Chrome WebAuthn assertion owned an account and signed for it, through the
+shipped `/app/try`: four transactions, two of them authorized by the passkey and
+nothing else, and the spec asserts no assertion was requested before the deploy —
+because a smart account authorizes nothing at its own creation, and a signature
+requested there would mean the two that follow proved less.
+
+**The point was never the green tick.** `lib/passkey.ts` has two pieces of code
+the §5.1 script could not reach — DER unpacking and low-S normalisation — and a
+virtual authenticator that emitted P1363, or only ever chose a low `s`, would
+have passed this spec without touching either. That is the hollow gate again in
+a new place, so the spec measures instead of assuming:
+
+- **DER unpacking: exercised.** 2 of 2 assertions were ASN.1 DER and both were
+  accepted on a ledger. An unconverted signature would have failed
+  `secp256r1_verify`.
+- **Low-S normalisation: exercised.** 1 of the 2 carried a high-S signature and
+  landed only after normalisation.
+- **The instrument, checked before it was trusted.** 16 free assertions taken
+  straight from the authenticator first: 16 of 16 DER, 9 of 16 high-S. That is
+  what makes a future run reporting "no high-S this time" mean *not exercised*
+  rather than *this authenticator cannot produce one*.
+
+The classification is arithmetic written out again in the spec rather than an
+import of `rawSignature` — the same argument `verify-browser-run.mjs` makes about
+not reusing `contractErrorCodes`.
+
+**Deliberately not deterministic.** At ~56% high-S per assertion and two per run,
+roughly one run in five will see none. The spec *reports* which paths it
+exercised rather than asserting it exercised them: failing a correct
+implementation at random is worse than a run that says plainly what it did not
+reach.
+
+**What is still open**, narrowed rather than dropped: a *physical* authenticator.
+This is Chrome's virtual authenticator over CDP — a real WebAuthn implementation
+producing real DER assertions, and not a hardware key, a biometric, or a human
+touching anything. What remains unknown is whether some particular vendor's
+authenticator sets flags or encodes signatures in a way this path mishandles.
+
+**And one finding.** WebAuthn refuses an IP-literal origin — a Relying Party ID
+must be a registrable domain — so `navigator.credentials.create` on
+`http://127.0.0.1:3000` fails with `SecurityError: This is an invalid domain`
+before any authenticator is consulted. **The passkey owner path cannot work
+anywhere the application is reached by IP.** `localhost` and a real domain are
+the two origins where it functions at all.
 
 ### 5.5 The one place this plan departs from a stated invariant
 

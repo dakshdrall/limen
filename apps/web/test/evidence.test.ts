@@ -36,7 +36,10 @@ const recorded = JSON.parse(recordedText) as {
   walkthrough: { smartAccount: string; installTx: string; firstRun: { installTx: string } };
   v4ChainRun: { smartAccount: string; installTx: string };
   browserRun: { runs: { smartAccount: string; installTx: string }[] };
-  webauthnRun: { smartAccount: string };
+  webauthnRun: {
+    smartAccount: string;
+    browserRun: { smartAccount: string; installTx: string };
+  };
   denyAxisSurvey: {
     liveRuleInstallTx: string;
     shortRuleInstallTx: string;
@@ -74,6 +77,10 @@ describe('the chain figures are what the deployments file says', () => {
       // completions means two installs, and a list that grew by pattern would
       // have absorbed them without anyone confirming there were two.
       ...recorded.browserRun.runs.map((run) => run.installTx),
+      // The passkey browser run's install, which a passkey authorized rather
+      // than a local key. Listed separately because it is the one install here
+      // whose owner signature came from an authenticator.
+      recorded.webauthnRun.browserRun.installTx,
     ]);
     expect(EVIDENCE.chain.contextRulesInstalled).toBe(installs.size);
   });
@@ -95,6 +102,11 @@ describe('the chain figures are what the deployments file says', () => {
       // WebAuthn verifier rather than an ed25519 key. Listed separately because
       // it is the one account here no local key can sign for.
       recorded.webauthnRun.smartAccount,
+      // …and the one the passkey run created through the shipped UI. A
+      // different account from the script's, from a different owner key, so it
+      // is a second passkey-owned account rather than a re-run against the
+      // first.
+      recorded.webauthnRun.browserRun.smartAccount,
     ]);
     expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
     expect(accounts.size).toBeGreaterThan(1);
