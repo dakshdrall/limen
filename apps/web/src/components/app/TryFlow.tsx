@@ -39,13 +39,16 @@ import {
 import { fundFromFriendbot, type WriteOutcome } from '@/lib/chain-write';
 import { decimalise } from '@/lib/format';
 import type { IngestError } from '@/lib/ingest-contract';
-import { NOT_EXPORTABLE } from '@/lib/key-roles';
+import { NOT_EXPORTABLE, PASSKEY_STILL_LOCAL } from '@/lib/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
 import { listAccounts, rememberAccount, rememberObserved, rememberProvenance } from '@/lib/store';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@/lib/status-labels';
 import { useAccountSnapshot } from '@/lib/use-account-snapshot';
 import { useLastRead } from '@/lib/use-last-read';
 import { useLocalKeyPublics, useLocalKeyRawPublics, useSigners } from '@/lib/use-local-keys';
+import { PasskeyOwnerControl, type OwnerKind } from '@/components/app/PasskeyOwnerControl';
+import { usePasskeySigner } from '@/lib/use-passkey';
+import { WEBAUTHN_VERIFIER } from '@/lib/chain-config';
 import { useLowering } from '@/lib/use-lowering';
 import { useStored } from '@/lib/use-store';
 import { useWriteLog } from '@/lib/use-write';
@@ -151,13 +154,62 @@ export function TryFlow() {
   const agent = publics?.AGENT;
   const ownerRaw = raws?.OWNER;
 
-  // Owning this account means holding the key its Default rule names, compared
-  // in hex — the raw 32 bytes the contract stores, not the `G…` a person reads.
-  // See `AccountWriteSteps` for what comparing the wrong two cost.
-  const ownsAccount =
-    ownerRaw !== undefined &&
+  const passkeySigner = usePasskeySigner();
+  const passkey = passkeySigner();
+
+  /**
+   * Whether the account this flow is on is owned by the passkey, **read from
+   * the chain** rather than from what this browser chose.
+   *
+   * The flow resumes from the chain and stores no cursor, and the owner kind is
+   * no exception: a reload would lose a React state, and signing step 4 with
+   * the local owner key on a passkey-owned account would be refused for a
+   * reason nobody could see. The Default rule names its verifier, so the
+   * account says which of the two it is.
+   */
+  const passkeyOwnsAccount =
     defaultRule !== null &&
-    defaultRule.signers.some((s) => s.kind === 'External' && s.publicKey === ownerRaw);
+    defaultRule.signers.some((s) => s.kind === 'External' && s.verifier === WEBAUTHN_VERIFIER);
+
+  // Owning this account means holding the key its Default rule names, compared
+  // in hex — the bytes the contract stores, not the `G…` a person reads. See
+  // `AccountWriteSteps` for what comparing the wrong two cost. For a passkey the
+  // stored value is the whole `key_data`, credential id included, which is why
+  // `hexKeyData` exists beside `hexPublicKey`.
+  const ownsAccount =
+    defaultRule !== null &&
+    defaultRule.signers.some(
+      (s) =>
+        s.kind === 'External' &&
+        (s.publicKey === ownerRaw || (passkey !== undefined && s.publicKey === passkey.hexKeyData)),
+    );
+
+  /**
+   * Which owner path a *new* account will take. Only consulted before one
+   * exists; once it does, `passkeyOwnsAccount` is the answer.
+   */
+  const [chosenOwner, setChosenOwner] = useState<OwnerKind>('local');
+  const ownerKind: OwnerKind = accountId === null ? chosenOwner : passkeyOwnsAccount ? 'passkey' : 'local';
+
+  /**
+   * The keys every write below signs with.
+   *
+   * `owner` is on both paths and does the same two jobs either way — fee source
+   * and envelope signature. Only the owner *signer* moves, and it moves for the
+   * whole flow rather than per step, because the account's owner is fixed at
+   * creation.
+   */
+  const keysNow = () => {
+    const base = signers();
+    if (base === null) return null;
+    if (ownerKind === 'local') return base;
+    const held = passkeySigner();
+    if (held === undefined) return null;
+    return {
+      ...base,
+      passkey: { keyData: held.keyData, hexPublicKey: held.hexPublicKey, signer: held.signer },
+    };
+  };
 
   const observedHash = stored?.observedTxHash ?? null;
 
@@ -297,13 +349,13 @@ export function TryFlow() {
   const runSetup = async () => {
     setKeyProblem(null);
 
-    let keys = signers();
+    let keys = keysNow();
     if (keys === null) {
       if (createLocalKeys() === undefined) {
         setKeyProblem(STORAGE_REFUSED);
         return;
       }
-      keys = signers();
+      keys = keysNow();
       if (keys === null) {
         setKeyProblem(STORAGE_REFUSED);
         return;
@@ -354,7 +406,7 @@ export function TryFlow() {
   /* --- step 2 -------------------------------------------------------------- */
 
   const runObserve = async () => {
-    const keys = signers();
+    const keys = keysNow();
     if (keys === null || accountId === null || defaultRule === null) return;
 
     const outcome = await log.run(
@@ -372,7 +424,7 @@ export function TryFlow() {
   /* --- step 4 -------------------------------------------------------------- */
 
   const runInstall = async () => {
-    const keys = signers();
+    const keys = keysNow();
     if (keys === null || accountId === null || observed === null) return;
     if (lowered.status !== 'lowered') return;
     const plan = lowered.plan;
@@ -414,7 +466,7 @@ export function TryFlow() {
   /* --- steps 5 and 6 ------------------------------------------------------- */
 
   const prepare = () =>
-    accountId === null ? Promise.resolve(null) : prepareRun({ keys: signers(), contractId: accountId, rule });
+    accountId === null ? Promise.resolve(null) : prepareRun({ keys: keysNow(), contractId: accountId, rule });
 
   const requirePermitted = (): PermittedCall => {
     if (permitted.current === null) throw new Error(NO_FOOTPRINT_YET);
@@ -509,6 +561,28 @@ export function TryFlow() {
           {owner !== undefined && agent !== undefined ? (
             <div className="panel">
               <div className="flex flex-col gap-4">
+                {ownerKind === 'passkey' && (
+                  // Which signer owns, above the two local keys rather than
+                  // instead of them: on this path the OWNER key below still
+                  // pays every fee and the AGENT key is still what the boundary
+                  // is installed against.
+                  //
+                  // The limit sentence renders here as well as in the control,
+                  // because §5.4 asks for it wherever a passkey account is
+                  // created *and wherever one is used* — and a person resuming
+                  // onto an existing passkey account never sees the control.
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[11px] tracking-[0.08em] text-muted uppercase">
+                        owner
+                      </span>
+                      <StatusLabel name={PASSKEY_LABEL} />
+                    </div>
+                    <p className="measure text-[12.5px] leading-relaxed text-muted">
+                      {PASSKEY_STILL_LOCAL}
+                    </p>
+                  </div>
+                )}
                 <LocalKeyBadge role="OWNER" publicKey={owner} weight="loud" showDisposability />
                 <LocalKeyBadge role="AGENT" publicKey={agent} />
               </div>
@@ -525,6 +599,17 @@ export function TryFlow() {
               </p>
               <p className="measure text-[12.5px] leading-relaxed text-muted">{NOT_EXPORTABLE}</p>
             </div>
+          )}
+
+          {/* The choice is offered only while there is no account. Once one
+              exists its owner is fixed at creation, and `ownerKind` comes off
+              the chain rather than off this control. */}
+          {accountId === null && (
+            <PasskeyOwnerControl
+              value={chosenOwner}
+              onChange={setChosenOwner}
+              disabled={log.busy}
+            />
           )}
 
           {(current === 1 || observeFailed) && (

@@ -30,3 +30,22 @@ export const KEY_ROLES: readonly KeyRole[] = ['OWNER', 'AGENT'];
  */
 export const NOT_EXPORTABLE =
   'This key cannot be exported. Clearing site data destroys it, and with it the account it owns.';
+
+/**
+ * What a passkey owner changes, in one sentence, and what it does not, in the
+ * next.
+ *
+ * PLAN-V7 §5.4 is explicit that the second half goes on screen rather than only
+ * into a plan, wherever a passkey account is created and wherever one is used.
+ * The gain is real and it is the whole of the gain: a passkey account that let a
+ * reader infer their agent key was safe too would be this project's own version
+ * of a caveat that stopped applying.
+ *
+ * Constants rather than per-screen prose for the same reason `NOT_EXPORTABLE`
+ * is one — two screens paraphrasing a limit is how a limit softens.
+ */
+export const PASSKEY_KEEPS_ACCOUNT =
+  'Clearing site data no longer strands your account: the passkey is held by your device, not by this browser.';
+
+export const PASSKEY_STILL_LOCAL =
+  'It still destroys the agent key, and with it this browser’s ability to act as the agent. A passkey cannot pay a Stellar fee or be handed to an agent, so both local keys below are still created and still used.';

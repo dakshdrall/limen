@@ -521,6 +521,54 @@ does not support it" are different statements.
   module rather than being satisfied by the passkey path simply not matching its
   detectors.
 
+#### 5.4.1 Built, 2026-08-15
+
+`lib/passkey.ts`, `lib/use-passkey.ts` and `components/app/PasskeyOwnerControl.tsx`,
+offered on step 1 of `/app/try` and on `/app/accounts/new`. The browser key is
+the default on both, and a browser without WebAuthn gets a sentence saying the
+default is unaffected rather than a disabled control with no explanation.
+
+**The shape the contract forced, which is narrower than §5.4 assumed.** A
+passkey replaces the *owner signer* and nothing else. It cannot pay a Stellar
+fee and cannot be handed to an agent, so a passkey-owned account still has both
+local ed25519 keys in this browser: `OWNER` is the fee source and signs every
+envelope, `AGENT` is what the boundary is installed against. `chain-actions.ts`
+gained one `ownerAuth(keys)` seam that decides verifier and signer together —
+four call sites each deciding would eventually produce an account whose owner is
+a key that cannot sign for it.
+
+So the on-screen caveat is the plan's sentence plus the half the plan did not
+have: the fee key. Both sentences are constants in `key-roles.ts`
+(`PASSKEY_KEEPS_ACCOUNT`, `PASSKEY_STILL_LOCAL`) and a test asserts that any file
+rendering the first also renders the second — the gain without the limit is the
+reassurance this project exists not to give.
+
+**Which owner an account has is read from the chain**, not remembered. The
+Default rule names its verifier, so `WEBAUTHN_VERIFIER` in that position is the
+answer; a React state would be lost on reload and step 4 would then sign with
+the wrong key and be refused for a reason nobody could see. Ownership is
+compared against the whole `key_data` — the credential id included — because the
+contract stores it verbatim and `canonicalize_key` is used only for duplicate
+detection. That is the same class of bug as the `G…`-versus-hex comparison in
+V6, so `Passkey` carries both forms rather than deriving one at a call site.
+
+**The tripwire.** `USES_A_PASSKEY` matches `navigator.credentials.create/get`
+and `PublicKeyCredential`, because `GENERATES_A_KEY` matches nothing in the
+passkey path — no secret of the user's exists in this application at any point,
+which is the whole difference between this and the design-rule-3 narrowing. Four
+new assertions: the passkey label satisfies neither obligation the local key's
+label satisfies and vice versa; every file creating, using or importing a
+passkey names `PASSKEY_LABEL`; and the scan is non-vacuous, so the day the
+passkey path is deleted or renamed the test says so rather than passing forever.
+
+**Still not proven in a browser.** §5.2.2's `browserGap` stands: every hash in
+`webauthnRun` came from a synthetic WebCrypto authenticator in Node. Whether a
+real `navigator.credentials.get` assertion — its own `authenticatorData` flags,
+its own DER signature — is accepted by this verifier is untested. The DER
+unpacking and low-S normalisation in `lib/passkey.ts` exist precisely because a
+real assertion differs from what the script produced, and code written for a
+difference nobody has observed is code that has not been checked.
+
 ### 5.5 The one place this plan departs from a stated invariant
 
 *"`git diff` against `packages/` is empty"* is in the brief's closing list, and

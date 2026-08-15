@@ -102,6 +102,38 @@ const NAMES_A_SECRET = /\b(?:secret|seed|privateKey|Keypair|signingKey)\b/i;
 const CARRIES_THE_LABEL = /TESTNET ONLY · LOCAL KEY|LOCAL_KEY_LABEL/;
 
 /**
+ * Making or using a passkey.
+ *
+ * V7 §5.4 adds a second owner path, and the rule above does not reach it: a
+ * passkey's private half never exists in this application, so nothing in
+ * `lib/passkey.ts` calls `Keypair.random()` or puts key material in storage.
+ * `GENERATES_A_KEY` would have passed it in silence.
+ *
+ * The plan is explicit that this is not good enough — the tripwire is "extended
+ * deliberately to cover the new module rather than being satisfied by the
+ * passkey path simply not matching its detectors". A rule that holds because
+ * the thing it watches does not resemble it is not a rule.
+ *
+ * So the passkey gets its own detector, written against its own API. The
+ * obligation is the same in shape and different in content: a passkey is not
+ * the design-rule-3 narrowing a local key is, so its label is not a warning —
+ * it is the answer to *which* owner path this account took, which a person must
+ * be able to see rather than infer.
+ *
+ * `subtle.importKey` and `subtle.exportKey` are deliberately absent: reading a
+ * public key back into a usable shape is not creating or using a credential,
+ * and `GENERATES_A_KEY` already covers `subtle.generateKey`.
+ */
+const USES_A_PASSKEY = /navigator\.credentials\.(?:create|get)\s*\(|PublicKeyCredential\b/;
+
+/** The passkey's label, as the literal or as the shared constant. */
+const CARRIES_THE_PASSKEY_LABEL = /TESTNET ONLY · PASSKEY|PASSKEY_LABEL/;
+
+/** An import of either passkey module, by alias or relative path. */
+const IMPORTS_THE_PASSKEY_MODULE =
+  /(?:from|import)\s*\(?\s*'(?:@\/lib\/(?:use-)?passkey|(?:\.\.?\/)+(?:lib\/)?(?:use-)?passkey)'/;
+
+/**
  * An import of the local key module, by alias or by relative path.
  *
  * Both spellings, because the write screens have a reason to prefer the second:
@@ -186,6 +218,47 @@ describe('the detectors can fire', () => {
     expect(code("const u = 'https://stellar.expert/x';")).toContain('stellar.expert/x');
   });
 
+  it('recognises a passkey being created or used', () => {
+    for (const sample of [
+      'const credential = await navigator.credentials.create({ publicKey: options });',
+      'await navigator.credentials.get({ publicKey: { challenge } })',
+      'typeof window.PublicKeyCredential === "function"',
+    ]) {
+      expect(USES_A_PASSKEY.test(sample), sample).toBe(true);
+    }
+  });
+
+  it('does not fire on reading a public key back, which creates no credential', () => {
+    for (const sample of [
+      "await crypto.subtle.importKey('spki', spki, { name: 'ECDSA' }, true, ['verify'])",
+      "await crypto.subtle.exportKey('raw', key)",
+      'const point = uncompressedPoint(spki);',
+    ]) {
+      expect(USES_A_PASSKEY.test(sample), sample).toBe(false);
+    }
+  });
+
+  it('recognises the passkey label in both forms, and does not confuse the two labels', () => {
+    expect(CARRIES_THE_PASSKEY_LABEL.test('<StatusLabel name={PASSKEY_LABEL} />')).toBe(true);
+    expect(CARRIES_THE_PASSKEY_LABEL.test("<StatusLabel name='TESTNET ONLY · PASSKEY' />")).toBe(true);
+    // The load-bearing half: the local key's label must not satisfy the
+    // passkey's obligation, or a file could carry one and be credited for both.
+    expect(CARRIES_THE_PASSKEY_LABEL.test('<StatusLabel name={LOCAL_KEY_LABEL} />')).toBe(false);
+    expect(CARRIES_THE_LABEL.test('<StatusLabel name={PASSKEY_LABEL} />')).toBe(false);
+  });
+
+  it('recognises an import of either passkey module however it is spelled', () => {
+    for (const sample of [
+      "import { createPasskey } from '@/lib/passkey';",
+      "import { usePasskeySigner } from '@/lib/use-passkey';",
+      "import { getPasskey } from '../lib/passkey';",
+      "const mod = await import('@/lib/passkey');",
+    ]) {
+      expect(IMPORTS_THE_PASSKEY_MODULE.test(sample), sample).toBe(true);
+    }
+    expect(IMPORTS_THE_PASSKEY_MODULE.test("import { NETWORK } from '@/lib/network';")).toBe(false);
+  });
+
   it('recognises the label being rendered rather than only mentioned', () => {
     expect(RENDERS_THE_LABEL.test('<StatusLabel name={LOCAL_KEY_LABEL} weight="loud" />')).toBe(true);
     // A constant assigned and never rendered is the failure this distinguishes.
@@ -222,6 +295,68 @@ describe('the label exists once, in the closed set', () => {
   it('is exactly one label, not two spellings drifting apart', () => {
     const occurrences = [...statusLabel.matchAll(/TESTNET ONLY · LOCAL KEY/g)];
     expect(occurrences).toHaveLength(2); // the set's key, and the constant
+  });
+
+  it('has the passkey label in the same closed set, with its own constant', () => {
+    expect(statusLabel).toContain("'TESTNET ONLY · PASSKEY'");
+    expect(statusLabel).toContain('export const PASSKEY_LABEL');
+    const occurrences = [...statusLabel.matchAll(/TESTNET ONLY · PASSKEY/g)];
+    expect(occurrences).toHaveLength(2); // the set's key, and the constant
+  });
+
+  it('says what a passkey does not do, not only what it does', () => {
+    // The whole risk of this label is that it reads as "your keys are safe
+    // now". A passkey cannot pay a Stellar fee and cannot be handed to an
+    // agent, so a passkey account still has local keys doing both — and the
+    // description has to carry that or it is reassurance.
+    const description = /'TESTNET ONLY · PASSKEY':\s*\n?\s*'([^']*)'/.exec(statusLabel)?.[1] ?? '';
+    expect(description).toContain('testnet');
+    expect(description).toContain('never by this browser');
+    expect(description).toContain('survives clearing site data');
+    expect(description).toContain('cannot pay a fee or act as the agent');
+  });
+});
+
+describe('the passkey announces itself too', () => {
+  it('labels every file that creates or uses a passkey', () => {
+    const unlabelled = sources()
+      .filter(({ text }) => USES_A_PASSKEY.test(text) && !CARRIES_THE_PASSKEY_LABEL.test(text))
+      .map(({ path }) => path);
+
+    // If this fails: the passkey path landed without its label. Import
+    // `PASSKEY_LABEL` from `lib/status-labels` and name it where the credential
+    // is created or used. Deleting this test is not the fix.
+    expect(unlabelled).toEqual([]);
+  });
+
+  it('labels every file that imports a passkey module', () => {
+    const unlabelled = sources()
+      .filter(({ text }) => IMPORTS_THE_PASSKEY_MODULE.test(text) && !CARRIES_THE_PASSKEY_LABEL.test(text))
+      .map(({ path }) => path);
+
+    expect(unlabelled).toEqual([]);
+  });
+
+  it('is not vacuous: something under src/ actually uses a passkey', () => {
+    // The `browserRun`-style guard. A scan that matches nothing passes forever
+    // and proves nothing, and the day the passkey path is deleted or renamed is
+    // exactly the day this must say so rather than stay quiet.
+    const users = sources().filter(({ text }) => USES_A_PASSKEY.test(text));
+    expect(users.length).toBeGreaterThan(0);
+  });
+
+  it('says both halves of the caveat wherever the passkey is offered', () => {
+    // PLAN-V7 §5.4: the gain goes on screen and so does its limit, in the same
+    // words in both places. The first sentence without the second is the
+    // reassurance this project exists not to give, so the constants are checked
+    // to travel together rather than one being rendered alone.
+    const offering = sources().filter(({ text }) => /PASSKEY_KEEPS_ACCOUNT/.test(text));
+    expect(offering.length).toBeGreaterThan(0);
+    for (const { path, text } of offering) {
+      expect(/PASSKEY_STILL_LOCAL/.test(text), `${path} states the gain without the limit`).toBe(
+        true,
+      );
+    }
   });
 });
 

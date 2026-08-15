@@ -54,7 +54,9 @@ import {
   ED25519_VERIFIER,
   RPC_URL,
   SPENDING_LIMIT_POLICY,
+  WEBAUTHN_VERIFIER,
 } from '@/lib/chain-config';
+import type { Ed25519Signer as ChainEd25519Signer } from '@limen/chain/browser';
 import { loadChain, type ChainBrowser, type SubmitResultLike } from '@/lib/chain-write';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
 
@@ -89,10 +91,51 @@ export const OBSERVED_AMOUNT = 1_000_000n;
  */
 export const CHAIN_ACTION_KEY_LABEL = LOCAL_KEY_LABEL;
 
+/**
+ * A passkey standing in as the account's owner signer.
+ *
+ * PLAN-V7 §5.4. Only the *owner signer* changes: `keys.owner` is still here and
+ * still does two jobs a passkey cannot do — it is the transaction's fee source
+ * and it signs the envelope. A passkey cannot pay a Stellar fee, so a
+ * passkey-owned account still needs a classic key in this browser, and that key
+ * still carries `TESTNET ONLY · LOCAL KEY`.
+ */
+export interface PasskeyOwner {
+  /** `key_data` for `Signer::External`: 65-byte point ‖ credential id. */
+  keyData: Uint8Array;
+  /** Hex of the 65 key bytes, as a context rule reports the signer back. */
+  hexPublicKey: string;
+  signer: ChainEd25519Signer;
+}
+
 /** Both keys, as `useSigners()` hands them over. */
 export interface Keys {
   owner: LocalKey;
   agent: LocalKey;
+  /**
+   * When present, the account's owner signer is this passkey rather than
+   * `owner`'s ed25519 key. Absent is the default and the zero-friction path: a
+   * reviewer with no passkey must never hit a wall.
+   */
+  passkey?: PasskeyOwner;
+}
+
+/**
+ * Which signer owns the account, and which verifier vouches for it.
+ *
+ * One place, because the alternative is four call sites each deciding, and the
+ * failure mode of getting it wrong is an account whose owner is a key that
+ * cannot sign for it. The fee source is deliberately *not* part of this: it is
+ * always `keys.owner`, on both paths.
+ */
+function ownerAuth(keys: Keys): {
+  verifier: string;
+  keyData: Uint8Array;
+  signer: ChainEd25519Signer;
+} {
+  return keys.passkey === undefined
+    ? { verifier: ED25519_VERIFIER, keyData: keys.owner.rawPublicKey, signer: keys.owner.signer }
+    : { verifier: WEBAUTHN_VERIFIER, keyData: keys.passkey.keyData, signer: keys.passkey.signer };
 }
 
 /**
@@ -158,10 +201,13 @@ export async function deployAccount({
     func: chain.deployAccountFunction({
       accountWasmHash: ACCOUNT_WASM_HASH,
       deployer: keys.owner.publicKey,
+      // The owner signer, which is the passkey when there is one. The deployer
+      // and fee source stay the classic key either way — the account does not
+      // authorize its own creation, so nothing here needs the owner to sign.
       owner: {
         kind: 'external',
-        verifier: ED25519_VERIFIER,
-        publicKey: keys.owner.rawPublicKey,
+        verifier: ownerAuth(keys).verifier,
+        publicKey: ownerAuth(keys).keyData,
       },
     }),
     label: 'deploy',
@@ -248,8 +294,8 @@ export async function observedTransfer({
       amount,
     }),
     signAuthEntry: chain.signAs({
-      signer: keys.owner.signer,
-      verifier: ED25519_VERIFIER,
+      signer: ownerAuth(keys).signer,
+      verifier: ownerAuth(keys).verifier,
       contextRuleIds: [defaultRuleId],
       expirationLedger: latest.sequence + AUTH_VALIDITY_LEDGERS,
       passphrase: NETWORK_PASSPHRASE,
@@ -309,7 +355,10 @@ export async function installBoundary({
     verifier: ED25519_VERIFIER,
     spendingLimitPolicy: SPENDING_LIMIT_POLICY,
     agentPublicKey: keys.agent.rawPublicKey,
-    ownerPublicKey: keys.owner.rawPublicKey,
+    // The account's owner *signer*, which is the passkey when there is one.
+    // Only `assertDistinctSigners` reads it, and the key that must not be the
+    // agent's is the one the boundary is installed by.
+    ownerPublicKey: ownerAuth(keys).keyData,
   });
   if (func === undefined) throw new Error('the plan lowered to no rules');
   if (rest.length > 0) {
@@ -327,8 +376,8 @@ export async function installBoundary({
     signEnvelope: keys.owner.signEnvelope,
     func,
     signAuthEntry: chain.signAs({
-      signer: keys.owner.signer,
-      verifier: ED25519_VERIFIER,
+      signer: ownerAuth(keys).signer,
+      verifier: ownerAuth(keys).verifier,
       contextRuleIds: [defaultRule.id],
       expirationLedger: latest.sequence + AUTH_VALIDITY_LEDGERS,
       passphrase: NETWORK_PASSPHRASE,
@@ -405,8 +454,8 @@ export async function prepareRun({
       defaultRule === undefined
         ? null
         : chain.signAs({
-            signer: keys.owner.signer,
-            verifier: ED25519_VERIFIER,
+            signer: ownerAuth(keys).signer,
+            verifier: ownerAuth(keys).verifier,
             contextRuleIds: [defaultRule.id],
             expirationLedger: expiry,
             passphrase: NETWORK_PASSPHRASE,
