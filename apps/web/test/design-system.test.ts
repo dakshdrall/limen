@@ -29,6 +29,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MARK_GRID, MARK_RECTS } from '../src/lib/mark';
@@ -257,6 +258,117 @@ describe('prose does not lose the space beside an inline value', () => {
       offenders,
       `these will render with the space missing — use {' '} instead:\n${offenders.join('\n')}`,
     ).toEqual([]);
+  });
+});
+
+describe('prose does not lose the space beside an inline value, second shape', () => {
+  /**
+   * The same defect, a different trigger, and a rule built on a measurement
+   * rather than on a guess about the compiler.
+   *
+   * It came back on `/app/try` step 2 as `0.1 XLMfrom this account`, and on
+   * `/app/accounts/[id]` as `100 XLMfrom the owner's classic account`. The
+   * describe above did not catch either, and the obvious widening — treat a
+   * JSX expression's closing `}` like an inline closing tag — is **wrong**. It
+   * was tried and measured first:
+   *
+   *   - a naive `\}[ \t]+` scan over `src/` produced 398 hits, almost all of
+   *     them `} from '…';` in import statements. A regex over raw source cannot
+   *     tell a JSX expression's brace from an import's.
+   *   - a parser-based version of that rule produced 20 hits, of which most
+   *     were checked against the shipped bundle and found to render correctly.
+   *     Fixing them would have inserted a second space into working prose.
+   *
+   * So the compiler was asked directly, through Next's own SWC binding, rather
+   * than reasoned about. What actually loses the space is this, and only this:
+   *
+   *   > A JSX text node **spanning more than one line** that **contains an HTML
+   *   > entity** loses its leading whitespace.
+   *
+   * Measured across `&rsquo;`, `&mdash;`, `&amp;`, `&nbsp;` and `&#8217;` — all
+   * five lose it; the same text with no entity keeps it, and the same text with
+   * an entity on a single line keeps it. The closing brace is a coincidence of
+   * the three sites that had it: what they have in common is `&rsquo;` and a
+   * line break, not a brace. A tag would do it too.
+   *
+   * That is why this rule is written against the parse tree and not a regular
+   * expression. The trigger is a property of a text node — its line span and
+   * its content — which no amount of pattern-matching on the surrounding
+   * characters can see.
+   *
+   * The fix at each site is the same as before: an explicit `{' '}`.
+   */
+  const ENTITY = /&(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#[xX][0-9a-fA-F]+);/;
+
+  const swallowed = tsx.flatMap(([path, source]) => {
+    const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const found: string[] = [];
+
+    const visit = (node: ts.Node): void => {
+      if (ts.isJsxElement(node) || ts.isJsxFragment(node)) {
+        node.children.forEach((child, index) => {
+          if (!ts.isJsxText(child)) return;
+          const raw = child.getFullText();
+          // Leading whitespace is what is at risk; without it there is nothing
+          // to lose. A first child has no sibling in front of it, so its
+          // leading whitespace is indentation and is meant to go.
+          if (!/^[ \t]/.test(raw)) return;
+          if (!raw.includes('\n')) return;
+          if (!ENTITY.test(raw)) return;
+          if (node.children[index - 1] === undefined) return;
+          const line = file.getLineAndCharacterOfPosition(child.getStart(file)).line + 1;
+          found.push(`${path}:${line}`);
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    visit(file);
+    return found;
+  });
+
+  it('keeps the space when a multi-line run contains an HTML entity', () => {
+    expect(
+      swallowed,
+      `these lose their leading space to the entity in them — use {' '} instead:\n${swallowed.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('can fire, proven on the three shapes rather than assumed', () => {
+    // The tripwire's own tripwire. A rule this specific is worthless if a
+    // future refactor makes it stop matching, and "no offenders" and "no longer
+    // looks for anything" are indistinguishable from the outside.
+    const parse = (code: string) =>
+      ts.createSourceFile('probe.tsx', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+    const flags = (code: string): boolean => {
+      const file = parse(code);
+      let hit = false;
+      const visit = (node: ts.Node): void => {
+        if (ts.isJsxElement(node) || ts.isJsxFragment(node)) {
+          node.children.forEach((child, index) => {
+            if (!ts.isJsxText(child)) return;
+            const raw = child.getFullText();
+            if (!/^[ \t]/.test(raw) || !raw.includes('\n') || !ENTITY.test(raw)) return;
+            if (node.children[index - 1] === undefined) return;
+            hit = true;
+          });
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(file);
+      return hit;
+    };
+
+    // The shape that shipped: an expression, a space, prose with an entity,
+    // running past a line break.
+    expect(flags('const A = <p>{v} the owner&rsquo;s account\n  {o}\n</p>;')).toBe(true);
+    // The same after an inline tag, which the brace-shaped reading would miss.
+    expect(flags('const B = <p><span>x</span> the owner&rsquo;s account\n  {o}\n</p>;')).toBe(true);
+    // And the three shapes that are fine, each of which a coarser rule flags.
+    expect(flags('const C = <p>{v} the owner&rsquo;s account</p>;')).toBe(false);
+    expect(flags('const D = <p>{v} the owner account\n  {o}\n</p>;')).toBe(false);
+    expect(flags('const E = <p> the owner&rsquo;s account\n  {o}\n</p>;')).toBe(false);
   });
 });
 

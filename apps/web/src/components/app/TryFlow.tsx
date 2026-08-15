@@ -679,7 +679,8 @@ export function TryFlow() {
               {owner !== undefined && <LocalKeyBadge role="OWNER" publicKey={owner} />}
             </div>
             <p className="measure text-[12.5px] leading-relaxed text-muted">
-              {describeAmount(OBSERVED_AMOUNT)} from this account to the agent&rsquo;s address
+              {describeAmount(OBSERVED_AMOUNT)}{' '}
+              from this account to the agent&rsquo;s address
               {defaultRule !== null && (
                 <>
                   , under context rule <span className="value">{defaultRule.id}</span>
@@ -816,7 +817,9 @@ export function TryFlow() {
 
           <WriteResult state={log.stateOf('install')} />
 
-          {rule !== null && <InstalledRule rule={rule} revoked={revoked} />}
+          {rule !== null && (
+            <InstalledRule rule={rule} revoked={revoked} removedHere={succeeded('revoke')} />
+          )}
         </div>
       </Step>
 
@@ -1035,22 +1038,75 @@ function Action({
 }
 
 /** The boundary as the chain currently answers it, which is the only authority. */
-function InstalledRule({ rule, revoked }: { rule: SnapshotRule; revoked: boolean }) {
+/**
+ * What step 4 says about its rule, including after step 6 has taken it away.
+ *
+ * The revoked branch is read **out of order**: a person who has just finished
+ * step 6 scrolls back up and meets this panel sitting directly under step 4's
+ * install hash. In that position "the rule is gone" is ambiguous in the worst
+ * available direction — it pairs with a successful install and reads as *the
+ * install did not stick*.
+ *
+ * Three things fix that, and all three are about the reading rather than the
+ * facts, which were already correct:
+ *
+ *   - **`pending` was the wrong tone.** It is the token this app uses for *not
+ *     done yet* — it is on "nothing generated yet" — so step 4 was wearing the
+ *     same border as an unstarted step. A deliberately removed boundary is
+ *     settled, not pending, and it is neither a permit nor a denial, so it takes
+ *     no tone at all.
+ *   - **The cause leads.** The revoke was in the second sentence, subordinate to
+ *     a point about re-reading the chain. It is now the first thing said.
+ *   - **The install is affirmed.** "The install above did land" answers the
+ *     misreading directly, for the reader who arrived here without step 6 in
+ *     mind.
+ *
+ * `removedHere` is why this can say *you*. The chain reports that a rule which
+ * was there is not there now; it does not report who removed it or why. This
+ * flow knows only whether **its own** step 6 landed, so the confident sentence
+ * is gated on that, and a rule that vanished some other way — an expiry, a
+ * revoke from `/app/policies/[id]` in another tab — gets the careful wording
+ * instead. Naming a cause the chain did not state is the same error as reading
+ * a refusal off an absence.
+ */
+function InstalledRule({
+  rule,
+  revoked,
+  removedHere,
+}: {
+  rule: SnapshotRule;
+  revoked: boolean;
+  /** Whether *this flow's* step 6 is what removed it. */
+  removedHere: boolean;
+}) {
   return (
-    <div className="panel" data-tone={revoked ? 'pending' : 'permitted'}>
+    <div className="panel" data-tone={revoked ? undefined : 'permitted'}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className={`eyebrow ${revoked ? 'text-muted-dim' : 'text-permit'}`}>
-          {revoked ? 'the rule is gone' : 'the boundary is installed'}
+        <span className={`eyebrow ${revoked ? 'text-muted' : 'text-permit'}`}>
+          {revoked
+            ? removedHere
+              ? 'you took this back in step 6'
+              : 'the rule is gone'
+            : 'the boundary is installed'}
         </span>
         <StatusLabel name="ON-CHAIN" />
       </div>
       <p className="measure text-[13px] leading-relaxed text-foreground/90">
         {revoked ? (
-          <>
-            Context rule <span className="value">{rule.id}</span>{' '}
-            is no longer on the account. The chain was re-read after the revoke rather than this
-            page assuming what it did.
-          </>
+          removedHere ? (
+            <>
+              You removed this in step 6, so context rule{' '}
+              <span className="value">{rule.id}</span>{' '}
+              is no longer on the account. The install above did land: the chain was re-read after
+              the revoke rather than this page assuming what it did.
+            </>
+          ) : (
+            <>
+              Context rule <span className="value">{rule.id}</span>{' '}
+              is no longer on the account, and this flow is not what removed it. The install above
+              did land. The chain was re-read rather than this page assuming what happened.
+            </>
+          )
         ) : (
           <>
             Context rule <span className="value">{rule.id}</span>{' '}
