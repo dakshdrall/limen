@@ -635,6 +635,106 @@ the invariant is meant literally, step 5 stops at the script and ships nothing.
 
 ---
 
+## 6. The failure surface — a boundary, a 404, and a reporter
+
+Added after §5.4, and argued from it. The React #418 on `/app/accounts/new` sat
+on a live screen through a release and was found only because a listener had
+been attached for an unrelated reason. Two separate gaps produced that, and they
+need two separate answers:
+
+- **Nothing designed was in front of a failure.** Next's own default is a black
+  page reading `Application error: a client-side exception has occurred`, and
+  the 404 was Next's too. `app/error.tsx` and `app/not-found.tsx` replace both,
+  in the design system, saying what failed, that it was not the reader's fault,
+  and where to go. The error page also says whether a write may have landed —
+  a page that failed to draw does not know, and telling somebody to "try again"
+  without that is telling them to submit a second transaction.
+- **Nothing was listening.** `instrumentation-client.ts` attaches the window
+  listener. This is the half that catches the #418 class and the error boundary
+  is not: a hydration mismatch is *recoverable*, React re-renders on the client,
+  nothing throws past a component, and no boundary is ever entered. React's
+  default `onRecoverableError` calls `reportError()`, which dispatches an
+  `error` event on `window`. That event is the entire trace such a bug leaves.
+
+### 6.1 An allowlist, not a scrub
+
+No user data in a report: no addresses, no hashes tied to a person, no key
+material. `REPORT_FIELDS` in `lib/report.ts` is the whole set of eight fields
+that may leave the browser, and `serializeReport` copies those keys and no
+others — a field nobody added cannot leak. `lib/redact.ts` then runs over the
+three that are free text, because free text is where an address arrives without
+anyone adding a field for it.
+
+Both are needed and neither subsumes the other. An allowlist alone ships
+`/app/accounts/CDLZ…`, since the path is a field somebody legitimately added; a
+redactor alone leaves the next field's author to remember. `redactPath` is the
+join: the query and fragment are **dropped entirely** rather than redacted,
+which is the only treatment that is correct for a parameter nobody has thought
+of yet.
+
+This is why no SDK was installed. `@sentry/nextjs` captures full URLs in
+breadcrumbs by default, `/app/accounts/[id]` and `/app/policies/[id]` have
+addresses in the path, and a `beforeSend` test would pin one surface out of
+several — a rule enforced against the wrong surface, which is the failure this
+repository keeps finding. Zero new dependencies, so the `--audit-level=low` gate
+is untouched.
+
+`test/report.test.ts` pins it on the CI bundle-fence model: every removal case
+first asserts the fixture is the shape it claims to be, because a redactor
+tested against values that were never the right shape removes nothing and
+reports success. The opposite risk is pinned too — `Minified React error #418`
+and an 8-character chunk hash must survive, or the report is not worth sending.
+
+### 6.2 A defect the test found
+
+The email pattern was written with unbounded `+` quantifiers and is quadratic
+on a subject with no `@` in it: 20,000 characters took 492ms and 50,000 never
+finished. It matters because the length caps are applied *after* redaction —
+truncating first could cut an address in half and leave an identifying prefix —
+so the redactor is the thing that sees the whole untruncated stack. Every
+quantifier is now bounded by the limits in RFC 5321. The file went from 6.2s to
+70ms.
+
+### 6.3 Verified, on a fresh production build
+
+Bundle fences first: `LIMEN_ERROR_WEBHOOK` does not appear in
+`apps/web/.next/static`, so the credential stays server-side; the four existing
+greps are unaffected.
+
+In Chromium against `next start`:
+
+| what | result |
+| --- | --- |
+| `reportError()` — the API React's `onRecoverableError` calls | reported, `kind: window` |
+| unhandled rejection carrying a `C…` address | reported as `read failed for [address]` |
+| a broken `<img>` — bubbles `error` with no thrown value | **nothing reported** |
+| eight distinct errors against a five-per-page budget | five reported |
+| the same error three times | one reported |
+| a server render throw, on a temporary route since removed | boundary rendered; `kind: boundary`, `digest 390029501` |
+
+The digest in that last report matches the one in the server log, so the join
+key to the unminified error works as documented. Next redacts the server
+message itself in production, which is what makes the digest the field worth
+carrying.
+
+Against the route with a hostile body — a raw address, a seed in the query, and
+`ip`, `cookies`, `localStorage` and `breadcrumbs` alongside — the server
+returned 204 and logged:
+
+```
+{"kind":"window","message":"Minified React error #418; hydrating [address]",
+ "stack":"at read ([key])","path":"/app/accounts/[address]",
+ "userAgent":"Mozilla/5.0 Test"}
+```
+
+The four unlisted fields were never read; the query carrying the seed is gone
+entirely; `#418` survived.
+
+`/no-such-page` is now in `ROUTES` in `e2e/viewports.spec.ts`, so the 404 is
+under the layout gate at all four widths — it is the one page nobody will
+remember to look at. 544 tests, lint, build, `evidence:check`, `mark:check`,
+audit and `e2e:ci` all green.
+
 ## Sequence
 
 Each step ends with the full suite, `lint`, `build`, `evidence:check`,
