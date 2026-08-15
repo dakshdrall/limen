@@ -64,10 +64,14 @@ import {
   readAllContextRules,
   recordAuthEntries,
   removeContextRuleFunction,
+  scvBytes,
+  sha256,
   signAs,
   simulationErrorCode,
+  structMap,
   submitAuthorized,
   submitWithBorrowedFootprint,
+  toHex,
 } from '../dist/browser.js';
 import manifest from '../src/wasm/manifest.json' with { type: 'json' };
 import deployments from '../deployments/testnet.json' with { type: 'json' };
@@ -684,11 +688,376 @@ function describeEntry(entry) {
   console.log(`  - ${kind} ${address} -> ${what}`);
 }
 
+/* ===================================================================== *
+ * PLAN-V7 §5: the passkey path, proven from a script before any UI.
+ * ===================================================================== */
+
+const WEBAUTHN_VERIFIER = deployments.shared.webauthnVerifier.contract;
+
+/** The order of the P-256 curve, for the low-S question §5.2 says to read. */
+const P256_ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+
+/**
+ * base64url, no padding — what `clientDataJSON.challenge` is compared against.
+ *
+ * The verifier does not decode the challenge. It base64url-encodes the 32-byte
+ * payload itself and compares 43 bytes of ASCII, so this must match its encoder
+ * exactly: no padding, `-` and `_`, no trailing `=`.
+ */
+function base64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function bigIntFromBytes(bytes) {
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
+  return value;
+}
+
+function bytesFromBigInt(value, length) {
+  const out = new Uint8Array(length);
+  let rest = value;
+  for (let index = length - 1; index >= 0; index -= 1) {
+    out[index] = Number(rest & 0xffn);
+    rest >>= 8n;
+  }
+  return out;
+}
+
+/**
+ * A synthetic authenticator: a P-256 key that signs the way a passkey would.
+ *
+ * **Deliberately WebCrypto rather than `node:crypto`, which §5.1 named.** This
+ * file forbids `node:` imports and `test/browser-path.test.ts` enforces it, so
+ * reaching for `node:crypto` here would have traded a real invariant for a
+ * convenience. It is also the better instrument: `crypto.subtle` produces
+ * IEEE-P1363 `r‖s` directly rather than DER, which is the encoding the verifier
+ * wants, and it is the same API the browser path would use — so what this
+ * proves is closer to what would ship.
+ *
+ * What it is not: a real authenticator. No hardware, no user gesture, no
+ * biometric. It proves the *contract* side — the half that can actually refuse —
+ * which is what §5.1 asks for and all it claims.
+ */
+async function syntheticAuthenticator() {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
+    'sign',
+    'verify',
+  ]);
+  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+  if (raw.length !== 65 || raw[0] !== 0x04) {
+    throw new Error(`expected a 65-byte uncompressed SEC1 key, got ${raw.length} bytes`);
+  }
+  return {
+    /** `key_data`: the 65-byte uncompressed point, as `canonicalize_key` slices it. */
+    keyData: raw,
+    async signRaw(message) {
+      return new Uint8Array(
+        await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, pair.privateKey, message),
+      );
+    },
+  };
+}
+
+/**
+ * One WebAuthn assertion over `authDigest`, encoded the way the verifier reads it.
+ *
+ * Every field below is what the source at `a9c42169` actually requires, read
+ * rather than guessed — the four §5.2 unknowns and three the plan did not list:
+ *
+ *   - `key_data` is 65-byte uncompressed SEC1, optionally with a credential id
+ *     after it, which `canonicalize_key` strips.
+ *   - `sig_data` is **XDR-encoded `WebAuthnSigData`** carried in `Bytes`, not a
+ *     struct argument: `{ authenticator_data, client_data, signature }` with
+ *     `signature` a raw 64-byte `r‖s`, never DER.
+ *   - `clientDataJSON` is parsed for exactly two fields, `type` and `challenge`.
+ *     Origin is **not** checked — the contract documents that omission and
+ *     leaves origin to the authenticator. `rpIdHash` is not checked either.
+ *   - the challenge is base64url of the **first 32 bytes of the payload the
+ *     account passes the verifier**, which `storage.rs::authenticate` shows is
+ *     the `auth_digest`, not the host's `signature_payload`.
+ *   - `authenticator_data` must be ≥ 37 bytes, and its flags byte at offset 32
+ *     must have **UP (0x01) and UV (0x04) both set** — a verifier-side
+ *     requirement no part of §5 anticipated.
+ *   - the signed message is `authenticator_data ‖ sha256(client_data)`, hashed
+ *     again by the contract before `secp256r1_verify`, which is what signing
+ *     with SHA-256 over that message produces.
+ */
+async function webauthnAssertion(authenticator, digest, { challengeOverride, forceHighS } = {}) {
+  const challenge = challengeOverride ?? base64Url(digest);
+
+  // `origin` is present because a real authenticator always sends one, and
+  // absent from the checks because the contract deliberately ignores it. Both
+  // halves are the point: this is the shape a browser produces.
+  const clientData = new TextEncoder().encode(
+    JSON.stringify({
+      type: 'webauthn.get',
+      challenge,
+      origin: 'https://limen.invalid',
+      crossOrigin: false,
+    }),
+  );
+
+  // 32 bytes rpIdHash, 1 byte flags, 4 bytes counter. The rpIdHash is not
+  // validated by this verifier, so it is filled with a recognisable constant
+  // rather than a real one — a fake this script can point at, not a fake it
+  // hides.
+  const authenticatorData = new Uint8Array(37);
+  authenticatorData.set(sha256(new TextEncoder().encode('limen.invalid')), 0);
+  authenticatorData[32] = 0x01 | 0x04; // UP | UV, with BE and BS both clear.
+
+  const signed = new Uint8Array([...authenticatorData, ...sha256(clientData)]);
+  let signature = await authenticator.signRaw(signed);
+  if (signature.length !== 64) {
+    throw new Error(`expected a 64-byte r‖s signature, got ${signature.length}`);
+  }
+
+  // The low-S question, answered by construction and then measured by the
+  // control case below rather than assumed either way.
+  const r = signature.slice(0, 32);
+  const s = bigIntFromBytes(signature.slice(32));
+  const high = s > P256_ORDER / 2n;
+  const wantHigh = forceHighS === true;
+  const useS = high === wantHigh ? s : P256_ORDER - s;
+  signature = new Uint8Array([...r, ...bytesFromBigInt(useS, 32)]);
+
+  const sigData = structMap([
+    ['authenticator_data', scvBytes(authenticatorData)],
+    ['client_data', scvBytes(clientData)],
+    ['signature', scvBytes(signature)],
+  ]);
+
+  return {
+    bytes: new Uint8Array(sigData.toXDR()),
+    sWasHigh: high,
+    sIsHigh: useS > P256_ORDER / 2n,
+  };
+}
+
+/**
+ * The host-level reason a transaction failed, when there is no contract code.
+ *
+ * `result.codes` carries *contract* errors, and a signature the host's own
+ * crypto rejects never reaches contract code to raise one. Reporting `(none)`
+ * there would read as a decode that failed, when what actually happened is that
+ * the refusal came from a layer below the contract. This reads the reason off
+ * the transaction's own diagnostic events so the deny step still ends in a hash
+ * *and* a decoded reason, which is what §1 asks of every refusal.
+ */
+async function hostErrorFor(hash) {
+  const result = await new rpc.Server(RPC_URL).getTransaction(hash);
+  const events = 'diagnosticEventsXdr' in result ? (result.diagnosticEventsXdr ?? []) : [];
+  // The readable half of an event is the string data the host logs beside the
+  // error. Walk topics and data, and keep any string that names the failure.
+  const messages = [];
+  for (const event of events) {
+    try {
+      const body = event.event().body().v0();
+      for (const value of [...body.topics(), body.data()]) {
+        const native = scValToNative(value);
+        if (typeof native === 'string' && /signature|normal|invalid|crypto/i.test(native)) {
+          messages.push(native);
+        } else if (Array.isArray(native)) {
+          for (const item of native) {
+            if (typeof item === 'string' && /signature|normal|invalid|crypto/i.test(item)) {
+              messages.push(item);
+            }
+          }
+        }
+      }
+    } catch {
+      /* an event we cannot read contributes nothing */
+    }
+  }
+  return [...new Set(messages)];
+}
+
+/** A `signAs`-shaped signer backed by the synthetic authenticator. */
+function passkeySigner(authenticator, options = {}) {
+  return {
+    rawPublicKey: () => authenticator.keyData,
+    sign: async (digest) => (await webauthnAssertion(authenticator, digest, options)).bytes,
+  };
+}
+
+async function webauthn() {
+  const server = new rpc.Server(RPC_URL);
+  const record = {
+    network: 'testnet',
+    producedBy: 'node packages/chain/scripts/acceptance.mjs webauthn',
+    verifier: WEBAUTHN_VERIFIER,
+  };
+
+  console.log(`verifier     : ${WEBAUTHN_VERIFIER}`);
+
+  // The passkey owns the account; a classic key pays the fees, because a
+  // passkey cannot pay a Stellar transaction fee. That split is inherent, not
+  // a shortcut, and it is what the UI would do too.
+  const payer = localKey('PAYER');
+  record.feePayer = payer.publicKey;
+  console.log(`fee payer    : ${payer.publicKey}`);
+  record.fundPayerTx = await fund(payer.publicKey);
+  console.log(`friendbot    : ${explorer(record.fundPayerTx)}`);
+
+  const authenticator = await syntheticAuthenticator();
+  record.passkeyPublicKey = toHex(authenticator.keyData);
+  console.log(`passkey key  : ${record.passkeyPublicKey.slice(0, 32)}… (${authenticator.keyData.length} bytes)`);
+
+  // --- 1: an account whose owner is External(webauthnVerifier, key_data) ---
+  const deployed = await submitAuthorized({
+    rpcUrl: RPC_URL,
+    passphrase: TESTNET_PASSPHRASE,
+    feeSource: payer.publicKey,
+    signEnvelope: payer.signEnvelope,
+    func: deployAccountFunction({
+      accountWasmHash: manifest.contracts.account.wasmHash,
+      deployer: payer.publicKey,
+      owner: { kind: 'external', verifier: WEBAUTHN_VERIFIER, publicKey: authenticator.keyData },
+    }),
+    label: 'deploy',
+  });
+  if (!report('deploy', deployed)) return record;
+  const smartAccount = deployedContractAddress(deployed.returnValue);
+  record.deployTx = deployed.hash;
+  record.smartAccount = smartAccount;
+  console.log(`smartAccount : ${smartAccount}`);
+
+  const rules = await readAllContextRules(
+    { rpcUrl: RPC_URL, simulationSource: payer.publicKey },
+    smartAccount,
+  );
+  const defaultRule = rules.find((rule) => rule.contextType === 'Default');
+  if (defaultRule === undefined) {
+    console.log('no Default rule; nothing below can be signed');
+    return record;
+  }
+  record.defaultRuleId = defaultRule.id;
+  console.log(`defaultRule  : id ${defaultRule.id}`);
+
+  // --- 2: seed it, so it has something to move ----------------------------
+  const seeded = await submitAuthorized({
+    rpcUrl: RPC_URL,
+    passphrase: TESTNET_PASSPHRASE,
+    feeSource: payer.publicKey,
+    signEnvelope: payer.signEnvelope,
+    func: transferFunc(payer.publicKey, smartAccount, SEED_AMOUNT),
+    label: 'seed',
+  });
+  if (!report('seed', seeded)) return record;
+  record.seedTx = seeded.hash;
+
+  const expiry = (await server.getLatestLedger()).sequence + 200;
+  const signOptions = {
+    verifier: WEBAUTHN_VERIFIER,
+    contextRuleIds: [defaultRule.id],
+    expirationLedger: expiry,
+    passphrase: TESTNET_PASSPHRASE,
+  };
+
+  // --- 3: a transfer the passkey authorizes, which must land --------------
+  const spend = await submitAuthorized({
+    rpcUrl: RPC_URL,
+    passphrase: TESTNET_PASSPHRASE,
+    feeSource: payer.publicKey,
+    signEnvelope: payer.signEnvelope,
+    func: transferFunc(smartAccount, payer.publicKey, OBSERVED_AMOUNT),
+    signAuthEntry: signAs({ signer: passkeySigner(authenticator), ...signOptions }),
+    label: 'passkey spend',
+  });
+  const spendLanded = report('passkey spend', spend);
+  record.passkeySpendTx = spend.hash;
+  record.passkeySpendOk = spendLanded;
+  if (!spendLanded) {
+    record.passkeySpendCodes = spend.codes ?? [];
+    console.log('\nThe passkey signature was not accepted. Everything below is moot.');
+    return record;
+  }
+
+  // --- 4 and 5: the control cases -----------------------------------------
+  //
+  // Both are *refusals*, and §1's first rule applies to them exactly as it does
+  // to the boundary: never assert a refusal from an absence. A bad signature
+  // fails the enforcing simulation, which produces no hash — and "the network
+  // would have rejected this" in this repository's own voice is not evidence.
+  //
+  // So each borrows the footprint of the spend that just succeeded, which is
+  // the same call with the same shape, and reaches a ledger to be refused
+  // there. What comes back is a hash and a decoded code.
+  const spendFunc = transferFunc(smartAccount, payer.publicKey, OBSERVED_AMOUNT);
+  const refusalCase = async ({ label, options }) => {
+    const [entry] = await recordAuthEntries({
+      rpcUrl: RPC_URL,
+      passphrase: TESTNET_PASSPHRASE,
+      feeSource: payer.publicKey,
+      func: spendFunc,
+    });
+    const signed = await signAs({ signer: passkeySigner(authenticator, options), ...signOptions })(
+      xdr.SorobanAuthorizationEntry.fromXDR(entry.toXDR()),
+    );
+    const result = await submitWithBorrowedFootprint({
+      rpcUrl: RPC_URL,
+      passphrase: TESTNET_PASSPHRASE,
+      feeSource: payer.publicKey,
+      signEnvelope: payer.signEnvelope,
+      func: spendFunc,
+      transactionData: spend.transactionData,
+      auth: [signed],
+      label,
+    });
+    report(label, result);
+    return result;
+  };
+
+  // §5.1 step 4: a challenge that does not match the digest must be refused.
+  // F4's first version asked the wrong question and got a confident answer to
+  // it, which is why this is here at all.
+  const wrongChallenge = await refusalCase({
+    label: 'wrong challenge',
+    options: { challengeOverride: base64Url(new Uint8Array(32)) },
+  });
+  record.wrongChallengeStage = wrongChallenge.stage;
+  record.wrongChallengeTx = wrongChallenge.hash;
+  record.wrongChallengeRefusedOnLedger = wrongChallenge.stage === 'ledger' && !wrongChallenge.ok;
+  record.wrongChallengeCodes = (wrongChallenge.codes ?? []).map(describeContractError);
+
+  // §5.2's third unknown: is low-S normalisation required? Asked by signing the
+  // same assertion with the high-S form of the same signature, which is
+  // mathematically just as valid an ECDSA signature.
+  const highS = await refusalCase({ label: 'high-S', options: { forceHighS: true } });
+  record.highSStage = highS.stage;
+  record.highSTx = highS.hash;
+  record.highSAcceptedOnLedger = highS.stage === 'ledger' && highS.ok === true;
+  record.highSCodes = (highS.codes ?? []).map(describeContractError);
+  if (highS.stage === 'ledger' && !highS.ok && record.highSCodes.length === 0) {
+    record.highSHostError = await hostErrorFor(highS.hash);
+    console.log(`             host reason: ${record.highSHostError.join(' | ') || '(unreadable)'}`);
+  }
+
+  const verdict = (result) =>
+    result.stage !== 'ledger'
+      ? `INCONCLUSIVE — never reached a ledger (${result.stage}), which is evidence of nothing`
+      : result.ok
+        ? `ACCEPTED on a ledger (${result.hash})`
+        : (result.codes ?? []).length > 0
+          ? `REFUSED on a ledger with ${named(result.codes)} (${result.hash})`
+          : `REFUSED on a ledger below contract level — ${(record.highSHostError ?? []).join(' | ') || 'no contract code, host reason unreadable'} (${result.hash})`;
+
+  console.log('\n--- what this run establishes -------------------------------');
+  console.log(`passkey-owned account signed a transfer that landed : ${record.passkeySpendOk ? `YES (${record.passkeySpendTx})` : 'NO'}`);
+  console.log(`a challenge that does not match the digest          : ${verdict(wrongChallenge)}`);
+  console.log(`the same signature in high-S form                   : ${verdict(highS)}`);
+  console.log('\nRUN RECORD ' + JSON.stringify(record));
+  return record;
+}
+
 const [command] = process.argv.slice(2);
 if (command === 'deploy') await deploy();
 else if (command === 'run') await run();
 else if (command === 'f4') await f4();
+else if (command === 'webauthn') await webauthn();
 else {
-  console.error('usage: acceptance.mjs deploy | run | f4');
+  console.error('usage: acceptance.mjs deploy | run | f4 | webauthn');
   process.exit(2);
 }

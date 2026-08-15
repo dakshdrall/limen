@@ -432,6 +432,62 @@ commit `a9c42169`. That source is not vendored here — this repo pins wasm hash
 not Rust — so **this step needs the source at that commit**, either fetched or
 from a local checkout. Worth knowing before it starts.
 
+#### 5.2.1 Answered, 2026-08-15
+
+The source was fetched at `a9c42169` and checked against the deployed verifier's
+own contract spec, read off the wasm the live contract actually runs. They match
+function-for-function and error-code-for-error-code, so the checkout is a
+faithful guide to the deployed artifact rather than a hopeful one.
+
+1. **`key_data`** — 65-byte uncompressed SEC1 (`0x04 ‖ X ‖ Y`), optionally
+   followed by a credential id, which `canonicalize_key` slices off. Not raw-64,
+   not compressed.
+2. **The signature struct** — `WebAuthnSigData { authenticator_data, client_data,
+   signature }`, and the shape is the part that would have been guessed wrong:
+   it is **XDR-encoded and carried in a single `Bytes` argument**, not passed as
+   struct fields. `signature` is a raw 64-byte `r‖s`. Never DER.
+3. **Low-S** — **required**, and measured rather than reasoned about: the same
+   assertion signed in high-S form was refused on a ledger by the host, not the
+   contract, with `ECDSA signature 's' part is not normalized to low form`.
+4. **`clientDataJSON`** — parsed for exactly `type` (must be `webauthn.get`) and
+   `challenge`. Origin is **not** validated, and neither is `rpIdHash`; both are
+   documented omissions in the contract, left to the authenticator.
+
+**Three the list did not have, all of which would have cost a debugging cycle:**
+
+- The challenge is base64url of the account's **`auth_digest`**, not the host's
+  `signature_payload`. `storage.rs::authenticate` hands the digest to the
+  verifier. §5.1 step 2 guessed this right; it is now read.
+- `authenticator_data` must be ≥ 37 bytes and its flags byte at offset 32 must
+  have **UP (`0x01`) and UV (`0x04`) both set**. An authenticator that does not
+  verify the user is refused outright — a policy decision baked into the
+  verifier that nothing in §5 anticipated.
+- **`signAs` could not have signed a passkey assertion at all.** It called
+  `signer.sign()` synchronously. `crypto.subtle` is async and so is
+  `navigator.credentials.get`, so the interface excluded every signer that is
+  not an in-memory secret key. Widened to allow a promise, which is a no-op for
+  the existing ed25519 callers.
+
+#### 5.2.2 The result
+
+The script works: `packages/chain/scripts/acceptance.mjs webauthn`. A smart
+account owned by a passkey authorized a transfer that landed, a mismatched
+challenge was refused on a ledger with `ChallengeInvalid#3114`, and the high-S
+control was refused beneath the contract. Hashes are in
+`deployments/testnet.json` under `webauthnRun`.
+
+Two things it does **not** establish, recorded here so the green does not spread
+further than it reaches. The authenticator is **synthetic** — a WebCrypto P-256
+key producing the bytes an authenticator would, with no hardware, no user
+gesture and no biometric anywhere. And it is **Node, not a browser**: whether
+`navigator.credentials.get` returns an assertion this verifier accepts is
+exactly what §5.4's UI would test, and §5.4 is not built.
+
+`node:crypto` was named in §5.1 and deliberately not used: `acceptance.mjs`
+forbids `node:` imports and `browser-path.test.ts` enforces it. WebCrypto also
+emits IEEE-P1363 `r‖s` directly rather than DER, which is the encoding the
+verifier wants.
+
 ### 5.3 If it does not work
 
 Stop and report the finding. Write it up in the README beside "Why there is no

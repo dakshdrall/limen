@@ -36,6 +36,7 @@ const recorded = JSON.parse(recordedText) as {
   walkthrough: { smartAccount: string; installTx: string; firstRun: { installTx: string } };
   v4ChainRun: { smartAccount: string; installTx: string };
   browserRun: { runs: { smartAccount: string; installTx: string }[] };
+  webauthnRun: { smartAccount: string };
   denyAxisSurvey: {
     liveRuleInstallTx: string;
     shortRuleInstallTx: string;
@@ -90,6 +91,10 @@ describe('the chain figures are what the deployments file says', () => {
       // profile. That they are two different addresses is the evidence that the
       // second run was cold rather than a repeat against the first's account.
       ...recorded.browserRun.runs.map((run) => run.smartAccount),
+      // The passkey run's account, whose owner is a secp256r1 key behind the
+      // WebAuthn verifier rather than an ed25519 key. Listed separately because
+      // it is the one account here no local key can sign for.
+      recorded.webauthnRun.smartAccount,
     ]);
     expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
     expect(accounts.size).toBeGreaterThan(1);

@@ -27,11 +27,11 @@
   "chain": {
     "network": "testnet",
     "recordedAt": "2026-08-15",
-    "transactions": 59,
+    "transactions": 65,
     "wasmUploads": 4,
     "wasmSource": "OpenZeppelin/stellar-contracts v0.7.2",
     "rustSourceFiles": 0,
-    "smartAccounts": 5,
+    "smartAccounts": 6,
     "contextRulesInstalled": 8,
     "denyAxes": {
       "total": 6,

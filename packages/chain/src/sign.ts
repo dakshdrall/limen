@@ -17,18 +17,36 @@ import { toHex } from './bytes.js';
 import { TESTNET_PASSPHRASE, type SupportedPassphrase } from './network.js';
 
 /**
- * Whatever holds an ed25519 key, reduced to what signing actually needs.
+ * Whatever holds a key, reduced to what signing actually needs.
  *
  * `Keypair` satisfies this structurally. So does a key held in `localStorage`,
- * and so would a WebCrypto `CryptoKey` behind a two-line adapter — without any
- * of them being named here. The narrower this interface is, the fewer places
- * the browser path and the script path can drift apart.
+ * and so does a WebCrypto `CryptoKey` behind a small adapter — without any of
+ * them being named here. The narrower this interface is, the fewer places the
+ * browser path and the script path can drift apart.
+ *
+ * ## Why `sign` may return a promise
+ *
+ * It used to return `Uint8Array` only, and the comment above claimed a WebCrypto
+ * key would fit behind "a two-line adapter". It would not have: `crypto.subtle`
+ * is asynchronous, and so is `navigator.credentials.get`, which is how a passkey
+ * signature is obtained. A synchronous return type quietly excluded every signer
+ * that is not an in-memory secret key — which is to say, every signer worth
+ * having.
+ *
+ * Widening it costs nothing: `await` on a plain value is a no-op, so `Keypair`
+ * and the `localStorage` key keep working unchanged and untouched.
+ *
+ * The name stays `Ed25519Signer` where it is used for ed25519. What it actually
+ * describes is *a thing that can produce signature bytes over a digest* — the
+ * WebAuthn path returns an XDR-encoded `WebAuthnSigData` rather than a raw
+ * signature, and the smart account's `Signer::External` treats both the same
+ * way: opaque bytes handed to a verifier contract.
  */
 export interface Ed25519Signer {
-  /** The raw 32-byte public key, as the verifier contract stores it. */
+  /** The raw public key, as the verifier contract stores it. */
   rawPublicKey(): Uint8Array;
-  /** Detached ed25519 signature over `message`. */
-  sign(message: Uint8Array): Uint8Array;
+  /** Detached signature over `message`, or the bytes a verifier expects. */
+  sign(message: Uint8Array): Uint8Array | Promise<Uint8Array>;
 }
 
 /**
@@ -109,7 +127,7 @@ export function signAs({
           [
             {
               signer: externalSigner(verifier, raw),
-              signature: signer.sign(authDigest(new Uint8Array(payload), contextRuleIds)),
+              signature: await signer.sign(authDigest(new Uint8Array(payload), contextRuleIds)),
             },
           ],
           contextRuleIds,

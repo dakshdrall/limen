@@ -154,6 +154,31 @@
       }
     ]
   },
+  "webauthnRun": {
+    "note": "PLAN-V7 §5.1, the passkey path proven from a script before any UI exists. A smart account whose owner is `Signer::External(webauthnVerifier, key_data)` where key_data is a secp256r1 public key, authorizing a transfer with a WebAuthn assertion — and refusing two deliberately wrong ones. The verifier contract was deployed and unused since V4; this is the first time anything has signed through it.",
+    "producedBy": "node packages/chain/scripts/acceptance.mjs webauthn",
+    "ranAt": "2026-08-15",
+    "verifier": "CCC4T3F7QDOPQGBJA23PU3JXTQWZTOT5CEO3NN2P2G4HTNN5OF2IAKWY",
+    "authenticator": "Synthetic, not real. A P-256 keypair from WebCrypto (`crypto.subtle`), signing the byte sequence an authenticator would produce. There is no hardware, no user gesture and no biometric anywhere in this run. What it proves is the contract side — the half that can actually refuse — which is what §5.1 asks of it and the whole of what it claims. A human touching a real authenticator remains unperformed.",
+    "whyNotNodeCrypto": "§5.1 named `node:crypto`. This uses WebCrypto instead, because `scripts/acceptance.mjs` forbids `node:` imports and `test/browser-path.test.ts` enforces that — reaching for `node:crypto` would have spent a real invariant on a convenience. WebCrypto is also the better instrument here: it emits IEEE-P1363 `r‖s` directly rather than DER, which is the encoding the verifier wants, and it is the same API a browser would use.",
+    "smartAccount": "CBJ4F7A6AC66K5DGCEXN6PBXRKZ7ETATHHPHG7RQMYTGE3AJ52CUWCB3",
+    "feePayer": "GBGADXHNQROBFMMU2BUZZZ4HSB6KVQE7DO6NC3R6CYNT3HZWVKAHULCN",
+    "feePayerNote": "A passkey cannot pay a Stellar transaction fee, so a classic key does. That split is inherent to the design rather than a shortcut in this script, and any UI would have it too.",
+    "passkeyPublicKey": "04138045649d6cf78396101ebb137b15bcb48439be0fa7f3438c72132d51dfa96449bf76ea76db3f5faec2f59638b2ef521af1d8c92810e2bd4ba2ee23300c714e",
+    "fundPayerTx": "17eaadf06964608f6c05c010d94bb14d7f628ffead9e9823c3e7eccce4e1d786",
+    "deployTx": "c9a43de82fbc949bafb4dd249c39fdd9a8ba6575854313802a1c0e44fef9aaa6",
+    "seedTx": "8c4641d7dd0b9d87c2e83c6f1a918b2c88dd717a9844ad2e367d769649deed29",
+    "passkeySpendTx": "64e1a4d9db14ba44b9bbab3eebdea32d1c49a90821197083185c166fd5acc227",
+    "passkeySpendResult": "SUCCESS — a transfer out of a passkey-owned smart account, authorized by a WebAuthn assertion and nothing else.",
+    "controls": "Two, because a green result that cannot fail is not a result — the lesson F4's first version taught. Both borrow the successful spend's footprint so they reach a ledger and are refused there: a refusal that failed in simulation has no hash and is only this repository's word for what would have happened.",
+    "wrongChallengeTx": "bf67c5797fc933b5ffcaab5571b6f9344688d7d24520c682df9d3360263f84e1",
+    "wrongChallengeResult": "REFUSED on a ledger with Contract#3114, which is WebAuthnError::ChallengeInvalid. The assertion was well-formed and correctly signed; only the challenge did not match the digest.",
+    "highSTx": "3a4a9010320a0522aa371d9beb3d0604143f7fb34f68fa5e21aacadd0060ec01",
+    "highSResult": "REFUSED on a ledger, below contract level: the host itself rejected it with \"ECDSA signature 's' part is not normalized to low form\". This carries no contract error code, and that absence is the finding rather than a failed decode — the refusal came from a layer beneath the verifier. It answers §5.2's third unknown: low-S normalisation IS required.",
+    "unknownsResolved": "All four of §5.2, read off OpenZeppelin/stellar-contracts at a9c42169 (tag v0.7.2) and confirmed against the deployed wasm's own contract spec, which matches that source function-for-function and error-code-for-error-code. (1) key_data is a 65-byte uncompressed SEC1 point, optionally followed by a credential id, which `canonicalize_key` strips. (2) sig_data is an XDR-encoded `WebAuthnSigData { authenticator_data, client_data, signature }` carried in `Bytes` — not struct arguments — with the signature a raw 64-byte r‖s, never DER. (3) Low-S normalisation is required, measured above rather than inferred. (4) clientDataJSON is parsed for exactly two fields, `type` (must be \"webauthn.get\") and `challenge`; origin is explicitly NOT validated and neither is rpIdHash, both documented omissions in the contract.",
+    "unknownsNotListed": "Three the plan did not anticipate. The challenge is base64url of the account's `auth_digest`, not the host's `signature_payload` — `storage.rs::authenticate` passes the digest to the verifier. `authenticator_data` must be at least 37 bytes and its flags byte at offset 32 must have both UP (0x01) and UV (0x04) set, so an authenticator that does not verify the user is refused outright. And `signAs` could not have signed any of this before today: it called `signer.sign()` synchronously, and every real passkey API is asynchronous.",
+    "browserGap": "This is Node, and a real passkey is a browser API with a hardware authenticator behind it. What remains unproven is `navigator.credentials.get` returning an assertion this verifier accepts — the authenticator's own `authenticatorData` flags and its signature encoding are what this run synthesised. §5.4's UI is where that gets tested, and it is not built."
+  },
   "browserRun": {
     "note": "PLAN-V4 step 6, and the block §11 said must stay absent until there was something true to put in it. The §1 acceptance test, run start to finish in a real browser: an account created from a key generated in the page, a boundary derived from that account's own transaction and installed on it, an agent operating inside the boundary and refused outside it, the agent's own attempt to revoke refused, the owner's revoke, and the same call failing afterwards for a different reason. Nine hashes per run, all on ledgers.",
     "producedBy": "apps/web/e2e/account-lifecycle.spec.ts, driving a real Chromium against a production `next start`. Playwright drives it; the signing is the page's. Every key was generated by `createLocalKeys` inside the browser and never left it.",
