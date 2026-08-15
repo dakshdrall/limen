@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LedgerCounter } from '@/components/LedgerCounter';
 import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
+import { HeaderSiteLinks } from '@/components/site/SiteLinks';
 import { NETWORK } from '@/lib/network';
 
 /**
@@ -37,6 +38,10 @@ interface Section {
 const SECTIONS: Section[] = [
   { href: '/docs', label: 'Docs', built: true },
   { href: '/app/accounts', label: 'App', built: true },
+  // The guided path, PLAN-V7 §3. Distinct from `App`, which is the reference
+  // view: the same nine transactions are reachable there across four screens,
+  // and this is the one that puts them in an order.
+  { href: '/app/try', label: 'Try', built: true },
 ];
 
 export function SiteHeader() {
@@ -86,6 +91,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
+          <HeaderSiteLinks />
           <LedgerCounter sequence={sequence} />
           <span
             className="status-label"

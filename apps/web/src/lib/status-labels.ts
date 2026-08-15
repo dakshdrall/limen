@@ -49,6 +49,14 @@ export const STATUS_LABELS = {
     'Derived in your browser by this repository’s own code. Nothing on chain asserts it, and no network enforced it.',
   'TESTNET ONLY · LOCAL KEY':
     'An ed25519 key generated in this browser and kept in this browser. Stellar testnet only, disposable by construction: it is not a wallet, it never reaches a Limen server, and clearing site data destroys it.',
+  // Added in V7 §5.4, and worded around the one thing a passkey here does NOT
+  // do. It owns the account and it survives clearing site data, which is the
+  // whole gain. It cannot pay a Stellar fee and it cannot be handed to an
+  // agent, so a passkey account still has local keys doing both of those jobs —
+  // and a label that let a reader infer otherwise would be this project's own
+  // version of a caveat that stopped applying.
+  'TESTNET ONLY · PASSKEY':
+    'A passkey held by your device or password manager, never by this browser and never by Limen. It survives clearing site data, which the local keys do not. Stellar testnet only: it can own an account here, and it cannot pay a fee or act as the agent.',
 } as const;
 
 export type StatusLabelName = keyof typeof STATUS_LABELS;
@@ -70,3 +78,21 @@ export type StatusLabelName = keyof typeof STATUS_LABELS;
  * of the two things on this page a person must read before they act.
  */
 export const LOCAL_KEY_LABEL = 'TESTNET ONLY · LOCAL KEY' satisfies StatusLabelName;
+
+/**
+ * The passkey's label, as an importable name, for the same reasons.
+ *
+ * A passkey is not the narrowing of design rule 3 that `LOCAL_KEY_LABEL` exists
+ * to justify — no secret of the user's is in browser storage, and none is in
+ * this application's reach at any point. So this label is not a warning; it is
+ * the answer to *which* of the two owner paths this account took, which is a
+ * thing a person must be able to see rather than infer.
+ *
+ * It carries its own obligation, and `test/local-key-label.test.ts` enforces it:
+ * a file that creates or uses a passkey must name this constant, exactly as a
+ * file that touches a local key must name `LOCAL_KEY_LABEL`. That rule is
+ * written against the passkey's own API rather than inherited, because the
+ * local-key detectors do not match `navigator.credentials` and a tripwire
+ * satisfied by not resembling anything is not a tripwire.
+ */
+export const PASSKEY_LABEL = 'TESTNET ONLY · PASSKEY' satisfies StatusLabelName;

@@ -52,6 +52,16 @@ export const ACCOUNT_WASM_HASH = manifest.contracts.account.wasmHash;
 /** The ed25519 verifier every `External` signer in this repository names. */
 export const ED25519_VERIFIER = deployments.shared.ed25519Verifier.contract;
 
+/**
+ * The WebAuthn verifier a passkey-owned account names instead.
+ *
+ * Deployed since V4 and unused until V7 §5. `deployments/testnet.json`'s
+ * `webauthnRun` block is the first thing that signed through it, and records
+ * what the contract actually requires — a 65-byte uncompressed key, an
+ * XDR-encoded `WebAuthnSigData`, a low-S signature, and the User Verified bit.
+ */
+export const WEBAUTHN_VERIFIER = deployments.shared.webauthnVerifier.contract;
+
 /** The `spending_limit` policy contract an installed boundary points at. */
 export const SPENDING_LIMIT_POLICY = deployments.shared.spendingLimitPolicy.contract;
 

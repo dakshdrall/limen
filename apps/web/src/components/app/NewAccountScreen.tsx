@@ -4,15 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Address } from '@/components/Address';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
+import { PasskeyOwnerControl, type OwnerKind } from '@/components/app/PasskeyOwnerControl';
 import { WriteResult } from '@/components/app/WriteResult';
 import { Section } from '@/components/Section';
 import { StatusLabel } from '@/components/StatusLabel';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
-import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, RPC_URL, WASM_SOURCE } from '@/lib/chain-config';
-import { fundFromFriendbot, loadChain } from '@/lib/chain-write';
+import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@/lib/status-labels';
+import { usePasskeySigner } from '@/lib/use-passkey';
+import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, WASM_SOURCE } from '@/lib/chain-config';
+import { deployAccount } from '@/lib/chain-actions';
+import { fundFromFriendbot } from '@/lib/chain-write';
 import { NOT_EXPORTABLE } from '@/lib/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
-import { NETWORK_PASSPHRASE } from '@/lib/network';
 import { rememberAccount } from '@/lib/store';
 import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';
 import { useWriteLog } from '@/lib/use-write';
@@ -54,8 +56,34 @@ export function NewAccountScreen() {
   const signers = useSigners();
   const log = useWriteLog();
 
+  const passkeySigner = usePasskeySigner();
+
   const [keyProblem, setKeyProblem] = useState<string | null>(null);
   const [contractId, setContractId] = useState<string | null>(null);
+  const [ownerKind, setOwnerKind] = useState<OwnerKind>('local');
+
+  /**
+   * The keys the deploy signs with, including the passkey when one owns.
+   *
+   * `keys.owner` is present on both paths and does the same two jobs either
+   * way: it is the fee source and it signs the envelope. Only the *owner
+   * signer* moves. See `chain-actions.ts`'s `ownerAuth`.
+   */
+  const keysForDeploy = () => {
+    const base = signers();
+    if (base === null) return null;
+    if (ownerKind === 'local') return base;
+    const passkey = passkeySigner();
+    if (passkey === undefined) return null;
+    return {
+      ...base,
+      passkey: {
+        keyData: passkey.keyData,
+        hexPublicKey: passkey.hexPublicKey,
+        signer: passkey.signer,
+      },
+    };
+  };
 
   const owner = publics?.OWNER;
   const agent = publics?.AGENT;
@@ -107,9 +135,13 @@ export function NewAccountScreen() {
   };
 
   const deploy = async () => {
-    const keys = signers();
+    const keys = keysForDeploy();
     if (keys === null) {
-      setKeyProblem('The keys are no longer in this browser. Generate them again.');
+      setKeyProblem(
+        ownerKind === 'passkey'
+          ? 'The keys or the passkey are no longer available in this browser. Set them up again above.'
+          : 'The keys are no longer in this browser. Generate them again.',
+      );
       return;
     }
 
@@ -118,46 +150,13 @@ export function NewAccountScreen() {
     const outcome = await log.run(
       'deploy',
       'Creating the smart account — createCustomContract, with the owner signer as its only signer',
-      async () => {
-        const chain = await loadChain();
-
-        // Before anything is built. A demonstration where the owner and the
-        // agent are the same key demonstrates nothing, and this is the
-        // mechanism rather than the intention.
-        //
-        // `assertTestnet` is deliberately not called here as well. Level 1 of
-        // the mainnet gate already makes `NETWORK_PASSPHRASE` a one-member
-        // union that cannot hold anything else, and level 2 fires inside
-        // `submitAuthorized` and again in `createLocalKeys`. A third call at
-        // the call site would read as the fence living here, which would make
-        // it deletable from here.
-        chain.assertDistinctSigners(keys.owner.rawPublicKey, keys.agent.rawPublicKey);
-
-        const result = await chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: keys.owner.publicKey,
-          signEnvelope: keys.owner.signEnvelope,
-          func: chain.deployAccountFunction({
-            accountWasmHash: ACCOUNT_WASM_HASH,
-            deployer: keys.owner.publicKey,
-            owner: {
-              kind: 'external',
-              verifier: ED25519_VERIFIER,
-              publicKey: keys.owner.rawPublicKey,
-            },
-          }),
-          label: 'deploy',
-        });
-
-        // Read out of the transaction's return value, never derived from the
-        // deployer and salt. Deriving it would be this repository agreeing with
-        // itself about what the network did instead of asking.
-        if (result.stage === 'ledger' && result.ok) {
-          deployed = chain.deployedContractAddress(result.returnValue);
-        }
-        return result;
-      },
+      () =>
+        deployAccount({
+          keys,
+          onDeployed: (contract) => {
+            deployed = contract;
+          },
+        }),
     );
 
     if (outcome?.status === 'onLedger' && outcome.ok && deployed !== null) {
@@ -199,6 +198,15 @@ export function NewAccountScreen() {
               </button>
             </div>
           )}
+
+          {/* Offered beside the default, never in front of it. The two local
+              keys above are created on both paths — a passkey replaces the
+              owner *signer*, not the keys that pay fees and act as the agent. */}
+          <PasskeyOwnerControl
+            value={ownerKind}
+            onChange={setOwnerKind}
+            disabled={log.busy || contractId !== null}
+          />
 
           {keyProblem !== null && (
             <p role="alert" className="text-[12.5px] leading-relaxed text-deny">
@@ -288,10 +296,30 @@ export function NewAccountScreen() {
               // never drawn.
               <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
                 <p className="text-[12.5px] leading-relaxed text-muted">
-                  This account will be owned by the key below, and by no other. It is fixed at
+                  This account will be owned by the signer below, and by no other. It is fixed at
                   creation.
                 </p>
-                <LocalKeyBadge role="OWNER" publicKey={owner} />
+                {ownerKind === 'passkey' ? (
+                  // The owner is the passkey; the OWNER key below it is still
+                  // here and still pays the fee. Showing both is the honest
+                  // rendering — showing only the passkey would imply this
+                  // account needs no local key, which is not true of any
+                  // account on testnet.
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[11px] tracking-[0.08em] text-muted uppercase">
+                        owner
+                      </span>
+                      <StatusLabel name={PASSKEY_LABEL} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="col-head text-muted-dim">pays the fee for this deploy</span>
+                      <LocalKeyBadge role="OWNER" publicKey={owner} />
+                    </div>
+                  </div>
+                ) : (
+                  <LocalKeyBadge role="OWNER" publicKey={owner} />
+                )}
               </div>
             )}
 

@@ -5,9 +5,12 @@ import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
 import { StatusLabel } from '@/components/StatusLabel';
 import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
-import { ED25519_VERIFIER, RPC_URL } from '@/lib/chain-config';
-import { loadChain } from '@/lib/chain-write';
-import { NETWORK_PASSPHRASE } from '@/lib/network';
+import {
+  OBSERVED_AMOUNT,
+  SEED_AMOUNT,
+  fundSmartAccount,
+  observedTransfer,
+} from '@/lib/chain-actions';
 import type { SnapshotRule } from '@/lib/account-contract';
 import { decimalise } from '@/lib/format';
 import { useLastRead } from '@/lib/use-last-read';
@@ -39,15 +42,6 @@ import { useWriteLog } from '@/lib/use-write';
  * Default rule. Only the second exercises the smart account as a signer, and
  * only the second is worth deriving a boundary from.
  */
-
-/** 100 XLM in stroops, enough to fund several agent runs and their fees. */
-const SEED_AMOUNT = 1_000_000_000n;
-
-/** 0.1 XLM. The flow the boundary is derived from — deliberately small. */
-const OBSERVED_AMOUNT = 1_000_000n;
-
-/** Ledgers of validity given to the owner's auth entry. ~10 minutes. */
-const AUTH_VALIDITY_LEDGERS = 200;
 
 export function AccountWriteSteps({
   contractId,
@@ -109,25 +103,7 @@ export function AccountWriteSteps({
     await log.run(
       'seed',
       `Funding the smart account — ${describeAmount(SEED_AMOUNT)} from the owner’s classic account`,
-      async () => {
-        const chain = await loadChain();
-        return chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: keys.owner.publicKey,
-          signEnvelope: keys.owner.signEnvelope,
-          func: chain.transferFunction({
-            token: chain.nativeTokenId(NETWORK_PASSPHRASE),
-            from: keys.owner.publicKey,
-            to: contractId,
-            amount: SEED_AMOUNT,
-          }),
-          // No `signAuthEntry`: this is the owner's own classic account paying
-          // out, authorized by the envelope signature. The smart account is
-          // only the recipient and authorizes nothing.
-          label: 'seed',
-        });
-      },
+      () => fundSmartAccount({ keys, contractId }),
     );
     onWritten();
   };
@@ -139,36 +115,7 @@ export function AccountWriteSteps({
     await log.run(
       'observe',
       `The account’s own transaction — ${describeAmount(OBSERVED_AMOUNT)} out, authorized by its owner under the Default rule`,
-      async () => {
-        const chain = await loadChain();
-        const { rpc } = await import('@stellar/stellar-sdk');
-        const latest = await new rpc.Server(RPC_URL).getLatestLedger();
-
-        return chain.submitAuthorized({
-          rpcUrl: RPC_URL,
-          passphrase: NETWORK_PASSPHRASE,
-          feeSource: keys.owner.publicKey,
-          signEnvelope: keys.owner.signEnvelope,
-          func: chain.transferFunction({
-            token: chain.nativeTokenId(NETWORK_PASSPHRASE),
-            from: contractId,
-            to: keys.agent.publicKey,
-            amount: OBSERVED_AMOUNT,
-          }),
-          // This is the half that makes it the account's transaction rather
-          // than the owner's: the smart account is the `from`, so the host
-          // calls `__check_auth` on it, and the owner's signature has to arrive
-          // as a signed auth entry naming the rule it is signing under.
-          signAuthEntry: chain.signAs({
-            signer: keys.owner.signer,
-            verifier: ED25519_VERIFIER,
-            contextRuleIds: [defaultRule.id],
-            expirationLedger: latest.sequence + AUTH_VALIDITY_LEDGERS,
-            passphrase: NETWORK_PASSPHRASE,
-          }),
-          label: 'observe',
-        });
-      },
+      () => observedTransfer({ keys, contractId, defaultRuleId: defaultRule.id }),
     );
     onWritten();
   };

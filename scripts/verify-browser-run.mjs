@@ -111,6 +111,7 @@ const SEQUENCE = [
 ];
 
 let failures = 0;
+let unverifiable = 0;
 
 function pass(line) {
   console.log(`  ok    ${line}`);
@@ -121,9 +122,49 @@ function fail(line) {
   failures += 1;
 }
 
+/**
+ * A check that cannot be made any more, which is not a check that did not hold.
+ *
+ * The same distinction §1 draws about refusals: a transaction that never reached
+ * a ledger is not evidence of a boundary, it is evidence of nothing. A contract
+ * error code that the RPC has forgotten is not evidence the code was wrong — it
+ * is the absence of evidence either way, and calling it `FAIL` would be reading
+ * a verdict off a gap. Counted separately so it is loud, and so a run whose
+ * every interesting check has aged out cannot print a clean bill of health.
+ */
+function unavailable(line) {
+  console.log(`  n/a   ${line}`);
+  unverifiable += 1;
+}
+
 function check(condition, line) {
   if (condition) pass(line);
   else fail(line);
+}
+
+/**
+ * The oldest ledger the Soroban RPC still holds, fetched once.
+ *
+ * Contract error codes and Soroban return values come from transaction meta,
+ * which only the RPC serves and which it keeps for `ledgerRetentionWindow`
+ * ledgers — about seven days on testnet. Horizon keeps the transactions
+ * themselves far longer, so an old run stays checkable for existence, fee
+ * source, signatures and ordering, and stops being checkable for anything that
+ * needs meta. Knowing the floor is what lets those two cases be told apart.
+ */
+let retentionFloorPromise;
+function retentionFloor() {
+  retentionFloorPromise ??= new rpc.Server(RPC_URL)
+    .getHealth()
+    .then((health) => health.oldestLedger ?? null)
+    .catch(() => null);
+  return retentionFloorPromise;
+}
+
+/** Is this transaction's meta outside what the RPC still retains? */
+async function metaAgedOut(tx) {
+  const floor = await retentionFloor();
+  return floor !== null && typeof tx.ledger === 'number' && tx.ledger < floor;
 }
 
 async function horizon(path) {
@@ -362,6 +403,7 @@ async function main() {
     runs = [JSON.parse(readFileSync(arg, 'utf8'))];
   }
 
+  const partial = [];
   for (const [index, run] of runs.entries()) {
     if (runs.length > 1) {
       console.log(`\n${'='.repeat(72)}`);
@@ -370,10 +412,29 @@ async function main() {
     }
     resetFailures();
     await verify(run);
+    if (unverifiable > 0) partial.push({ index: index + 1, which: run.which, count: unverifiable });
   }
 
   if (runs.length > 1) {
-    console.log(`\nAll ${runs.length} recorded runs verified.`);
+    if (partial.length === 0) {
+      console.log(`\nAll ${runs.length} recorded runs verified.`);
+    } else {
+      console.log(
+        `\nAll ${runs.length} recorded runs held every check that can still be made. ` +
+          `${partial.length} of them can no longer be checked in full:`,
+      );
+      for (const entry of partial) {
+        console.log(
+          `  run ${entry.index}${entry.which ? ` — ${entry.which}` : ''}: ${entry.count} ` +
+            'check(s) need transaction meta the RPC has since dropped',
+        );
+      }
+      console.log(
+        'Those runs were verified in full when they were recorded, and that verdict is dated in\n' +
+          'the block rather than reasserted here — this script can only speak for what the\n' +
+          'network can still be asked today.',
+      );
+    }
   }
 }
 
@@ -455,10 +516,19 @@ async function verify(run) {
     if (!step.ok) {
       const codes = await codesFor(hash);
       if (codes === null || codes.length === 0) {
-        fail(
-          'it failed on a ledger but no contract error code could be decoded — ' +
-            'not attributable to the boundary',
-        );
+        if (await metaAgedOut(tx)) {
+          unavailable(
+            `it failed on ledger ${tx.ledger.toLocaleString('en-US')}, which is older than the ` +
+              `RPC keeps meta for (oldest ${(await retentionFloor()).toLocaleString('en-US')}) — ` +
+              'the code cannot be decoded any more, and was recorded as ' +
+              `${run[`${step.key.replace(/Tx$/, '')}Error`] ?? 'nothing'}`,
+          );
+        } else {
+          fail(
+            'it failed on a ledger but no contract error code could be decoded — ' +
+              'not attributable to the boundary',
+          );
+        }
       } else {
         const named = codes.map(describeContractError).join(', ');
         const recorded = run[`${step.key.replace(/Tx$/, '')}Error`];
@@ -482,12 +552,20 @@ async function verify(run) {
       // then used is the address this transaction returned. If they differed,
       // every later row would be about somebody else's account.
       const returned = await returnValueAddress(hash);
-      check(
-        returned === account,
-        returned === null
-          ? 'the deploy’s return value could not be read, so the address it created is unconfirmed'
-          : `the deploy returned ${returned}, which is the account the rest of this run uses`,
-      );
+      if (returned === null && (await metaAgedOut(tx))) {
+        unavailable(
+          `the deploy closed on ledger ${tx.ledger.toLocaleString('en-US')}, older than the RPC ` +
+            `keeps meta for (oldest ${(await retentionFloor()).toLocaleString('en-US')}) — its ` +
+            'return value is gone, so the address it created cannot be confirmed from here',
+        );
+      } else {
+        check(
+          returned === account,
+          returned === null
+            ? 'the deploy’s return value could not be read, so the address it created is unconfirmed'
+            : `the deploy returned ${returned}, which is the account the rest of this run uses`,
+        );
+      }
     } else {
       // Named as an argument *or* as the contract being called.
       // `add_context_rule` and `remove_context_rule` are invoked **on** the
@@ -559,6 +637,24 @@ async function verify(run) {
     console.log(`${failures} check${failures === 1 ? '' : 's'} did not hold. The run is not verified.`);
     process.exit(1);
   }
+  if (unverifiable > 0) {
+    console.log(
+      `Every check that can still be made held, and ${unverifiable} could not be made: this run ` +
+        'is older than the RPC keeps transaction meta for.',
+    );
+    console.log(
+      `${records.size} transactions confirmed to exist, to have succeeded or failed the way §1 ` +
+        'requires, to have been paid for by the right key and to have closed in order — all of ' +
+        'that is Horizon, which still has them. What is gone is meta: the contract error codes ' +
+        'and the deploy’s return value.',
+    );
+    console.log(
+      'Re-running this later will not recover them. A run is fully re-checkable for about seven ' +
+        'days and existence-checkable indefinitely, so the full verdict is a perishable claim ' +
+        'and is dated where it is recorded.',
+    );
+    return;
+  }
   console.log(
     `Every check held. ${records.size} transactions confirmed, ` +
       'by a process that did not produce them.',
@@ -576,6 +672,7 @@ async function verify(run) {
  */
 function resetFailures() {
   failures = 0;
+  unverifiable = 0;
 }
 
 await main();
