@@ -88,6 +88,14 @@ const ROUTES = [
   '/app/try',
   `/app/accounts/${ACCOUNT}`,
   `/app/policies/${ACCOUNT}-${RULE}`,
+  // The 404. It is a route in every sense that matters here — it renders the
+  // root layout, lays out a `.screen`, and is now a designed page rather than
+  // Next's default, so it can overflow and mis-set a column exactly like any
+  // other. It is also the one page on the site nobody will remember to look at.
+  //
+  // Any unmatched path reaches it; this one is spelled to say so if it ever
+  // appears in a failure message.
+  '/no-such-page',
 ] as const;
 
 /**
@@ -116,7 +124,18 @@ const PROVENANCE = ['ON-CHAIN', 'COMPUTED LOCALLY', 'shipped fixture', 'NOT AUDI
  * ledger number with no provenance beside it. That still fails, on every route,
  * which is the regression worth catching.
  */
-const NO_DATA_STATES = ['read failed', 'no accounts', 'Waiting for', 'Reading', 'Simulating'];
+const NO_DATA_STATES = [
+  'read failed',
+  'no accounts',
+  'Waiting for',
+  'Reading',
+  'Simulating',
+  // The 404, which is a fourth no-data state and the least ambiguous of them:
+  // there is no screen here, so there are no numbers to attribute. Matched on
+  // the page's own sentence rather than on the route, so a 404 that stopped
+  // being the designed page would stop satisfying this.
+  'There is nothing at this address',
+];
 
 /**
  * `/app/activity` scans per account and shows an empty state until it has one.

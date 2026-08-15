@@ -94,6 +94,18 @@ const ENVIRONMENT = [
     required: false,
     note: 'Where waitlist entries are written. Defaults to a file in the system temp directory.',
   },
+  {
+    name: 'LIMEN_ERROR_WEBHOOK',
+    scope: 'server',
+    required: false,
+    note: 'Where error reports are delivered. Server-side only, because a webhook URL is a credential. Unset, a report is logged and not sent.',
+  },
+  {
+    name: 'NEXT_PUBLIC_LIMEN_RELEASE',
+    scope: 'browser',
+    required: false,
+    note: 'The short commit SHA an error report names as its build. Derived from the platform at build time, not set by hand.',
+  },
 ] as const;
 
 const PRIMITIVES = [
