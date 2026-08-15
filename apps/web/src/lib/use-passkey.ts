@@ -5,6 +5,7 @@ import {
   PASSKEY_LABEL,
   SERVER_PASSKEY_SNAPSHOT,
   getPasskey,
+  passkeysAvailable,
   readPasskeySnapshot,
   subscribeToPasskey,
   type Passkey,
@@ -26,6 +27,33 @@ import {
  * tripwire satisfied by not resembling anything is not a tripwire.
  */
 export const USE_PASSKEY_LABEL = PASSKEY_LABEL;
+
+/**
+ * Whether this browser can do WebAuthn at all — as a hydration-safe answer.
+ *
+ * `undefined` means *not known yet*, and it is the only answer the server can
+ * honestly give: `passkeysAvailable()` reads `window` and `navigator`, so it is
+ * `false` on the server and usually `true` in the browser.
+ *
+ * Calling it directly during render is what `PasskeyOwnerControl` did first, and
+ * it produced a React #418 on `/app/accounts/new`: the server sent the "this
+ * browser does not offer passkeys" sentence with the control disabled, the
+ * client rendered neither, and the text content did not match. The comment
+ * justifying it said the server render has no answer for this — which is the
+ * reason to model it as unknown, not the reason to skip doing so.
+ *
+ * `useSyncExternalStore` is the fix rather than a `useEffect` flag because React
+ * hydrates with `getServerSnapshot` and only then re-reads, so the first client
+ * render agrees with the server by construction. The subscribe callback is a
+ * no-op: a browser does not gain WebAuthn support while the page is open.
+ */
+export function usePasskeysAvailable(): boolean | undefined {
+  return useSyncExternalStore(
+    () => () => {},
+    () => passkeysAvailable(),
+    () => undefined,
+  );
+}
 
 /** The hex public key of the passkey this browser holds, or `undefined`. */
 export function usePasskeyPublic(): string | undefined | null {

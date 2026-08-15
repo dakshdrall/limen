@@ -372,6 +372,48 @@ describe('prose does not lose the space beside an inline value, second shape', (
   });
 });
 
+describe('a browser-only capability is not read during render', () => {
+  /**
+   * `passkeysAvailable()` reads `window` and `navigator`. On the server it is
+   * `false`; in a browser it is usually `true`. A component that calls it while
+   * rendering therefore renders one thing on the server and another on the
+   * client, and React fails hydration with #418 — silently, in production, with
+   * a minified error code and no indication which element disagreed.
+   *
+   * That shipped on `/app/accounts/new` in V7 §5.4 and was found by watching for
+   * page errors while checking something else. The server sent the "this browser
+   * does not offer passkeys" sentence with the control disabled; the client
+   * rendered neither.
+   *
+   * The fix is `usePasskeysAvailable()`, which answers `undefined` until the
+   * browser has been asked — the same not-known-yet shape `useLocalKeyPublics`
+   * uses, and hydration-safe because React renders `getServerSnapshot` first.
+   * This rule keeps the direct call out of components so the next person cannot
+   * reintroduce it by reaching for the obvious function.
+   */
+  const componentsCallingItDirectly = tsx.filter(([, source]) =>
+    /(?<!use)[Pp]asskeysAvailable\s*\(/.test(source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1')),
+  );
+
+  it('goes through the hook, so the server and the first client render agree', () => {
+    expect(
+      componentsCallingItDirectly.map(([path]) => path),
+      'call usePasskeysAvailable() instead — a direct call renders differently on the server',
+    ).toEqual([]);
+  });
+
+  it('can fire, so it is not passing because the name changed', () => {
+    const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const rule = (s: string) => /(?<!use)[Pp]asskeysAvailable\s*\(/.test(strip(s));
+    expect(rule('const available = passkeysAvailable();')).toBe(true);
+    expect(rule('if (!passkeysAvailable()) return null;')).toBe(true);
+    // The hook is the sanctioned form and must not be flagged.
+    expect(rule('const available = usePasskeysAvailable();')).toBe(false);
+    // …and a mention in prose is not a call.
+    expect(rule('// passkeysAvailable() reads window')).toBe(false);
+  });
+});
+
 describe('the grid is a token set, not a judgement call', () => {
   const tokens = ['--col-addr', '--col-hash', '--col-amount', '--col-ledger', '--col-verdict', '--col-label', '--col-signer', '--col-error'];
 
