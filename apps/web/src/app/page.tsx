@@ -81,13 +81,27 @@ export default function Home() {
           </p>
         </Reveal>
 
-        <SceneBlock index={1} className="flex flex-wrap items-center gap-3">
-          <Link href="/app/simulator" className="btn" data-variant="primary" data-register="scene">
-            See it derive one
-          </Link>
-          <Link href="/docs" className="btn" data-variant="secondary" data-register="scene">
-            Read the docs
-          </Link>
+        <SceneBlock index={1} className="flex flex-col gap-3">
+          {/* The primary points at the flow, not the simulator. A person who
+              lands on the simulator concludes this is a demo, which is exactly
+              what happened. The simulator keeps its place as the control you
+              reach for when you do not want to spend a friendbot call — which
+              is a quiet register, not a competing one. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/app/try" className="btn" data-variant="primary" data-register="scene">
+              Derive one on testnet
+            </Link>
+            <Link href="/docs" className="btn" data-variant="secondary" data-register="scene">
+              Read the docs
+            </Link>
+            <Link href="/app/simulator" className="btn" data-variant="quiet" data-register="scene">
+              See it derive one
+            </Link>
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-muted-dim measure">
+            Trying it on testnet submits real transactions, funded by friendbot — no real money
+            anywhere. The simulator spends nothing.
+          </p>
         </SceneBlock>
 
         <SceneBlock index={2}>
@@ -417,6 +431,21 @@ export default function Home() {
               arguing about what their union should permit, is not built.
             </li>
           </ul>
+        </SceneBlock>
+
+        {/* The caveats come first and the way in comes after them, deliberately:
+            what this is not is the thing a person should have read before
+            spending a friendbot call, not after. */}
+        <SceneBlock index={3} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/app/try" className="btn" data-variant="primary" data-register="scene">
+              Derive one on testnet
+            </Link>
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-muted-dim measure">
+            Six steps, end to end: create an account, observe a transaction, derive the boundary,
+            install it, watch an agent act inside it and be refused outside it.
+          </p>
         </SceneBlock>
       </Scene>
 

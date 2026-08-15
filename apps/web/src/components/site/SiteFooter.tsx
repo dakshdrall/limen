@@ -71,6 +71,11 @@ export function SiteFooter() {
                 </Link>
               </Row>
               <Row>
+                <Link href="/app/try" className="link">
+                  Try it on testnet
+                </Link>
+              </Row>
+              <Row>
                 <Link href="/app/simulator" className="link">
                   Simulator
                 </Link>

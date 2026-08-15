@@ -275,6 +275,84 @@ are reported. A green run against an unknown baseline proves less than it looks
 like — if that suite is already red for an unrelated reason, a green "after" is
 the more suspicious of the two outcomes, and there would be no way to tell.
 
+#### 3.4.1 What was actually run, and how strong each half is
+
+The two halves of that check are **not equally evidenced**, and the difference is
+recorded here rather than averaged away.
+
+**The "before" run — a prior session's report, not an artifact.** The session
+that wrote the extraction ran the suite first, against the pre-built
+pre-extraction server, and reported it green: a real baseline, not an unknown
+one. That record was written to the scratchpad and the scratchpad did not
+survive. So what this plan can show is *a report of a prior session's report*.
+Nobody later should read "baseline green" as something this repository can
+produce on demand — it cannot. The claim is believed and it is unbacked, and
+those are different words on purpose. Re-establishing it would cost eleven more
+testnet submissions to convert a credible report into a file, which was weighed
+and declined.
+
+This is the third artifact lost to the scratchpad. Results that a later reader
+will need go in this file or in `deployments/testnet.json` — somewhere versioned
+— and the scratchpad holds only what is disposable within the session.
+
+**The "after" run — at `865bb11`, green.** Run 2026-08-15 against a fresh
+`next build` at that commit, one test, no retries, 1.7 minutes:
+
+```
+1 passed (2.0m)
+✓ a browser creates an account, installs a boundary, runs an agent inside it,
+  and takes it back
+```
+
+The `RUN RECORD` it emitted, which is the machine-readable half:
+
+| field | value |
+| --- | --- |
+| `smartAccount` | `CDTL3MY5UVIVJMMCJORL3QPXUTXIYWY4RKH24ZCZANTVO7KSWPCCQANU` |
+| `ownerSigner` | `GDR7DA7K6K6WWHWVOB7K7OU5UCYTNMWPAXV7PNXSA2ICXS7QURSGGJO2` |
+| `agentSigner` | `GDTD3W3YFGUROBEQHS2L5MURD4NFRQMQO5PL2XVE5ST5FRGG54UZHGNW` |
+| `deployTx` | `245973f5e33e65a8b6af31615580f4220138a777f5f4802e9b8fcbcaed3e1e90` |
+| `seedTx` | `3e5c27d55721bb0ae44eda6673a6400c992fd4f9cd1f5fbfb85c357623ba3d33` |
+| `observedTx` | `4219a6a80f8ba0158f5047e2c1c0806a7656494a56eee001bfdb058c5c4be4d1` |
+| `installTx` | `99970322ba2e5db35ea07b20854ae46b25ca2a4979855a70bc342352ec4055e3` |
+| `contextRuleId` | `1` |
+| `permittedTx` | `f67038e92f8192b69d608172db10f23aabf69ac06bd783d2e266ebaf05355007` |
+| `refusedTx` | `00c1678e669e161de69937b06c66cbbf838d71019df39cfad263b81e15233e77` — `SpendingLimitExceeded#3221` |
+| `agentRevokeTx` | `5d58fdae37319177522e646370a6b670b08b97396e19d8f970a200781ff72c5a` — `UnvalidatedContext#3002` |
+| `revokeTx` | `3c00226257d6698ead541b7d4038ecd1bdef11674c02f9b1402f6efd5a84e501` |
+| `postRevokeTx` | `20365aad3eca7bb9670fbe3b91d160916d32183a88d723ffe19a057854afadff` — `ContextRuleNotFound#3000` |
+
+The three refusals decoded to three *different* codes, which is the part that
+actually exercises the extraction: over-cap refused as `SpendingLimitExceeded`,
+the agent's own revoke refused as `UnvalidatedContext`, and the post-revoke call
+failing as `ContextRuleNotFound` — a different reason, not the same wall twice.
+Every deny step asserted a hash as well as a code, so none of it is a refusal
+inferred from an absence.
+
+**Why this block is here and not in `deployments/testnet.json`.** That file is
+the canonical home for browser-run hashes and has `verify-browser-run.mjs` to
+re-check them against Horizon from outside the process — it is the better home.
+It also lives under `packages/`, and this plan's closing invariant is that
+`git diff` against `packages/` is empty through step 4. Transcribing it there is
+a one-line judgement call that belongs to whoever holds that invariant, so it is
+recorded here and flagged rather than taken. The run is reproducible from the
+hashes above either way.
+
+#### 3.4.2 What the suite covers, and what it does not
+
+`account-lifecycle.spec.ts` drives the **four reference screens** and only those:
+`/app/accounts/new` → `/app/accounts/[id]` → `/app/policies/new` →
+`/app/policies/[id]`. The string `/app/try` does not appear in the file.
+
+So a green run says the extraction is behaviour-preserving **along the path the
+reference screens take through it**. `/app/try` reaches the same
+`chain-actions.ts` functions by a different path — its own ordering, its own
+gating, its own resume-from-chain logic — and no automated check drives it. A
+green run here must not be read as covering the flow, because it does not touch
+it.
+
+That gap is closed by hand on the preview, not by this suite.
+
 ### 3.5 The layout gate
 
 `/app/try` joins `ROUTES` in `e2e/viewports.spec.ts`. A new route outside that
