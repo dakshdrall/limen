@@ -176,7 +176,8 @@ export function AccountWriteSteps({
           <LocalKeyBadge role="OWNER" publicKey={owner} />
         </div>
         <p className="measure text-[12.5px] leading-relaxed text-muted">
-          {describeAmount(SEED_AMOUNT)} from the owner&rsquo;s classic account to this contract.
+          {describeAmount(SEED_AMOUNT)}{' '}
+          from the owner&rsquo;s classic account to this contract.
           Ordinary <span className="value">G→C</span>: the smart account is the recipient and
           authorizes nothing.
         </p>
@@ -198,7 +199,8 @@ export function AccountWriteSteps({
           <LocalKeyBadge role="OWNER" publicKey={owner} />
         </div>
         <p className="measure text-[12.5px] leading-relaxed text-muted">
-          {describeAmount(OBSERVED_AMOUNT)} from this account to the agent&rsquo;s address. This one
+          {describeAmount(OBSERVED_AMOUNT)}{' '}
+          from this account to the agent&rsquo;s address. This one
           runs <span className="value">__check_auth</span> on the smart account under context rule{' '}
           <span className="value">{defaultRule.id}</span>, so it is the account acting rather than
           the owner acting beside it.
