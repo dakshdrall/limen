@@ -1,7 +1,8 @@
 # PLAN-V8 — from a permission layer to an agent platform
 
-**Status: proposal. Nothing in this plan has been implemented. No file outside
-this one has been touched.**
+**Status: approved in outline; the two open decisions are taken and recorded
+(B8 off-chain with three conditions, B9 passkey mandatory). Nothing in this plan
+has been implemented. No file outside this one has been touched.**
 
 The repository was inspected, the full suite was run green (544 tests, 25 files,
 matching `apps/web/src/generated/evidence.json` exactly), and the findings below
@@ -342,13 +343,28 @@ keeps them honest. **The drift-detection discipline has itself drifted**, and it
 did so in exactly the way the discipline exists to prevent: silently, in prose,
 while every test stayed green.
 
-**Proposal: fix before anything else, in the first commit after this plan.**
-Either restore a `caveats.test.ts` pinning the surviving caveats in both
-directions, or strike the two claims. Restore it — the V8 work multiplies the
-number of caveats and this plan depends on that mechanism existing. This is
-prerequisite work, not V8 work, and it is listed first because approving a plan
+**DECIDED: fixed first, before any V8 work.** A README citing a test that does
+not exist is the same fault this project keeps finding, and it must not survive
+into a plan that adds surface.
+
+`caveats.test.ts` is **restored**, not struck — striking the two sentences would
+remove the evidence of the failure along with the failure, and the V8 work
+multiplies the number of caveats this repository has to keep honest. The restored
+suite pins every surviving caveat in **both directions**: the sentence present
+where it still holds, and absent where it has stopped holding. That two-sided
+shape is what makes it able to catch B1, B3, B5 and B6 when they land.
+
+It is prerequisite work rather than V8 work, and it is **M0**. Approving a plan
 that adds fifteen caveats to a repository whose caveat fence is missing would be
-the wrong order.
+the wrong order, and the fence has to exist before there is anything new to
+fence.
+
+One thing the restored suite must do that the deleted one did not: **assert it is
+non-vacuous.** The original pinned sentences on a landing page, and when that
+page was deleted the suite went with it rather than going red. A guard asserting
+the set of pinned caveats is non-empty and covers every entry in the README's
+"Not done yet" list turns a future deletion into a failure instead of a silence —
+which is precisely the hole this entry exists because of.
 
 ---
 
@@ -549,7 +565,7 @@ Enforcing a recipient allowlist requires a Rust policy contract nobody has
 audited — which design rule 2 forbids, and which `lower.ts` already refuses at
 install time.
 
-**Three options, and a recommendation:**
+**Three options were put:**
 
 | | What it is | Cost |
 |---|---|---|
@@ -557,28 +573,116 @@ install time.
 | B | Ship them as an explicitly-labelled **off-chain** check | Honest, useful, and not a security boundary |
 | C | Write the Rust policy | Breaks rule 2 and `rustSourceFiles: 0` |
 
-**Recommend B, with the labelling done properly.** A recipient allowlist checked
-in the tool layer is genuinely useful — it stops the *common* failure, which is a
-confused or prompt-injected model sending to the wrong place — and it is
-worthless against an attacker holding the agent key. Both halves go on screen,
-in the same words everywhere, using the existing `COMPUTED LOCALLY` vocabulary
-beside the `ON-CHAIN` items:
+### DECIDED: B, off-chain, under three conditions
 
-> **Recipient allowlist — COMPUTED LOCALLY.** Limen's tool layer refuses a
-> payment to an address you have not approved. Unlike your cap, your asset and
-> your expiry, **the ledger does not enforce this** — no audited policy contract
-> constrains a transfer's destination. Someone holding the agent key could send
-> to any address, up to your cap. Lower your cap if that matters more to you
-> than convenience.
+A recipient allowlist checked in the tool layer is genuinely useful — it stops
+the *common* failure, which is a confused or prompt-injected model sending to the
+wrong place — and it is **worthless against an attacker holding the agent key**.
+Both halves go on screen, in the same words everywhere.
 
-And the dashboard's policy panel must **partition** into two headed groups,
-`Enforced by the network` and `Enforced by Limen`, rather than listing six
-constraints as though they were the same kind of thing. This is the same
-distinction the simulator already draws between its local deny table and the
-network's refusals, applied to the policy display.
-
-Option C is the trigger for the codegen work the README already gates behind
+Option C remains the trigger for the codegen work the README already gates behind
 `compositionOnly: false` — not a reason to write Rust now.
+
+#### B8.1 The check is server-side, in the tool layer. Never in React.
+
+Brief §15 is explicit that the boundary must not exist only in the frontend, and
+a recipient check in a React component is not a boundary — it is a hint that
+anyone calling the API directly skips. The allowlist is read from
+`Policy.enforced_offchain_json` and evaluated inside `packages/policy`, on the
+server, on the same path every other gate check takes. The web app may *also*
+show the user which recipients are approved; that display is a convenience and
+is never the thing that decides.
+
+**Pinned by test:** no module under `apps/web/src/components` may import the
+recipient-check function, and the §10 suite calls the runtime API directly with a
+disallowed recipient — bypassing the UI entirely — and asserts the refusal still
+happens.
+
+#### B8.2 The policy panel is partitioned, and the split is real
+
+Six constraints, two groups, and the grouping is a statement about **who
+refuses** rather than a visual tidy-up:
+
+| Constraint | Group | Backed by |
+|---|---|---|
+| `amount` | **Enforced by the network** | `SpendingLimitExceeded#3221` — hash `ac477549…` |
+| `asset` | **Enforced by the network** | `UnvalidatedContext#3002` — hash `1312be89…` |
+| `function` | **Enforced by the network** | `NotAllowed#3223` — hash `45a0eb20…` |
+| `contract` | **Enforced by the network** | `UnvalidatedContext#3002` — hash `6b7f4ded…` |
+| `expiry` | **Enforced by the network** | `UnvalidatedContext#3002` — hash `f5ebce51…`, error code not decoded on-ledger *(the standing caveat, carried)* |
+| `recipient` | **Enforced by Limen** | **No hash.** No audited policy contract constrains a transfer's destination. |
+
+The allowed-contract row is network-enforced and stays in the top group. That
+matters: the temptation when adding one off-chain constraint is to move
+everything address-shaped down beside it, which would silently demote a
+constraint the ledger genuinely imposes and has a hash for.
+
+**These five are not the six deny axes, and the difference is deliberate.** The
+sixth axis — `invocation`, an appended second call, refused
+`ContextRuleIdsLengthMismatch#3014` at hash `e365e681…` — is network-enforced
+like the rest but is **not a row in this panel**, because it is not a constraint
+a user configures. It is a structural property of how the rule is signed. It
+keeps its place in the deny table on `/app/simulator` and on `/docs/reference`,
+and a reader who counts five here and six there must find that difference stated
+rather than infer that something was quietly dropped.
+
+**The off-chain row must never borrow the visual language of a hash-backed
+one.** Concretely, and enforceable by the design suite the same way the four
+verdict states already are:
+
+- No `ExplorerLink`, no truncated hash, no monospace hash column — the row has
+  nothing to link to, and an empty hash cell reads as *pending*, not as
+  *inapplicable*.
+- It carries `COMPUTED LOCALLY`, which is the existing label for exactly this
+  and already means *nothing on chain asserts it, and no network enforced it*.
+- The reason is stated in the row, not in a footnote: *no audited policy
+  contract constrains a transfer's destination*.
+- The group heading is rendered even when a group has one member. A single
+  ungrouped row beneath five grouped ones reads as an afterthought rather than
+  as a different kind of thing.
+
+The panel copy:
+
+> **Enforced by Limen — recipient allowlist.** Limen's server refuses a payment
+> to an address you have not approved. Unlike your cap, your asset, your
+> function, your contract and your expiry, **the ledger does not enforce this**
+> — no audited policy contract constrains a transfer's destination. Someone
+> holding the agent key could send to any address, up to your cap. Lower your
+> cap if that matters more to you than convenience.
+
+This is the same distinction the simulator already draws between its local deny
+table and the network's refusals, applied to the policy display. The precedent
+for keeping two kinds of refusal visually apart is already in the codebase:
+`errors.ts` deliberately keeps `REVOKED_RULE_CODES` out of
+`BOUNDARY_REFUSAL_CODES` so *"the boundary refused you"* and *"the boundary is
+gone"* cannot render identically.
+
+#### B8.3 The §55 test asserts provenance, and the absence is the finding
+
+Brief §55's *"use unauthorized recipient"* case does not assert "the payment was
+refused". It asserts **where the refusal came from**:
+
+```
+attempt:    send_payment to an address not in the allowlist
+expect:     refused
+expect:     refused_by_limen, NOT refused_by_network
+expect:     no transaction hash — nothing reached a ledger
+expect:     the recorded reason names the off-chain allowlist
+```
+
+The absent hash is the **result**, not a gap in the test. Every other case in
+§10 produces a hash; this one produces a recorded statement that it could not,
+and the report says so in those words. A suite that quietly let this row look
+like the other five would be asserting network enforcement that does not exist —
+which is the precise failure the `resourceLimitExceeded` incident taught this
+repository to test for.
+
+The companion case is the one that proves the honesty of the pair: **with the
+gate bypassed** — calling `packages/custody` with a hand-built decision token for
+a disallowed recipient — the payment **succeeds on-ledger, with a hash**. That
+transaction is recorded in `deployments/testnet.json` as evidence of the limit,
+not hidden as an embarrassment. It is the single clearest demonstration of what
+"enforced by Limen" costs, and it belongs on `/docs/custody`.
 
 ---
 
@@ -601,21 +705,114 @@ Even with a passkey owner (which survives clearing site data) the problem is onl
 half solved: a passkey signs the auth entry but **cannot pay a Stellar fee**
 (`key-roles.ts:51`), and today the fee comes from the browser's local key.
 
-**Proposal, and it is a hard requirement on the MVP:**
+### DECIDED: mandatory. Revocation that depends on Limen's cooperation is not revocation.
 
-1. **Passkey owner is the default** for any account with a deployed agent, not
-   an option beside the browser key.
+That is the one failure the §3 custody answer cannot survive. If Limen holds a
+key that spends, and stopping it requires Limen to be up, honest and willing,
+then the boundary is a promise again and the whole argument collapses back to
+where every other platform already is.
+
+**Five requirements on the MVP:**
+
+1. **Passkey owner is mandatory** for any account with a deployed agent — not a
+   default, not a recommendation. §B9.1 for what that means for existing
+   accounts.
 2. **Limen sponsors the fee for owner revocation.** A Limen-owned fee account
    pays; the owner signs the auth entry with the passkey. Limen cannot forge that
-   entry, so sponsoring the fee grants Limen nothing.
-3. **`valid_until` is mandatory and short** for agent rules — a dead-man switch,
-   so an abandoned agent stops on its own.
-4. **A revocation path that does not require the web app at all**: `/revoke` as a
-   standalone route needing only the passkey, plus `/revoke` as a Telegram
-   command, plus a documented `stellar` CLI invocation in `/docs` for the case
-   where Limen is down. If Limen holds a key that spends, the user must be able
-   to stop it **without Limen's cooperation**. That last one is the only version
-   of this that is a real guarantee, and it is the one that must ship.
+   entry, so sponsoring the fee grants Limen nothing and removes the last reason
+   revocation could need the browser's local key.
+3. **`valid_until` is mandatory and short** for agent rules. **A mitigation, not
+   a substitute** — see §B9.2.
+4. **A revocation path that does not require Limen at all.** `/revoke` as a
+   standalone route needing only the passkey; `/revoke` from Telegram (which
+   deep-links to the passkey, since Telegram must not be able to revoke on its
+   own); and a **documented `stellar` CLI invocation in `/docs/custody`** for the
+   case where Limen is down, gone, or refusing. That last one is the only version
+   of this that is a real guarantee, and it is the one that must ship. It is
+   verified in M8 by revoking an account **with the runtime stopped**, and the
+   resulting hash is recorded.
+5. **No agent deployment from an IP-reached origin** — §B9.3.
+
+#### B9.1 Existing browser-key accounts, and what "cannot be upgraded" means exactly
+
+The owner signer is **fixed at creation**: it is chosen on `/app/accounts/new`
+and written into the account's constructor, and which owner an account has is
+read back from the chain (the Default rule names its verifier) rather than
+remembered. So a browser-key account cannot become passkey-owned **through any
+code path that exists today**.
+
+One precision, because the file that records this finding is explicit that
+nobody should plan around its absence: `packages/chain/src/deploy.ts:29-42` names
+`batch_add_signer` as a contract primitive that **could** add a second owner
+signer later, authorized by the first. It is out of scope for V8 and is not
+being built. But the honest statement is *no upgrade path is built*, not *the
+contract forbids it* — and if enough existing accounts turn out to want one, that
+is the primitive it would be built on.
+
+**So the rule is per-account, evaluated at agent-deploy time**, not a global
+switch and not a migration:
+
+- An account whose Default rule names the **webauthn verifier** → agent
+  deployment proceeds.
+- An account whose Default rule names the **ed25519 verifier** → agent
+  deployment is refused, with a **message rather than a disabled button**:
+
+> **This account is owned by a key in this browser.** An agent Limen runs for
+> you keeps signing after you close this tab — so the key that can stop it must
+> outlive the tab too. Clearing site data would destroy this account's owner key
+> while the agent kept spending.
+>
+> An account's owner is fixed when it is created, so this one cannot be
+> converted. **Create a passkey-owned account** and deploy your agent there.
+>
+> This account keeps working for everything else: derive a boundary, install it,
+> run the browser agent flow at `/app/try`. It is agent deployment specifically
+> that needs an owner your browser cannot lose.
+
+A disabled button with a tooltip would leave a person guessing at a rule; the
+message names the reason, the consequence, and the next action. The existing
+browser-key path is **not deprecated** — it remains the whole of `/app/try`, the
+lifecycle e2e suite, and the three recorded browser runs, none of which involve
+a Limen-held key.
+
+#### B9.2 Expiry is a mitigation, not a substitute
+
+Stated plainly because it is the tempting shortcut: *"`valid_until` bounds the
+damage, so requirement 4 can slip to P1."* It cannot.
+
+**A seven-day `valid_until` is seven days of an agent nobody can stop.** For an
+agent with a 500-unit daily limit that is 3,500 units, spent by a key the owner
+cannot revoke, on a schedule they cannot pause. Expiry bounds the *total*; it
+does nothing about the interval, and the interval is the whole complaint.
+
+Expiry earns its place for the case requirement 4 does not cover — an account
+genuinely abandoned, where nobody is trying to revoke because nobody is left —
+and it is mandatory for that. It is not the answer to *"what if the owner wants
+to stop this now"*. Requirement 4 is, and it ships in M3 or M3 is not done.
+
+#### B9.3 No agent deployment from an IP-reached origin
+
+Inherited from PLAN-V7 §5.4.2's measured finding: **WebAuthn refuses an
+IP-literal origin.** A Relying Party ID must be a registrable domain, so
+`navigator.credentials.create` on `http://127.0.0.1:3000` fails with
+`SecurityError: This is an invalid domain` before any authenticator is consulted.
+`localhost` and a real domain are the two origins where the passkey path
+functions at all.
+
+Since B9 makes a passkey owner mandatory for agent deployment, that finding stops
+being a developer-ergonomics footnote and becomes a **deployment
+precondition**. If the app is reached by IP, no passkey can be created, so no
+compliant account can be created, so no agent may be deployed — and the failure
+must arrive as a stated reason at the top of the flow rather than as a
+`SecurityError` in the console at the moment someone commits.
+
+**So:** the create-agent flow checks the origin **before** offering anything, and
+an IP-literal origin gets a named refusal — *Limen must be reached by a domain
+name; passkeys cannot be created on an IP address* — with `localhost` called out
+as the working local option. The check is server-side as well as client-side, so
+a deployment API call from an IP-reached origin is refused rather than merely
+undisplayed. This also becomes a documented hosting requirement in
+`/docs/custody`.
 
 ---
 
@@ -1183,47 +1380,129 @@ opinion about it.
 
 # PART IX — MILESTONES
 
-**M0 — Repair (prerequisite, not V8).** Restore `caveats.test.ts` (B0). Widen the
-tripwire's `ROOTS` to every workspace (B4). Both before any new subsystem, so the
-fences exist before there is something to fence.
+Each milestone ends with the fence that keeps it honest, because a milestone that
+ships behaviour and defers its check is how the B0 fault happened.
 
-**M1 — Foundations.** `packages/db` + migrations. `packages/shared` (redactor,
-labels, key roles lifted out of `apps/web`). Passkey authentication with
-server-side origin verification. Sessions. Redis. **The label changes from B1,
-B2, B4, B5, B6 land here**, in the same commits as the code that makes them true —
-never after.
+### M0 — Repair. Prerequisite, not V8. Nothing else starts until this lands.
 
-**M2 — Custody.** `packages/custody`. Keygen, envelope encryption, the signer
-service, decision tokens. The `SERVER_SIGNERS` registry and its CI fence (B3).
-The schema test asserting no plaintext column exists.
+- Restore `caveats.test.ts` (**B0**), two-sided, with the non-vacuity guard.
+- Correct `README.md:507` and `README.md:572` to name the restored suite truly.
+- Widen the tripwire's `ROOTS` from an enumerated list to discovered
+  `packages/*/src` + `apps/*/src` (**B4**), with a guard asserting the discovered
+  set is non-empty and contains the known workspaces.
 
-**M3 — Agent lifecycle.** Create → configure → deploy → active → pause → revoke.
-Both security modes (§17). Deployment reuses `deployAccount`, `installBoundary`.
-**Ends with a recorded testnet run and its hashes in `deployments/testnet.json`**,
-per the repository's standing rule. Revocation-without-Limen (B9) ships here, or
-M3 is not done.
+**Done when:** the suite is green, and deleting any pinned caveat or adding an
+unscanned workspace turns it red. No new subsystem exists yet, on purpose — the
+fences go up before there is anything to fence.
 
-**M4 — Runtime and tools.** `packages/agent`, `packages/tools`,
-`packages/policy`. Read tools, then `send_payment`. Web chat first — Telegram is
-a channel, not a prerequisite.
+### M1 — Foundations
 
-**M5 — End-to-end on testnet.** The brief §51 demo, driven from the web chat.
-Permitted, refused, revoked. Hashes recorded.
+`packages/db` + migrations. `packages/shared` (redactor, status labels, key roles
+lifted out of `apps/web`). Passkey authentication with **server-side origin and
+challenge verification** (§7.3 — the contract checks neither, so the login path
+must). Sessions. Redis, retiring the two process-local `TODO(roadmap)`s.
 
-**M6 — Telegram.** Adapter, pairing, commands, notifications. The scheduler
-("every Friday") lands here with it.
+**The label and prose changes from B1, B2, B5 and B6 land here**, in the same
+commits as the code that makes them true — never after. B4's third label
+(`TESTNET ONLY · AGENT KEY (LIMEN-HELD)`) is added here and is unused until M2,
+which is the correct order: the closed set gains the label before anything can
+render it.
 
-**M7 — Dashboard.** Lifecycle state, balances, the boundary read from the chain,
-the activity feed with its four outcomes distinguished, transaction previews, the
-policy panel partitioned into `Enforced by the network` / `Enforced by Limen`.
+**Done when:** `NO CUSTODY` appears nowhere in the tree, its two replacements are
+in the closed set and rendered, and `caveats.test.ts` pins the retirement in both
+directions.
 
-**M8 — Security suite.** All nineteen attacks from brief §55, each producing a
-hash or stating plainly why there is none. Then the landing rewrite (§35/§36),
-last — because the page states measured numbers and the measurements have to
-exist first.
+### M2 — Custody
 
-**P2, explicitly deferred:** SDK, marketplace, multi-agent, DeFi tools,
-mainnet, agentic payments, Rust codegen.
+`packages/custody`. Server-side keygen, envelope encryption (per-agent data key,
+KMS-wrapped master), the signer service, single-use decision tokens. The signer
+**rebuilds the transaction from the token's arguments** — there is no "sign this
+XDR" entrypoint, per demo-signer fence 3.
+
+- `SERVER_SIGNERS` registry and its CI fence (**B3**), two-sided like the
+  existing sentinel check.
+- Schema test: no plaintext-secret column exists under any name.
+- Shared redactor applied to every server egress, not only error reports.
+- Server-side twin of the `S…` bundle grep: no plaintext seed reaches any log
+  sink, proved against a canary.
+
+**Done when:** an agent key can sign, and every fence that would catch it leaking
+is live and proven non-vacuous.
+
+### M3 — Agent lifecycle, and the revocation guarantee
+
+Create → configure → deploy → active → pause → revoke. Both security modes
+(brief §17). Deployment reuses `deployAccount` and `installBoundary` unchanged.
+
+- **B9.1** — passkey-owner gate at agent-deploy time, per account, with the
+  message rather than a disabled button.
+- **B9.3** — origin check before the flow offers anything, client and server.
+- **B9** requirement 2 — Limen-sponsored fee for owner revocation.
+- **B9** requirement 3 — mandatory short `valid_until`.
+- **B9** requirement 4 — the three revocation paths, including the documented
+  `stellar` CLI invocation.
+
+**Done when:** a recorded testnet run is in `deployments/testnet.json`, **and**
+an account has been revoked with the runtime process stopped, with that hash
+recorded. Revocation-without-Limen is not a P1 item and does not slip; without
+it the §3 custody answer is not true and M3 is not done.
+
+### M4 — Runtime and tools
+
+`packages/agent`, `packages/tools`, `packages/policy`. Read tools first, then
+`send_payment`. Web chat first — Telegram is a channel, not a prerequisite.
+
+- The recipient allowlist lands here, **server-side in `packages/policy`**
+  (**B8.1**), with the component-import ban pinned by test.
+- The four-outcome error vocabulary (§4.4), with *refused by Limen* structurally
+  unable to borrow *refused by the network*'s badge.
+- Dependency-direction test: `agent` imports neither `core` nor `custody`.
+
+**Done when:** a tool call reaches a ledger, and a gate refusal is recorded with
+its provenance rather than as a generic failure.
+
+### M5 — End-to-end on testnet
+
+The brief §51 demo, driven from the web chat: permitted, refused, revoked, and
+the same call failing differently afterwards. Hashes recorded. **This is the
+smallest working MVP** (§X) and the point at which the product exists.
+
+### M6 — Telegram
+
+Adapter, pairing token, `initData` HMAC, webhook secret, commands,
+notifications. The scheduler ("every Friday") lands with it. Isolation test:
+the adapter imports no policy, custody or chain module.
+
+### M7 — Dashboard
+
+Lifecycle state, balances, the boundary **read from the chain at a stated
+sequence number**, the activity feed with its four outcomes distinguished,
+transaction previews.
+
+- **B8.2** — the partitioned policy panel: five network rows each with a refusal
+  hash, one Limen row with no hash and the reason in the row.
+- Design-suite assertions that the off-chain row carries no `ExplorerLink`, no
+  hash column, and `COMPUTED LOCALLY` — enforced the way the four verdict states
+  already are.
+
+### M8 — Security suite, then the landing
+
+All nineteen attacks from brief §55, each producing a hash or stating plainly why
+there is none.
+
+- **B8.3** — the unauthorized-recipient case asserts `refused_by_limen`, **not**
+  `refused_by_network`, and asserts the absent hash as its result.
+- Its companion: the gate bypassed, the payment **succeeding on-ledger with a
+  hash**, recorded as evidence of the limit and published on `/docs/custody`.
+- The full set re-run against `HostileModelProvider`, with identical outcomes
+  (brief §28).
+
+Then the landing rewrite (§35/§36) **last**, because the page states measured
+numbers and the measurements have to exist first — including the duration claim,
+which does not appear at all until `evidence.mjs` generates one (§7.2).
+
+**P2, explicitly deferred:** SDK, marketplace, multi-agent, DeFi tools, mainnet,
+agentic payments, Rust codegen, `batch_add_signer` owner upgrades.
 
 ---
 
@@ -1376,27 +1655,48 @@ in both directions: the old sentence must be absent, the new one present.
 8. Every number on the landing page is generated. The duration claim exists only
    if it was measured.
 9. `rustSourceFiles` is still `0`. `npm audit` is still `0`.
-10. All nineteen §55 attacks are run and recorded.
-11. `caveats.test.ts` exists again and pins every caveat in both directions.
-12. The full suite is green, and the count on the page matches the count in the
+10. All nineteen §55 attacks are run and recorded — including the
+    unauthorized-recipient case, which asserts `refused_by_limen` and records its
+    **absent** hash as the result, and its bypassed-gate companion, which records
+    a **present** one.
+11. The policy panel is partitioned, five rows carry refusal hashes, one carries
+    `COMPUTED LOCALLY` and no link, and no off-chain row anywhere borrows a
+    hash-backed row's visual language.
+12. No agent has been deployed from an IP-reached origin, and the flow refuses
+    one by name.
+13. `caveats.test.ts` exists again, pins every caveat in both directions, and
+    fails rather than falls silent if the thing it pins is deleted.
+14. The full suite is green, and the count on the page matches the count in the
     run.
 
 ---
 
-## Two things this plan asks you to decide
+## The two open decisions, taken
 
-**1. B8 — recipient allowlists.** The brief promises them nine times; the chain
-cannot enforce them. This plan recommends shipping them as an explicitly
-off-chain check, labelled as sharply as the passkey caveat is. The alternative is
-writing an unaudited Rust policy, which breaks design rule 2. **If you want them
-on-chain, that is a different plan and it starts with an audit budget.**
+Both were put to the owner and both are resolved. Recorded here rather than only
+in their sections, because a plan that reads as though its hardest questions are
+still open invites them to be reopened at the moment they are inconvenient.
 
-**2. B9 — passkey as the default owner.** This plan makes it mandatory for any
-account with a deployed agent, because a browser-only owner key plus a
-server-held agent key is a configuration where the user can lose the ability to
-stop something that is still spending. That closes the browser-key path for new
-agents. It is the right trade and it is a product decision, not an
-implementation detail.
+**1. B8 — recipient allowlists: off-chain, under three conditions.** The check
+lives server-side in the tool layer, never in React (B8.1). The policy panel is
+partitioned into five network-enforced rows carrying refusal hashes and one
+Limen-enforced row carrying none, with allowed-contract staying in the top group
+because it genuinely is network-enforced (B8.2). The §55 test asserts *where* the
+refusal came from, and the absent hash is the finding rather than a gap (B8.3).
+Going on-chain remains a different plan that starts with an audit budget.
+
+**2. B9 — passkey owner: mandatory, not default.** Revocation that depends on
+Limen's cooperation is not revocation, and it is the one failure the §3 custody
+answer cannot survive. Expiry is a mitigation and never a substitute — a
+seven-day `valid_until` is seven days of an agent nobody can stop (B9.2). The
+owner signer is fixed at creation, so the rule is a per-account gate at
+agent-deploy time with a message naming the reason, not a global switch and not a
+disabled button (B9.1). And it inherits V7's measured registrable-domain finding:
+no agent deployment from an IP-reached origin (B9.3).
+
+**And one that was not a decision, only a repair.** B0 — the README cites a test
+that does not exist. It is M0, it lands before any V8 subsystem, and the suite is
+restored rather than the sentences struck.
 
 Everything else in this document follows from the §3 answer, and the §3 answer
 follows from one sentence: an agent that answers a message signs while nobody's
