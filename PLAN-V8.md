@@ -1336,16 +1336,16 @@ stop an agent is holding a phone — but **`/revoke` requires the passkey**, so 
 bot replies with a one-time deep link into the web app. Telegram alone cannot
 revoke, and it must not be able to: Telegram is not the security boundary.
 
-## 7.5 Deployment
+## 7.5 Deployment and the stack
 
 | Component | Where | Why |
 |---|---|---|
 | `apps/web` | Vercel | Already shaped for it |
-| `apps/runtime` | One long-lived Node container (Fly/Railway/Render) | Needs a scheduler, a queue, and **a single writer per agent** for sequence numbers |
+| `apps/runtime` | One long-lived Node container (Fly/Railway/Render) | §7.5.4 — and **not for the reason usually given** |
 | `apps/telegram` | Same container, separate route | One deploy, no cross-service auth |
-| Postgres | Managed (Neon/Supabase/RDS) | — |
+| Postgres | Neon (managed) | §7.5.2 |
 | Redis | Managed | Shared rate limits, the tx cache, the submission lock — retires two `TODO(roadmap)`s |
-| KMS | AWS KMS / GCP KMS / Vault | The master key that must not sit beside the database |
+| Master key | `KeyProvider` interface; env-var master at M2 | §7.5.3 |
 
 **Sequence-number serialization is a correctness requirement, not an
 optimisation.** The demo signer already serializes submissions so concurrent
@@ -1353,6 +1353,199 @@ reviewers cannot collide; with N agents sharing fee accounts and a scheduler
 firing, this becomes a per-fee-account lock in Redis. Two agents building on the
 same sequence number produce a failure that looks exactly like a refusal, which
 is the one failure this product cannot afford to render wrong.
+
+### 7.5.1 Drizzle, specifically, and not Prisma
+
+Both were candidates. Drizzle wins on a reason particular to this repository
+rather than on general preference.
+
+**The audit gate is at `--audit-level=low`, which is the strictest npm offers,
+and it currently stands at zero.** Getting it there cost real work: 36 advisories
+reduced to 23 by five overrides, then to zero only by *removing a dependency
+nothing imported* — `@creit.tech/stellar-wallets-kit`, which dragged in
+`elliptic` through two independent paths under an advisory covering `*`, every
+published version, with no version to pin to and no override that could reach
+it. The README documents that episode at length, and its lesson is that a
+transitive dependency you do not control can hold a security gate hostage
+indefinitely.
+
+Prisma ships a binary query engine and a substantially larger dependency
+surface. Drizzle is TypeScript that compiles to SQL, with the driver as the only
+native-adjacent piece. On a gate that has already been held hostage once, the
+smaller surface is not a stylistic preference — it is the difference between an
+advisory being a fix and an advisory being a hostage negotiation.
+
+Two secondary reasons that matter here specifically:
+
+- **Migrations are readable SQL files.** A reviewer can check them by reading,
+  which is the standard every other artefact in this repository is held to.
+  Prisma's migration diffing is a step further from what actually runs.
+- **No codegen step in the build.** `evidence:check` already re-runs three
+  suites; adding a generate step that must be in sync or the build lies is the
+  class of problem this project keeps designing away from.
+
+### 7.5.2 Connection pooling — the decision, not a detail
+
+Correct: a plain `pg` client from serverless functions exhausts Postgres.
+Vercel autoscales to 30,000 concurrent executions, each instance opening its own
+connection, against a Postgres accepting a few hundred. Vercel's own limits page
+lists **1,024 file descriptors shared across concurrent executions** and names
+database connections as consumers of them.
+
+**Two access paths, one schema, chosen per runtime shape:**
+
+| Consumer | Driver | Endpoint | Why |
+|---|---|---|---|
+| `apps/web` (Vercel, many short-lived instances) | `drizzle-orm/neon-http` | Neon HTTP | Stateless. Each query is an HTTP request; **there is no connection to exhaust**, so the 30,000-instance case has no pool to run out of. |
+| `apps/runtime` (one long-lived process, small fixed count) | `drizzle-orm/node-postgres` with a bounded `pg.Pool` | Neon **pooled** (`-pooler`, PgBouncer transaction mode) | A known, small number of processes holding a bounded pool is the case a pool is actually for. |
+| Migrations | `drizzle-kit` | Neon **direct** (unpooled) | Transaction-mode poolers break DDL and the session advisory locks migration tools take. Running migrations through the pooler is a well-known way to get a half-applied schema. |
+
+**The constraint this buys, stated because it is load-bearing elsewhere in this
+plan.** `neon-http` is documented as supporting single non-interactive queries
+and **not** interactive transactions — multi-statement work with conditional
+logic between statements needs the WebSocket driver or the pooled endpoint. That
+is acceptable because of how the work divides: the web app reads and writes
+single rows, and **every multi-statement money-path operation lives in
+`apps/runtime`**, which is on `node-postgres` and has full transaction support.
+If a web route turns out to need an interactive transaction, it moves to the
+runtime API rather than the driver changing — which is the right pressure anyway,
+since a money-path write reaching the database from a Vercel function is
+something this architecture should resist.
+
+And transaction-mode pooling breaks three things the design must therefore not
+use: **session-level advisory locks** (the sequence lock is Redis — already the
+plan), **`LISTEN`/`NOTIFY`** (job dispatch is Redis, not Postgres pub/sub), and
+**named prepared statements** (Drizzle's `.prepare()` is not used on the pooled
+path). All three are decided here rather than discovered as an intermittent
+failure under load.
+
+**One thing to verify at M1 rather than assume**, in the idiom this repository
+uses everywhere else: that `drizzle-orm/neon-http` behaves as documented for the
+specific query shapes the web app needs, measured against a real Neon instance
+before the schema is built on top of it. The driver's transaction limitation is
+documented; how it surfaces in Drizzle's API is the part worth ten minutes and a
+recorded result.
+
+### 7.5.3 KMS: build the interface, not the dependency
+
+**Agreed, and adopted.** The interface ships at M2; the dependency does not.
+
+```ts
+interface KeyProvider {
+  wrapDataKey(plaintext: Uint8Array): Promise<WrappedKey>;
+  unwrapDataKey(wrapped: WrappedKey): Promise<Uint8Array>;
+  readonly id: string;   // recorded on every AgentKey row
+}
+```
+
+Two implementations. `EnvMasterKeyProvider` reads a master key from an
+environment variable. `KmsKeyProvider` calls AWS KMS / GCP KMS / Vault and is
+**not written at M2**.
+
+The threat model this is honest about:
+
+| Threat | Env-var master | Real KMS |
+|---|---|---|
+| Database dump | Protected | Protected |
+| Backup leak | Protected | Protected |
+| SQL injection | Protected | Protected |
+| Read-only DB access by an operator | Protected | Protected |
+| **Full host compromise / env leak** | **Not protected** | Protected (key never leaves the KMS) |
+
+So the two differ **only** when the environment variable leaks along with the
+database — and that is precisely the exposure `LIMEN_DEMO_SECRET` already carries
+today, on testnet, deliberately, and documented. Adding a second value with the
+same exposure profile does not introduce a new class of risk; it widens an
+accepted one.
+
+Three conditions on accepting that trade:
+
+1. **It is stated on `/docs/custody`, in the same register as everything else** —
+   not in a config comment. Draft: *"Your agent's key is encrypted in our
+   database with a master key held in the server's environment, not in a
+   hardware security module. Someone who obtained both the database and the
+   server's environment could use your agent's key — within the boundary your
+   account enforces, which is the part that does not depend on us. On mainnet
+   this would not be acceptable, and it is one of the reasons there is no
+   mainnet."*
+2. **Real KMS is a documented mainnet precondition**, listed beside "not audited"
+   as a thing that must become true first — not a `TODO(roadmap)` that decays.
+3. **Swapping it is a module, not a refactor.** Pinned by test: exactly one
+   module constructs a `KeyProvider`, `kms_key_id` is recorded on every
+   `AgentKey` row from the first migration so rows are attributable after a
+   provider change, and the env-var implementation **refuses to construct when
+   `NODE_ENV=production` and the network is not testnet** — the same shape as
+   `demo-signer.ts`'s hard throw, which is a fence rather than a warning.
+
+### 7.5.4 Where the runtime runs — decided here, at M1, not discovered at M4
+
+Correct that this matters more than the database, and correct to force it now.
+The recommendation is a **persistent process for `apps/runtime`, with `apps/web`
+staying on Vercel** — but the usual reason for that is not the real one, and
+getting it right changes what the design has to defend.
+
+**Duration is not the binding constraint.** Measured against Vercel's current
+limits rather than assumed: with fluid compute, Node functions default to **300s
+on every plan**, with 800s available on Pro and Enterprise. An agent turn — LLM
+call, build, simulate, sign, re-simulate enforcing, submit, wait for close — is
+**15–45 seconds typically**. It fits with an order of magnitude to spare. And
+Vercel bills active CPU, explicitly *not* I/O wait, so the cost objection to
+sitting on a ledger close is weaker than it sounds too. If duration were the only
+issue, the runtime would go on Vercel.
+
+**The four reasons that do bind:**
+
+1. **Durable execution of money-moving work.** An agent turn that dies after
+   submission and before recording has spent funds with no record. This needs a
+   queue with at-least-once delivery, an idempotency key checked before
+   submission, and a retry that can tell "not yet submitted" from "submitted,
+   result unknown". That is a worker-and-queue shape. It is buildable on
+   functions, but every part of it is then reconstructed from primitives that a
+   persistent worker gets for free.
+2. **The scheduler.** Brief §6's *"pay my contractor 20 USDC every Friday"* is a
+   different shape from a request. Vercel Cron can poll a `ScheduledTask` table
+   on a minute tick and would work; a persistent process with a real scheduler
+   is the honest fit, and it is the same process the queue already needs.
+3. **Single-writer discipline.** Redis locks make correct behaviour *possible*
+   across N instances. A bounded set of long-lived workers makes it *cheap*, and
+   makes the failure mode when the lock layer misbehaves a queue backup rather
+   than two transactions on one sequence number — which, per §7.5, is the one
+   failure this product cannot afford to render wrong.
+4. **Availability coupling.** The money path's uptime should not be a property
+   of the frontend host's function semantics. Separating them means a web
+   deployment cannot take the agents down.
+
+**And the accept-fast, work-async shape follows from these rather than from
+duration.** Telegram retries an unacknowledged webhook, and an agent turn should
+not be inside a webhook handler regardless of how long the handler is allowed to
+live:
+
+```
+Telegram webhook / web chat POST
+        │  verify, enqueue, ACK immediately  (< 1s)
+        ▼
+    Redis queue
+        │
+        ▼
+  apps/runtime worker — the agent turn, idempotency-keyed
+        │
+        ▼
+  result delivered: Telegram sendMessage, or SSE to the open web tab
+```
+
+**The honest alternative, recorded so it is not rediscovered as an idea.** This
+*could* run entirely on Vercel: fluid compute for duration, Vercel Cron for the
+scheduler, Redis for locks, `waitUntil` for post-response work, and Vercel
+Workflows — which exist for exactly the pause-and-resume case — for durability.
+That is a legitimately simpler operational story, one deploy target, and it
+should be reconsidered if the container turns out to be the main source of
+operational cost. It is not chosen because reasons 1 and 4 are about the money
+path specifically, and the money path is the thing this project has spent seven
+plans making checkable.
+
+**Decided at M1**, which is where the process boundary gets built into the
+package layout. Discovering it at M4 would mean moving `packages/agent`'s
+callers, its queue, and its scheduler after they have consumers.
 
 ---
 
@@ -1383,7 +1576,7 @@ opinion about it.
 Each milestone ends with the fence that keeps it honest, because a milestone that
 ships behaviour and defers its check is how the B0 fault happened.
 
-### M0 — Repair. Prerequisite, not V8. Nothing else starts until this lands.
+### M0 — Repair. Its own branch, its own PR, off `main`.
 
 - Restore `caveats.test.ts` (**B0**), two-sided, with the non-vacuity guard.
 - Correct `README.md:507` and `README.md:572` to name the restored suite truly.
@@ -1391,16 +1584,41 @@ ships behaviour and defers its check is how the B0 fault happened.
   `packages/*/src` + `apps/*/src` (**B4**), with a guard asserting the discovered
   set is non-empty and contains the known workspaces.
 
-**Done when:** the suite is green, and deleting any pinned caveat or adding an
-unscanned workspace turns it red. No new subsystem exists yet, on purpose — the
-fences go up before there is anything to fence.
+**Branched from `main`, not from the V8 branch, and the reason is not
+separability.** M0 is correct whether or not V8 ever happens. Verified on
+`main` at `b9cdc82`: `README.md:507` and `README.md:572` both cite
+`apps/web/test/caveats.test.ts`, and `git cat-file -e main:apps/web/test/caveats.test.ts`
+fails — the file is not there. That is a live inaccuracy in the shipped README of
+the default branch today. If V8 stalls, gets rethought, or is abandoned, this
+repair must already have landed rather than being held hostage to it.
 
-### M1 — Foundations
+**Done when:** the suite is green, deleting any pinned caveat turns it red,
+adding an unscanned workspace turns it red, and the PR is merged to `main`
+independently of anything else in this plan.
 
-`packages/db` + migrations. `packages/shared` (redactor, status labels, key roles
-lifted out of `apps/web`). Passkey authentication with **server-side origin and
-challenge verification** (§7.3 — the contract checks neither, so the login path
-must). Sessions. Redis, retiring the two process-local `TODO(roadmap)`s.
+### M1 — Foundations, and the process boundary
+
+`packages/db` + Drizzle migrations (§7.5.1). `packages/shared` (redactor, status
+labels, key roles lifted out of `apps/web`). Passkey authentication with
+**server-side origin and challenge verification** (§7.3 — the contract checks
+neither, so the login path must). Sessions. Redis, retiring the two
+process-local `TODO(roadmap)`s.
+
+**Three stack decisions land structurally here, not just on paper:**
+
+- **§7.5.2** — the two access paths wired and the third proved: `neon-http` from
+  `apps/web`, bounded `pg.Pool` from `apps/runtime`, migrations against the
+  direct endpoint. Plus the ten-minute measurement of how `neon-http`'s
+  transaction limitation surfaces in Drizzle's API, **recorded** rather than
+  assumed.
+- **§7.5.3** — the `KeyProvider` interface exists with the env-var
+  implementation and its production refusal, and exactly one module constructs
+  one, pinned by test. `kms_key_id` is on `AgentKey` from the **first** migration,
+  so rows stay attributable across a future provider swap.
+- **§7.5.4** — `apps/runtime` exists as a separate deployable with the queue and
+  the worker loop, even though nothing enqueues yet. The process boundary is a
+  property of the package layout, and building it after `packages/agent` has
+  consumers means moving them.
 
 **The label and prose changes from B1, B2, B5 and B6 land here**, in the same
 commits as the code that makes them true — never after. B4's third label
