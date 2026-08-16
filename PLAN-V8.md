@@ -1473,6 +1473,52 @@ before the schema is built on top of it. The driver's transaction limitation is
 documented; how it surfaces in Drizzle's API is the part worth ten minutes and a
 recorded result.
 
+#### UNRUN — the `neon-http` transaction measurement
+
+**Status: not run. Not deferred, not waived, not checked by anybody.** Recorded
+in the register §11's by-hand run uses, because the failure mode of a
+measurement like this is that it silently becomes "checked" by nobody looking
+again.
+
+**What it would settle.** Neon documents that `neon-http` supports single
+non-interactive queries and not interactive transactions. What is *not*
+documented, and is the part that matters, is **how that surfaces in Drizzle's
+API**. There are three possibilities and they are not equally survivable:
+
+1. `db.transaction()` is absent from the type — a compile error, which is the
+   good case and needs no further fence.
+2. It exists and throws at runtime — recoverable, but it must be proved to throw
+   rather than assumed to, or a rarely-taken route carries it to production.
+3. **It exists and silently runs the statements unwrapped.** This is the case
+   the measurement is for. A caller believing three writes are atomic when they
+   are three independent writes is precisely the failure the whole two-path
+   division of work exists to prevent, and nothing in the type system or the
+   test suite would show it.
+
+**What it cannot be inferred from.** Not from the Neon documentation, which
+describes the driver and not the ORM wrapper. Not from `drizzle-orm`'s types
+alone, because case 3 is a runtime behaviour that type inspection cannot
+distinguish from case 1. And **not from the local Postgres this milestone runs
+against**: `neon-http` speaks Neon's HTTP protocol, so a container cannot
+exercise the driver at all. Every other schema property in M1 is proved against
+a real database; this one specifically cannot be.
+
+**What would close it.** A Neon instance, and roughly ten minutes: call
+`db.transaction()` on a `createWebDb` handle with two statements where the
+second fails, then read the table. If the first statement's effect survives, it
+is case 3, and `createWebDb` grows a fence that makes `transaction` unreachable
+— the same shape as `assertPoolable` in `packages/db/src/forbidden.ts`, and for
+the same reason: a limitation that only shows up as silent wrong behaviour has
+to be turned into a loud refusal.
+
+**Why M1 proceeded without it.** The two properties M1 actually has to
+establish — that the migration applies, and that the schema fences fire — are
+both provable against local Postgres, and both were. This is a question about
+one driver's behaviour, and holding four commits of foundations on a Neon
+account that does not exist yet would have been the wrong trade. `web.ts`'s
+header states the same thing at the code, so a reader of the module is told
+before a reader of this plan.
+
 ### 7.5.3 KMS: build the interface, not the dependency
 
 **Agreed, and adopted.** The interface ships at M2; the dependency does not.

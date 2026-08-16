@@ -49,6 +49,11 @@ const MANIFEST = join(root, 'packages/chain/src/wasm/manifest.json');
 const SUITES = [
   { workspace: '@limen/core', directory: 'packages/core', covers: 'synthesis and the deny-case harness' },
   { workspace: '@limen/chain', directory: 'packages/chain', covers: 'lowering, refusal decoding, and the auth encoding' },
+  {
+    workspace: '@limen/db',
+    directory: 'packages/db',
+    covers: 'the schema fences, and what a pooled connection may not do',
+  },
   // `covers` named `caveats` until the V6 rebuild. `caveats.test.ts` was one of
   // the four suites step 1 deleted with the rendering layer — it pinned
   // sentences on a landing page that no longer exists — so the description
@@ -98,6 +103,37 @@ function runSuite({ workspace, directory, covers }, reportDirectory) {
   const result = JSON.parse(readFileSync(report, 'utf8'));
   if (result.success !== true || result.numFailedTests > 0) {
     throw new Error(`${workspace} is not green; refusing to record a passing count`);
+  }
+
+  // A skipped test is not a passing test, and the landing says "passing".
+  //
+  // This became reachable when `@limen/db` landed. Its append-only fence cannot
+  // be proved without a database — it has to connect as the constrained role
+  // and watch an UPDATE be refused — so those assertions skip on a machine with
+  // no Postgres. `numTotalTests` counts them either way, which is what keeps
+  // `evidence:check` environment-independent, and is exactly what would let a
+  // number generated on a laptop with no database claim six tests passed that
+  // never ran.
+  //
+  // Refused rather than subtracted. Recording the smaller number would make the
+  // committed evidence depend on who generated it, and `evidence:check` would
+  // then fail in CI for a reason that reads as drift. The fix is to run the
+  // service, which is the same thing CI does.
+  if (result.numPendingTests > 0) {
+    const pending = result.testResults
+      .flatMap((file) => file.assertionResults ?? [])
+      // `numPendingTests` is the count; the per-assertion status vitest writes
+      // for the same tests is `skipped`. Both spellings are matched rather than
+      // the pair being assumed to agree, because a mismatch here would print an
+      // empty list under a correct count — a message that says something is
+      // wrong and not which thing.
+      .filter((assertion) => assertion.status === 'pending' || assertion.status === 'skipped')
+      .map((assertion) => assertion.fullName);
+    throw new Error(
+      `${workspace} skipped ${result.numPendingTests} test(s); refusing to record them as passing.\n` +
+        `${pending.map((name) => `  - ${name}`).join('\n')}\n` +
+        'Most likely a service is not running. `@limen/db` needs TEST_DATABASE_URL pointing at a Postgres.',
+    );
   }
   return {
     workspace,

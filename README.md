@@ -418,6 +418,13 @@ packages/shared/    @limen/shared — the words every surface states its limits 
   status-labels.ts  the closed label set; a screen cannot invent a member
   key-roles.ts      which key is acting, and the sentences that go with it
   redact.ts         what must never reach a log, a report, or a webhook
+packages/db/        @limen/db — schema, migrations, and two access paths
+  schema.ts         14 tables; what it cannot hold is the design
+  amount.ts         numeric(39, 0) <-> bigint. No float goes near an amount
+  forbidden.ts      what a transaction-mode pooler breaks, refused at runtime
+  web.ts            neon-http, for Vercel. No connection to exhaust
+  runtime.ts        a bounded pg.Pool, for the one long-lived process
+  migrations/       readable SQL, applied against the direct endpoint
 packages/chain/     @limen/chain — everything that touches the network
   lower.ts          PolicyProposal -> InstallPlan; refuses what it cannot enforce
   plan.ts           plan types and the OpenZeppelin limits they respect

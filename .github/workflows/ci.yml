@@ -11,6 +11,37 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # A real Postgres, because one fence in `@limen/db` cannot be proved by
+    # reading. `audit_events` is append-only by GRANT rather than by trigger,
+    # and the only way to see a privilege refused is to connect as the role it
+    # constrains and try. `append-only.test.ts` skips with a printed notice on a
+    # developer machine with no database and **fails** when `CI` is set — so
+    # this service is not a convenience, it is what stops an unproven fence
+    # going green on the run that gates a merge.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: limen
+          POSTGRES_PASSWORD: limen
+          POSTGRES_DB: limen
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U limen"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The DIRECT connection string. There is no pooler in front of this
+      # container, which matches how migrations are run everywhere else:
+      # `drizzle.config.ts` and `scripts/migrate.mjs` both refuse a host
+      # containing `-pooler`.
+      MIGRATE_DATABASE_URL: postgresql://limen:limen@localhost:5432/limen
+      TEST_DATABASE_URL: postgresql://limen:limen@localhost:5432/limen
+
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +84,23 @@ jobs:
       # reason the e2e suite is not: every run spends testnet funds.
       - name: Test @limen/chain (lowering, refusals, encodings)
         run: npm run test -w @limen/chain
+
+      # Applied before the suite that reads them, so the append-only test has a
+      # schema to be refused against. This step is also the only proof that the
+      # committed migrations actually apply to an empty database — a migration
+      # that has never been run is a file, not a schema.
+      - name: Apply migrations to a fresh database
+        run: npm run migrate -w @limen/db
+
+      # The schema fences (no plaintext-secret column, no float near an amount,
+      # nothing caching a claim about chain state) plus the three things a
+      # transaction-mode pooler breaks. The last of those is the reason this job
+      # has a Postgres at all and the reason that Postgres is not enough on its
+      # own: it accepts session advisory locks, LISTEN/NOTIFY and named prepared
+      # statements, all of which fail against Neon's pooled endpoint. The source
+      # scan is what catches them; the container is what proves the grant.
+      - name: Test @limen/db (schema fences, pooler portability, append-only)
+        run: npm run test -w @limen/db
 
       - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web

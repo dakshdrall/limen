@@ -11,7 +11,8 @@
     "build:core": "npm run build -w @limen/core",
     "build:chain": "npm run build -w @limen/core && npm run build -w @limen/chain",
     "build:shared": "npm run build -w @limen/shared",
-    "test": "npm run build -w @limen/core && npm run test -w @limen/core && npm run test -w @limen/chain && npm run test -w @limen/web",
+    "build:db": "npm run build -w @limen/db",
+    "test": "npm run build -w @limen/core && npm run test -w @limen/core && npm run test -w @limen/chain && npm run test -w @limen/db && npm run test -w @limen/web",
     "lint": "npm run lint -w @limen/web",
     "evidence": "node scripts/evidence.mjs",
     "evidence:check": "node scripts/evidence.mjs --check",
@@ -25,6 +26,8 @@
     "uuid": ">=11.1.1",
     "postcss": ">=8.5.18",
     "sharp": ">=0.35.0",
-    "nanoid": ">=3.3.18"
+    "nanoid": ">=3.3.18",
+    "esbuild": ">=0.25.0",
+    "@esbuild-kit/core-utils": { "esbuild": ">=0.25.0" }
   }
 }

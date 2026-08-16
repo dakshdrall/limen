@@ -148,12 +148,20 @@ describe('the test totals are internally consistent', () => {
   it('sums the per-suite counts', () => {
     const summed = EVIDENCE.tests.suites.reduce((total, suite) => total + suite.tests, 0);
     expect(EVIDENCE.tests.total).toBe(summed);
-    expect(EVIDENCE.tests.suites).toHaveLength(3);
+    expect(EVIDENCE.tests.suites).toHaveLength(4);
   });
 
-  it('covers all three workspaces, so a suite cannot be dropped and go unnoticed', () => {
+  it('covers all four workspaces, so a suite cannot be dropped and go unnoticed', () => {
+    // Three until V8 M1 added `@limen/db`. The count and the names are both
+    // written out on purpose: the count alone would let a suite be swapped for
+    // another, and the names alone would let one be added without anybody
+    // deciding to. This test going red when a workspace gains a suite is the
+    // intended behaviour — the landing states these numbers, and a new suite
+    // arriving in them should be a decision rather than a side effect.
     const workspaces = EVIDENCE.tests.suites.map((suite) => suite.workspace);
-    expect(new Set(workspaces)).toEqual(new Set(['@limen/core', '@limen/chain', '@limen/web']));
+    expect(new Set(workspaces)).toEqual(
+      new Set(['@limen/core', '@limen/chain', '@limen/db', '@limen/web']),
+    );
   });
 });
 
