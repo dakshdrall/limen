@@ -54,6 +54,11 @@ const SUITES = [
     directory: 'packages/db',
     covers: 'the schema fences, and what a pooled connection may not do',
   },
+  {
+    workspace: '@limen/custody',
+    directory: 'packages/custody',
+    covers: 'key wrapping, and the fence that keeps the env-var master off mainnet',
+  },
   // `covers` named `caveats` until the V6 rebuild. `caveats.test.ts` was one of
   // the four suites step 1 deleted with the rendering layer — it pinned
   // sentences on a landing page that no longer exists — so the description

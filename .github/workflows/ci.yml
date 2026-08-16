@@ -102,6 +102,13 @@ jobs:
       - name: Test @limen/db (schema fences, pooler portability, append-only)
         run: npm run test -w @limen/db
 
+      # The KeyProvider, its production refusal, and the assertion that exactly
+      # one module in the repository constructs one. That last is what makes
+      # §7.5.3's promise — swapping the env-var master for a real KMS is a
+      # module, not a refactor — checkable rather than aspirational.
+      - name: Test @limen/custody (key wrapping, the mainnet fence, one construction site)
+        run: npm run test -w @limen/custody
+
       - name: Test @limen/web (extraction, ingest refusals, demo-signer fence)
         run: npm run test -w @limen/web
 

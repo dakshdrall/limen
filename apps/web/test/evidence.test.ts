@@ -148,11 +148,19 @@ describe('the test totals are internally consistent', () => {
   it('sums the per-suite counts', () => {
     const summed = EVIDENCE.tests.suites.reduce((total, suite) => total + suite.tests, 0);
     expect(EVIDENCE.tests.total).toBe(summed);
-    expect(EVIDENCE.tests.suites).toHaveLength(4);
+    expect(EVIDENCE.tests.suites).toHaveLength(5);
   });
 
-  it('covers all four workspaces, so a suite cannot be dropped and go unnoticed', () => {
-    // Three until V8 M1 added `@limen/db`. The count and the names are both
+  it('covers all five workspaces, so a suite cannot be dropped and go unnoticed', () => {
+    // Three until V8 M1 added `@limen/db`, then `@limen/custody`.
+    //
+    // Adding a workspace to `SUITES` hits the same bootstrap circularity that
+    // `evidence.mjs --chain-only` exists for, one step removed: regenerating
+    // runs this suite, and this suite reads the file the regeneration is about
+    // to write. The sequence is two passes — regenerate with the old
+    // expectation so the new suite reaches the file, then raise the expectation
+    // and regenerate again. Editing the generated file by hand would do the
+    // same thing while discarding the guarantee that nothing in it is typed. The count and the names are both
     // written out on purpose: the count alone would let a suite be swapped for
     // another, and the names alone would let one be added without anybody
     // deciding to. This test going red when a workspace gains a suite is the
@@ -160,7 +168,7 @@ describe('the test totals are internally consistent', () => {
     // arriving in them should be a decision rather than a side effect.
     const workspaces = EVIDENCE.tests.suites.map((suite) => suite.workspace);
     expect(new Set(workspaces)).toEqual(
-      new Set(['@limen/core', '@limen/chain', '@limen/db', '@limen/web']),
+      new Set(['@limen/core', '@limen/chain', '@limen/db', '@limen/custody', '@limen/web']),
     );
   });
 });

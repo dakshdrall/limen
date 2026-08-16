@@ -418,6 +418,10 @@ packages/shared/    @limen/shared — the words every surface states its limits 
   status-labels.ts  the closed label set; a screen cannot invent a member
   key-roles.ts      which key is acting, and the sentences that go with it
   redact.ts         what must never reach a log, a report, or a webhook
+packages/custody/   @limen/custody — the key Limen holds, and what wraps it
+  key-provider.ts   the interface; the KMS dependency is deliberately absent
+  env-master-key.ts AES-256-GCM wrap, and the refusal that keeps it off mainnet
+  provider.ts       the ONE module that constructs a provider; a test proves it
 packages/db/        @limen/db — schema, migrations, and two access paths
   schema.ts         14 tables; what it cannot hold is the design
   amount.ts         numeric(39, 0) <-> bigint. No float goes near an amount

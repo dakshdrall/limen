@@ -1813,6 +1813,15 @@ XDR" entrypoint, per demo-signer fence 3.
 
 - `SERVER_SIGNERS` registry and its CI fence (**B3**), two-sided like the
   existing sentinel check.
+- **The `LIMEN_MASTER_KEY` bundle grep**, deferred here from M1 deliberately.
+  The client-bundle fences in CI are two-sided by rule — the sentinel must be
+  found in the server bundle before its absence from the client bundle means
+  anything — and at M1 nothing in `apps/web` imports `@limen/custody`, so the
+  positive half would find nothing and the negative half would pass by not
+  looking. The source-level half is live already:
+  `packages/custody/test/single-construction-site.test.ts` asserts the variable
+  is read in exactly one module, which is two-sided today. The bundle grep lands
+  in the milestone where the web app can actually reach the provider.
 - Schema test: no plaintext-secret column exists under any name.
 - Shared redactor applied to every server egress, not only error reports.
 - Server-side twin of the `S…` bundle grep: no plaintext seed reaches any log
