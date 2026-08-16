@@ -23,11 +23,19 @@ export const metadata = {
  *
  * ## The labels, and the one that is missing
  *
- * `TESTNET ONLY`, `NOT AUDITED`, `COMPOSITION ONLY` — and no `NO CUSTODY`, for
- * the same reason `/app/accounts/new` omits it. This flow generates a key whose
+ * `TESTNET ONLY`, `NOT AUDITED`, `COMPOSITION ONLY` — and no custody label, for
+ * the same reason `/app/accounts/new` omits one. This flow generates a key whose
  * whole purpose is to move testnet funds, and claiming custody of nothing on the
  * one page that creates a spending key would be exactly the inaccuracy the label
  * set exists to prevent.
+ *
+ * V8 M1 retired `NO CUSTODY` and replaced it with `NO OWNER CUSTODY`, which is
+ * narrower and is genuinely true here — the key this flow creates never reaches
+ * a Limen server. The omission stands anyway, and the reason is placement rather
+ * than accuracy: the loud label on a screen that mints a spending key is the
+ * disposability warning, and a reassuring label beside it is read as qualifying
+ * the warning. That is the softening the omission was there to prevent, and the
+ * narrowing does not change it.
  *
  * `NOT AUDITED` is also what satisfies the provenance gate on arrival: this
  * screen carries no numbers until it has read some, which is the same position

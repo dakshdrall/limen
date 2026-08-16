@@ -40,9 +40,12 @@ import { useWriteLog } from '@/lib/use-write';
  * caption correcting them is worse than never offering it.
  *
  * So there is one owner path, the screen states which key owns the account at
- * the moment it is created, and `NO CUSTODY` is not claimed on this screen at
- * all — because it would not be true here. This key can move funds. That is what
- * it is for.
+ * the moment it is created, and no custody label is claimed on this screen at
+ * all — because the one that existed when this was written would not have been
+ * true here. This key can move funds. That is what it is for.
+ *
+ * `NO CUSTODY` was retired in V8 M1. Its replacement `NO OWNER CUSTODY` would be
+ * true here, and is still not rendered; the page header records why.
  *
  * ## Two keys, and the fence that makes it a mechanism
  *

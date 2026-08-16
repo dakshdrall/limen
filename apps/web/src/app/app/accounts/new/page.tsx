@@ -13,9 +13,15 @@ export const metadata = {
  * Everything before v4 read the chain; nothing wrote to it, because writing
  * needs an owner signature and no browser signer existed. This is where that
  * stops being true, and the labels say so precisely: `TESTNET ONLY` and `NOT
- * AUDITED` as everywhere else, and no `NO CUSTODY` — the key created here exists
- * so it can move testnet funds, and claiming otherwise on the one screen that
- * generates it would be the exact inaccuracy the label set exists to prevent.
+ * AUDITED` as everywhere else, and no custody label — the key created here
+ * exists so it can move testnet funds, and claiming otherwise on the one screen
+ * that generates it would be the exact inaccuracy the label set exists to
+ * prevent.
+ *
+ * `NO CUSTODY` was retired in V8 M1 and its replacement, `NO OWNER CUSTODY`, is
+ * true on this screen. It is still not rendered here: see `/app/try` for the
+ * reason, which is about what a second label does to the loud one beside it
+ * rather than about whether the sentence is accurate.
  */
 export default function NewAccountPage() {
   return (

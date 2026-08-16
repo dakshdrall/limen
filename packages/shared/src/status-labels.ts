@@ -12,7 +12,7 @@
  * the argument rather than under it: the labels appear before the scene that
  * makes the claim they qualify.
  *
- * ## Why this is in `lib/` and not beside the component that renders it
+ * ## Why this is not beside the component that renders it
  *
  * Through V5 these constants lived in `components/StatusLabel.tsx`, and
  * `lib/local-key.ts` imported `LOCAL_KEY_LABEL` from there — a module in the
@@ -21,9 +21,19 @@
  * rebuild deleted the component: the safety rule that every key-handling file
  * must name its label was resting on a component file continuing to exist.
  *
- * The vocabulary is content, not markup. It lives here, dependency-free like
- * `markers.ts` and for the same reason, and the component that renders it is a
- * consumer. That is the direction the dependency should always have run.
+ * The vocabulary is content, not markup. It is dependency-free like `markers.ts`
+ * and for the same reason, and the component that renders it is a consumer. That
+ * is the direction the dependency should always have run.
+ *
+ * ## Why it is not in `apps/web` either
+ *
+ * V6 moved it to `apps/web/src/lib/`; V8 M1 moved it here, to
+ * `packages/shared`. The second move is the first one repeated a level up. A
+ * closed set exists so that no surface can invent a member or drift a label's
+ * wording, and `apps/web` is about to stop being the only surface: the agent
+ * runtime and the Telegram adapter both state limits to a person. A set that
+ * lives inside one of the things it constrains is closed by convention rather
+ * than by construction.
  */
 
 export const STATUS_LABELS = {
@@ -35,14 +45,38 @@ export const STATUS_LABELS = {
     'No third party has reviewed this code. The OpenZeppelin contracts it installs are audited; the code that decides what to install is not.',
   'COMPOSITION ONLY':
     'Every installed policy is a configuration of an existing audited OpenZeppelin primitive. No Rust is generated, and none is written by hand.',
-  // The second sentence used to read "There is no code path here that can move
-  // your funds." It stopped being true the moment a screen could generate a
-  // signing key: that key exists precisely so it can move testnet funds, and on
-  // the screens that use it the old wording would have been reassurance rather
-  // than a limit. What survives is the claim that holds on every screen — Limen
-  // holds nothing, and the key is yours and stays in your browser.
-  'NO CUSTODY':
-    'No key of yours reaches a Limen server, an environment variable, or a log line. Any key that can move funds here was generated in your browser, stays in it, and is destroyed when you clear site data.',
+  // ── `NO CUSTODY` was here, and was retired in V8 M1. ──────────────────────
+  //
+  // Its history, kept because it is the second time this label narrowed and the
+  // shape of the narrowing is the same both times.
+  //
+  // It first read "There is no code path here that can move your funds", and
+  // that stopped being true the moment a screen could generate a signing key:
+  // the key exists precisely so it can move testnet funds. It was narrowed to a
+  // claim about *custody* rather than capability — Limen holds nothing, and the
+  // key is yours and stays in your browser.
+  //
+  // PLAN-V8 §3 breaks the second half of that outright. An agent that answers a
+  // message while no browser is open signs with a key generated on a Limen
+  // server and kept there, so "any key that can move funds here was generated
+  // in your browser" becomes false — not softened, false.
+  //
+  // One label cannot carry two opposite facts, and narrowing the text while
+  // keeping the name `NO CUSTODY` would be exactly the softening this project
+  // has refused everywhere else: the name is the part a reader remembers. So it
+  // is retired and replaced by two, one for each fact.
+  //
+  // `caveats.test.ts` pins the retirement in both directions — the old string
+  // is gone, and both replacements are present — so it cannot come back by
+  // someone restoring a familiar-looking constant.
+  'NO OWNER CUSTODY':
+    'The key that owns your account — a passkey, or a key generated in your browser — never reaches a Limen server. Limen cannot move your funds outside the boundary you installed, and cannot remove that boundary.',
+  // The other half, and the loud one. Not rendered anywhere yet, deliberately:
+  // see `AGENT_KEY_LABEL` below for why a label lands in this set before the
+  // fact it describes, and `caveats.test.ts` for the assertion that keeps it
+  // unrendered until M3 rather than until somebody notices.
+  'LIMEN HOLDS THE AGENT KEY':
+    'Your agent signs with a key Limen stores and can use while your browser is closed. That key can do exactly what the context rule you installed permits — one token contract, transfer only, up to your cap, until your expiry — and the account enforces that, not Limen. It cannot revoke itself; you can revoke it.',
   'ON-CHAIN':
     'Read from the ledger at the stated sequence number. Not restored from browser storage, and not this application’s opinion.',
   'COMPUTED LOCALLY':
@@ -57,6 +91,20 @@ export const STATUS_LABELS = {
   // version of a caveat that stopped applying.
   'TESTNET ONLY · PASSKEY':
     'A passkey held by your device or password manager, never by this browser and never by Limen. It survives clearing site data, which the local keys do not. Stellar testnet only: it can own an account here, and it cannot pay a fee or act as the agent.',
+  // Added in V8 M1, for a key that does not exist yet. PLAN-V8 B4 is explicit
+  // that this is the correct order rather than an oversight: the tripwire in
+  // `local-key-label.test.ts` requires every file that generates or stores a
+  // key to name its label, so the label has to be in the closed set *before*
+  // `packages/custody` can be written, or the first server keygen lands with
+  // nothing to name.
+  //
+  // The wording's whole job is to not be mistaken for the local key's label.
+  // Forcing a server-held key to render `LOCAL_KEY_LABEL` would make
+  // the tripwire the source of a false statement — the fence producing the lie
+  // — which is why there are two labels and why carrying the wrong one is a
+  // failure rather than a near miss.
+  'TESTNET ONLY · AGENT KEY (LIMEN-HELD)':
+    'An ed25519 key generated on a Limen server and kept there, encrypted. Stellar testnet only. It is not in your browser and you never see it: it exists so your agent can act while your browser is closed, and what it may do is decided by the context rule installed on your account rather than by Limen.',
 } as const;
 
 export type StatusLabelName = keyof typeof STATUS_LABELS;
@@ -96,3 +144,32 @@ export const LOCAL_KEY_LABEL = 'TESTNET ONLY · LOCAL KEY' satisfies StatusLabel
  * satisfied by not resembling anything is not a tripwire.
  */
 export const PASSKEY_LABEL = 'TESTNET ONLY · PASSKEY' satisfies StatusLabelName;
+
+/**
+ * The agent key's label, as an importable name. Nothing carries it yet.
+ *
+ * This is the third key, and the one PLAN-V8 §3 introduces: generated on a
+ * Limen server, held there encrypted, used to sign while no browser is open.
+ * It is the narrowing of design rule 3 that v8 takes, in the same way
+ * `LOCAL_KEY_LABEL` was the narrowing v4 took — and it is a larger one, because
+ * the key is not the user's and is not in their reach.
+ *
+ * **It exists here before anything can render it, and that is the point.** The
+ * tripwire requires every file that generates or stores a key to name its
+ * label; a label added *after* the first server keygen would mean the first
+ * server keygen had nothing to name and no fence to fail. B4 records the same
+ * ordering argument from the other side: the tripwire's scan roots were a
+ * hand-maintained list that would have let `packages/custody` land outside every
+ * fence in this repository with nothing going red. Both halves of that failure
+ * — the unscanned directory and the missing label — are closed before the
+ * directory exists.
+ *
+ * The partition is the load-bearing part. A browser key must carry
+ * `LOCAL_KEY_LABEL` and a server-held key must carry this one, and **carrying
+ * the wrong one is a failure rather than a near miss**: a server-held key
+ * rendering `LOCAL_KEY_LABEL` would be the safety mechanism producing a false
+ * statement about where a key lives, which is worse than no label at all. `local-key-label.test.ts` asserts neither label can satisfy the other's
+ * obligation, in both directions, against synthetic samples — so the rule is
+ * proved able to fire before there is anything for it to fire on.
+ */
+export const AGENT_KEY_LABEL = 'TESTNET ONLY · AGENT KEY (LIMEN-HELD)' satisfies StatusLabelName;

@@ -75,9 +75,15 @@ const source = (relative: string) =>
  * that states a limit to a person. A caveat suite that could only read
  * `apps/web/src` would have quietly stopped guarding them — which is the
  * failure this whole file was restored to close, one directory over.
+ *
+ * Unflattened, unlike `source`. Its one caller has to strip comments before
+ * collapsing whitespace, and doing that in the other order lets a `//` from a
+ * wrapped comment line land in the middle of a sentence — which is precisely the
+ * accident that made the old `NO CUSTODY` assertion pass for a reason nobody
+ * chose.
  */
 const shared = (relative: string) =>
-  flat(readFileSync(fileURLToPath(new URL(`../../../packages/shared/src/${relative}`, import.meta.url)), 'utf8'));
+  readFileSync(fileURLToPath(new URL(`../../../packages/shared/src/${relative}`, import.meta.url)), 'utf8');
 
 const README = flat(readFileSync(fileURLToPath(new URL('../../../README.md', import.meta.url)), 'utf8'));
 
@@ -226,23 +232,152 @@ describe('the custody claim stays accurate as signers are added', () => {
     expect(README).toContain('disposable and holds trivial funds');
   });
 
-  it('keeps the NO CUSTODY label a claim about custody, not about capability', () => {
-    // Re-pointed twice, and neither time did the claim change.
+  // Re-pointed twice, and neither time did the claim change.
+  //
+  // V6 moved the closed label set from `components/StatusLabel.tsx` to
+  // `lib/status-labels.ts`, because `lib/local-key.ts` was importing a string
+  // from the rendering layer and the rule that every key-handling file names
+  // its label was resting on a component file continuing to exist. The M0
+  // restore re-pointed this assertion at that new home.
+  //
+  // V8 M1 moved it again, to `packages/shared/src/status-labels.ts`, for the
+  // reason one level up: the runtime and the Telegram adapter will state limits
+  // too, and a closed set inside `apps/web` is not closed against them.
+  /**
+   * The live set, sliced out of the module that also records its own history.
+   *
+   * This distinction was forced by the retirement rather than anticipated.
+   * `status-labels.ts` keeps a note saying what `NO CUSTODY` used to claim and
+   * why each wording stopped being true — which is most of that file's value,
+   * because a label set with no memory is one that can quietly re-adopt a claim
+   * it already retired. But it means the file legitimately *contains* strings
+   * the live set must not, and an assertion reading the whole file cannot tell a
+   * retired claim from a current one.
+   *
+   * Before this, that only worked by accident: the old note happened to break
+   * the quoted sentence across two comment lines, so `flat()` left a `//` in the
+   * middle of it and the `not.toContain` passed for a reason nobody chose. A
+   * fence that holds because of where a line wrapped is not a fence.
+   *
+   * Comments are stripped rather than the note being moved out of the object.
+   * Each retirement note belongs *at* the label it replaced — that adjacency is
+   * what makes it findable by the next person editing that line — and the same
+   * reasoning `local-key-label.test.ts` gives for its own `code()` stripper
+   * applies here: a claim in a comment is a record of a claim, never a live one.
+   */
+  const liveLabels = flat(
+    (/export const STATUS_LABELS = \{[\s\S]*?\n\} as const;/.exec(shared('status-labels.ts'))?.[0] ?? '').replace(
+      /(^|[^:])\/\/.*$/gm,
+      '$1',
+    ),
+  );
+
+  it('reads the live set, not the module that records its history', () => {
+    // Guard on the slice itself. If the regex above stops matching, every
+    // assertion below becomes a claim about an empty string and passes forever.
+    expect(liveLabels).toContain("'TESTNET ONLY'");
+    expect(liveLabels).toContain('} as const;');
+  });
+
+  it('has retired NO CUSTODY, and not by softening it', () => {
+    // The first direction. `NO CUSTODY` said "any key that can move funds here
+    // was generated in your browser", and PLAN-V8 §3 makes that false rather
+    // than imprecise: an agent that answers a message with no browser open
+    // signs with a key generated on a Limen server.
     //
-    // V6 moved the closed label set from `components/StatusLabel.tsx` to
-    // `lib/status-labels.ts`, because `lib/local-key.ts` was importing a string
-    // from the rendering layer and the rule that every key-handling file names
-    // its label was resting on a component file continuing to exist. The M0
-    // restore re-pointed this assertion at that new home.
+    // What this asserts is that the *name* is gone, not just the sentence. One
+    // label cannot carry two opposite facts, and rewording the description
+    // while keeping the name would leave the part a reader actually remembers
+    // saying the thing that stopped being true. The literal string appears in
+    // this test and in the retirement note in `status-labels.ts` — both are
+    // records of the retirement — so the assertion is on the label set's own
+    // keys and constants rather than on the file containing the characters.
+    expect(liveLabels).not.toContain("'NO CUSTODY':");
+    expect(liveLabels).not.toContain('There is no code path here that can move your funds');
+    expect(liveLabels).not.toContain('Any key that can move funds here was generated in your browser');
+  });
+
+  it('replaced it with two labels, because it was carrying two facts', () => {
+    // The second direction, and the one a retirement forgets. Deleting a label
+    // and replacing it with nothing would also pass the test above, and would
+    // be the landing quietly dropping a limit — which is the exact failure M0
+    // found in the limits list and recorded as B12.
+    expect(liveLabels).toContain("'NO OWNER CUSTODY':");
+    expect(liveLabels).toContain("'LIMEN HOLDS THE AGENT KEY':");
+  });
+
+  it('keeps the owner half a claim about custody, not about capability', () => {
+    // The surviving half of the original narrowing, which is the whole reason
+    // `NO OWNER CUSTODY` is worth having: it is a statement about who holds the
+    // key, and it must not drift back into a statement about what can move
+    // funds.
+    const owner = /'NO OWNER CUSTODY':\s*'([^']*)'/.exec(liveLabels)?.[1] ?? '';
+    expect(owner).toContain('never reaches a Limen server');
+    expect(owner).toContain('cannot remove that boundary');
+  });
+
+  it('does not let the agent half read as reassurance', () => {
+    // This label exists to tell someone a thing they will not like. Every one
+    // of these clauses is the part that makes it a limit rather than a feature
+    // announcement, and losing any of them turns it into one.
+    const agent = /'LIMEN HOLDS THE AGENT KEY':\s*'([^']*)'/.exec(liveLabels)?.[1] ?? '';
+    expect(agent).toContain('a key Limen stores and can use while your browser is closed');
+    expect(agent).toContain('the account enforces that, not Limen');
+    expect(agent).toContain('It cannot revoke itself; you can revoke it.');
+  });
+
+  it('has LIMEN HOLDS THE AGENT KEY in the closed set and rendered nowhere', () => {
+    // Deliberate, and asserted in both directions so M3 has to flip it rather
+    // than someone noticing later that it was never shown.
     //
-    // V8 M1 moved it again, to `packages/shared/src/status-labels.ts`, for the
-    // reason one level up: the runtime and the Telegram adapter will state
-    // limits too, and a closed set inside `apps/web` is not closed against
-    // them.
-    const labels = shared('status-labels.ts');
-    expect(labels).not.toContain('There is no code path here that can move your funds');
-    expect(labels).toContain('No key of yours reaches a Limen server');
-    expect(labels).toContain('generated in your browser, stays in it');
+    // M1's done-when in PLAN-V8 asks for both replacements to be rendered. This
+    // is a recorded deviation from it, not a slip: at M1 there is no agent key,
+    // `packages/custody` is M2, and no key is held for a user until M3.
+    // Rendering it now would put a present-tense claim on a public preview
+    // about a risk this project has not yet taken on — and overstating a risk
+    // you have not taken on is still stating something false. A claim is true
+    // when it is read, not when the plan intends it.
+    //
+    // The ordering precedent is B4's third label, which enters the set at M1
+    // and is unused until the key it names exists. Same rule, same reason: the
+    // closed set gains a label before anything can render it, and the label
+    // goes up when the fact does.
+    //
+    // The other half of the argument is that a label meaning nothing the first
+    // time a reader meets it means less the second time. Landing it with the
+    // fact is what keeps it worth reading.
+    const rendered = [
+      source('app/page.tsx'),
+      source('app/docs/page.tsx'),
+      source('components/StatusLabel.tsx'),
+    ];
+    for (const screen of rendered) {
+      expect(screen).not.toContain('LIMEN HOLDS THE AGENT KEY');
+    }
+    // And it is genuinely available to render, so this is an unrendered label
+    // rather than a missing one.
+    expect(liveLabels).toContain("'LIMEN HOLDS THE AGENT KEY':");
+  });
+
+  it('renders the owner half where NO CUSTODY used to be', () => {
+    // The replacement is not merely defined. The spec strip and the docs
+    // overview both carried the retired label, and a retirement that left both
+    // slots empty would shorten the limits list by one — which is how the
+    // landing lost two entries in the V6 rebuild without anything going red.
+    expect(source('app/page.tsx')).toContain("'NO OWNER CUSTODY'");
+    expect(source('app/docs/page.tsx')).toContain("'NO OWNER CUSTODY'");
+  });
+
+  it('narrows local-key.ts to this browser rather than to signing as such', () => {
+    // PLAN-V8 B5. "It is the only one" was true when written and stops being
+    // true in v8. The narrowed form is true both before and after, which is why
+    // it lands at M1 rather than with the code that breaks the old one.
+    const localKey = source('lib/local-key.ts');
+    expect(localKey).toContain('This module is the only way this browser signs');
+    expect(localKey).not.toContain('is not one of two ways to sign — it is the only one');
+    // The other half of B5: the "no server involvement" paragraph is a true
+    // statement about these keys and was never one about the application.
+    expect(localKey).toContain('No server involvement of any kind — in this module');
   });
 
   it('keeps the label out of the rendering layer, which is why it survived the rebuild', () => {
@@ -537,7 +672,7 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
     // AUDITED` say precisely. What this test guards is unchanged by that: these
     // four are the ones a reader has to meet, and the failure it exists to
     // catch is one of them quietly going missing.
-    for (const label of ['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']) {
+    for (const label of ['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO OWNER CUSTODY']) {
       expect(page, `the spec strip is missing ${label}`).toContain(`'${label}'`);
     }
   });
@@ -553,7 +688,7 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
       'Testnet only.',
       'Not audited.',
       'Composition only.',
-      'No custody.',
+      'No owner custody.',
       'Single-transaction derivation.',
     ]) {
       expect(page, `the landing's limits list is missing "${limit}"`).toContain(limit);

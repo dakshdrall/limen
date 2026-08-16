@@ -14,8 +14,18 @@
  * The rule used to end "on the connected-wallet path no key enters the page at
  * all". That clause is gone with the path it described: PLAN-V4's F4
  * measurement found a `Delegated` owner's nested auth requirement undiscoverable
- * from either simulation, so v4 has no connected-wallet owner. This module is
- * not one of two ways to sign — it is the only one.
+ * from either simulation, so v4 has no connected-wallet owner.
+ *
+ * **This module is the only way this browser signs.**
+ *
+ * That sentence used to read "it is the only one", full stop, and PLAN-V8 B5
+ * found it. It was true when written and stops being true in v8: §3 puts an
+ * agent key on a Limen server precisely so something can sign while no browser
+ * is open. The scope is narrowed here, ahead of that key existing, because the
+ * unscoped form is the kind of claim a reader carries away and a later commit
+ * does not think to revisit — and the narrowed form is true both before and
+ * after, which is why it can land now rather than with the code that breaks the
+ * old one.
  *
  * Every clause of that is a constraint on this module:
  *
@@ -43,10 +53,17 @@
  * added; the secret is reachable only as a signer, which is the only thing
  * anything here needs it for.
  *
- * **No server involvement of any kind.** Nothing in this module fetches, and
- * nothing that calls it may put a key in a request body. CI proves the second
- * half by grepping the built client bundle for a 56-character `S…` StrKey, which
- * catches a pasted or serialized secret without needing to know its value.
+ * **No server involvement of any kind — in this module.** Nothing here fetches,
+ * and nothing that calls it may put a key in a request body. CI proves the
+ * second half by grepping the built client bundle for a 56-character `S…`
+ * StrKey, which catches a pasted or serialized secret without needing to know
+ * its value.
+ *
+ * The three trailing words are load-bearing and were added in V8 M1. This
+ * paragraph is a statement about *these keys*, and it survives v8 intact:
+ * neither key in this file ever reaches a server. It was never a statement
+ * about the application, and leaving it unscoped while a server-side signer
+ * exists elsewhere in the repository would let it be read as one.
  */
 
 import { Keypair } from '@stellar/stellar-sdk';

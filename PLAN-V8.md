@@ -1702,6 +1702,62 @@ render it.
 in the closed set and rendered, and `caveats.test.ts` pins the retirement in both
 directions.
 
+#### AMENDED at M1: one of the two replacements renders at M3, not here
+
+This done-when asked for both replacement labels to be **rendered**. One of them
+is not, and the deviation is recorded here rather than absorbed.
+
+`NO OWNER CUSTODY` replaces `NO CUSTODY` immediately, in the hero spec strip and
+on the docs overview. It is true today.
+
+`LIMEN HOLDS THE AGENT KEY` enters the closed set at M1 and **renders nowhere**
+until M3. At M1 there is no agent key: `packages/custody` is M2, and no key is
+held *for a user* until M3 deploys one. Rendering it now would put a
+present-tense claim on a public preview about a risk this project has not yet
+taken on — and **overstating a risk you have not taken on is still stating
+something false.** The rule this project runs on is that a claim is true when it
+is read, not that limits arrive as early as possible.
+
+Two further reasons, both about whether the label works at all:
+
+- A label that means nothing the first time a reader meets it means less the
+  second time. Landing it with the fact is what keeps it worth reading.
+- The ordering precedent is already in this plan. B4's third label,
+  `TESTNET ONLY · AGENT KEY (LIMEN-HELD)`, enters the set at M1 and is unused
+  until the key it names exists — *"the closed set gains the label before
+  anything can render it"*. This is the same rule applied to the same kind of
+  claim.
+
+**A wording that was true in both tenses was considered and rejected outright.**
+A label written to be accurate before and after M3 is hedged by construction, and
+hedging a custody claim is the specific softening this project exists not to do.
+
+**The absence is pinned in both directions**, so M3 has to flip it deliberately
+rather than someone noticing later that it was never shown: `caveats.test.ts`
+asserts the label is in the closed set *and* appears in none of the rendering
+sites. Proved non-vacuous by adding it to the hero strip and watching that test
+name it, then removing it.
+
+**B2 moves with it, for the same reason.** §3.4's rewritten design rule 3 is a
+three-key table whose third row reads *"Agent — held by a Limen server,
+encrypted"*. That row is false at M1. The README's current rule 3 — *"Signing is
+client-side only"*, *"no server-side signer for a user's account"* — is still
+true at M1 and stays until the code that breaks it lands. It is rewritten in the
+milestone that makes the new table true, which is M3.
+
+**B5 does land at M1**, and the distinction is the whole point. Its narrowing —
+`local-key.ts`'s *"it is the only one"* becoming *"this module is the only way
+this browser signs"* — is true **both before and after** the agent key exists.
+That is not hedging; it is a claim that was always over-broad, corrected. A
+rewrite that is accurate today lands today; one that is only accurate after a
+feature lands with the feature.
+
+**B6 lands at M1 too, in the sessions commit**, not this one. `store.ts`'s *"No
+user accounts, no passwords, no email, no server"* is true until the commit that
+adds users, sessions and Postgres — and false the moment it lands. Same rule:
+the prose changes in the commit that makes it change, never before and never
+after.
+
 ### M2 — Custody
 
 `packages/custody`. Server-side keygen, envelope encryption (per-agent data key,

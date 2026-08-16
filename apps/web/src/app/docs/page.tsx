@@ -27,7 +27,7 @@ export default function DocsOverview() {
     <DocPage
       title="Documentation"
       lead="Limen derives the narrowest smart-account permission boundary that permits one transaction you already made, and installs it. This is how it works and what it refuses to claim."
-      labels={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']}
+      labels={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO OWNER CUSTODY']}
       contents={CONTENTS}
     >
       <DocSectionBlock id="what" title="What Limen does">
@@ -70,9 +70,10 @@ export default function DocsOverview() {
             , which is the claim as a number rather than as a promise.
           </li>
           <li>
-            <span className="value text-foreground">No custody.</span>{' '}No key of yours reaches a
-            Limen server, an environment variable, or a log line. Keys that can move funds are
-            generated in your browser and stay there.
+            <span className="value text-foreground">No owner custody.</span>{' '}The key that owns
+            your account — a passkey, or a key generated in your browser — never reaches a Limen
+            server, an environment variable, or a log line. Limen cannot move your funds outside the
+            boundary you installed, and cannot remove that boundary.
           </li>
           <li>
             <span className="value text-foreground">One transaction in.</span>{' '}A boundary is derived

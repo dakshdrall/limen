@@ -65,7 +65,7 @@ export default function Home() {
       {/* ---------------------------------------------------------------- hero */}
       <section className="scene" aria-labelledby="hero-title">
         <Reveal className="flex flex-col gap-6 measure-scene">
-          <StatusLabels names={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO CUSTODY']} />
+          <StatusLabels names={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO OWNER CUSTODY']} />
           <h1 id="hero-title" className="scene-h1 text-foreground">
             The boundary is derived, not authored.
           </h1>
@@ -421,9 +421,10 @@ export default function Home() {
               are generated, which is the claim as a number rather than as a promise.
             </li>
             <li>
-              <span className="value text-foreground">No custody.</span>{' '}No key of yours reaches a
-              Limen server, an environment variable, or a log line. Any key that can move funds here
-              was generated in your browser and stays in it.
+              <span className="value text-foreground">No owner custody.</span>{' '}The key that owns
+              your account — a passkey, or a key generated in your browser — never reaches a Limen
+              server, an environment variable, or a log line. Limen cannot move your funds outside
+              the boundary you installed, and cannot remove that boundary.
             </li>
             <li>
               <span className="value text-foreground">Single-transaction derivation.</span>{' '}A

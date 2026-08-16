@@ -164,6 +164,31 @@ const USES_A_PASSKEY = /navigator\.credentials\.(?:create|get)\s*\(|PublicKeyCre
 /** The passkey's label, as the literal or as the shared constant. */
 const CARRIES_THE_PASSKEY_LABEL = /TESTNET ONLY · PASSKEY|PASSKEY_LABEL/;
 
+/**
+ * The agent key's label, for a key that does not exist yet.
+ *
+ * PLAN-V8 B4, part two. Part one — discovering the scan roots instead of
+ * listing them — landed in M0, and closed the half of the hole where a new
+ * `packages/custody/src` would simply not be looked at. This is the other half:
+ * when that directory does get written, the label it must carry has to already
+ * exist, or the first server-side keygen has nothing to name.
+ *
+ * **Carrying the wrong one is a failure, not a near miss.** A server-held key
+ * that satisfied the tripwire by rendering `TESTNET ONLY · LOCAL KEY` would
+ * make this fence the source of a false statement about where a key lives —
+ * the safety mechanism producing the lie — which is strictly worse than the key
+ * being unlabelled, because an unlabelled key is caught here and a mislabelled
+ * one is caught by nobody.
+ *
+ * So the two detectors are written not to overlap, and that is asserted in both
+ * directions below against synthetic samples. The samples are the whole point
+ * at M1: nothing in the tree carries this label yet, so a rule tested only
+ * against real files would be vacuous and would stay vacuous until the day it
+ * mattered. Same argument the local key's detectors were written under when
+ * they matched nothing either.
+ */
+const CARRIES_THE_AGENT_KEY_LABEL = /TESTNET ONLY · AGENT KEY \(LIMEN-HELD\)|AGENT_KEY_LABEL/;
+
 /** An import of either passkey module, by alias or relative path. */
 const IMPORTS_THE_PASSKEY_MODULE =
   /(?:from|import)\s*\(?\s*'(?:@\/lib\/(?:use-)?passkey|(?:\.\.?\/)+(?:lib\/)?(?:use-)?passkey)'/;
@@ -320,6 +345,34 @@ describe('the detectors can fire', () => {
     expect(CARRIES_THE_LABEL.test('<StatusLabel name={PASSKEY_LABEL} />')).toBe(false);
   });
 
+  it('keeps the three key labels from satisfying one another', () => {
+    // The partition, proved before there is anything to partition. Each label
+    // answers "where does this key live", and they give three different
+    // answers: this browser, your device, a Limen server. A file that carried
+    // one and was credited for another would be stating the wrong one of those
+    // three, which is the failure mode a label is supposed to remove.
+    expect(CARRIES_THE_AGENT_KEY_LABEL.test('<StatusLabel name={AGENT_KEY_LABEL} weight="loud" />')).toBe(
+      true,
+    );
+    expect(
+      CARRIES_THE_AGENT_KEY_LABEL.test("<StatusLabel name='TESTNET ONLY · AGENT KEY (LIMEN-HELD)' />"),
+    ).toBe(true);
+
+    // Neither of the two existing labels satisfies the agent key's obligation.
+    expect(CARRIES_THE_AGENT_KEY_LABEL.test('<StatusLabel name={LOCAL_KEY_LABEL} />')).toBe(false);
+    expect(CARRIES_THE_AGENT_KEY_LABEL.test('<StatusLabel name={PASSKEY_LABEL} />')).toBe(false);
+    expect(CARRIES_THE_AGENT_KEY_LABEL.test("<StatusLabel name='TESTNET ONLY · LOCAL KEY' />")).toBe(false);
+
+    // And the agent key's label satisfies neither of theirs. This is the
+    // direction that matters most: it is the one that would let a server-held
+    // key pass as a browser key.
+    expect(CARRIES_THE_LABEL.test('<StatusLabel name={AGENT_KEY_LABEL} />')).toBe(false);
+    expect(CARRIES_THE_PASSKEY_LABEL.test('<StatusLabel name={AGENT_KEY_LABEL} />')).toBe(false);
+    expect(CARRIES_THE_LABEL.test("<StatusLabel name='TESTNET ONLY · AGENT KEY (LIMEN-HELD)' />")).toBe(
+      false,
+    );
+  });
+
   it('recognises an import of either passkey module however it is spelled', () => {
     for (const sample of [
       "import { createPasskey } from '@/lib/passkey';",
@@ -385,6 +438,52 @@ describe('the label exists once, in the closed set', () => {
     expect(statusLabel).toContain('export const PASSKEY_LABEL');
     const occurrences = [...statusLabel.matchAll(/TESTNET ONLY · PASSKEY/g)];
     expect(occurrences).toHaveLength(2); // the set's key, and the constant
+  });
+
+  it('has the agent key label in the same closed set, with its own constant', () => {
+    expect(statusLabel).toContain("'TESTNET ONLY · AGENT KEY (LIMEN-HELD)'");
+    expect(statusLabel).toContain('export const AGENT_KEY_LABEL');
+    const occurrences = [...statusLabel.matchAll(/TESTNET ONLY · AGENT KEY \(LIMEN-HELD\)/g)];
+    expect(occurrences).toHaveLength(2); // the set's key, and the constant
+  });
+
+  it('says where the agent key lives, which is the only thing it is for', () => {
+    // This label's entire job is to not be mistaken for the local key's. Drop
+    // "on a Limen server and kept there" and it becomes a label that could
+    // describe either, at which point there was no reason to have two.
+    const description =
+      /'TESTNET ONLY · AGENT KEY \(LIMEN-HELD\)':\s*\n?\s*'([^']*)'/.exec(statusLabel)?.[1] ?? '';
+    expect(description).toContain('generated on a Limen server and kept there, encrypted');
+    expect(description).toContain('It is not in your browser and you never see it');
+    expect(description).toContain('rather than by Limen');
+  });
+
+  it('has nothing carrying the agent key label yet, and says so deliberately', () => {
+    // Asserted rather than left to be noticed. The label is in the set at M1
+    // and the key it names does not exist until M2, so every scan for it
+    // currently matches nothing — which is exactly the vacuous state this file
+    // refuses to leave unmarked anywhere else.
+    //
+    // The difference between this and a broken detector is that this one is
+    // *known* to be empty and is proved able to fire, in `keeps the three key
+    // labels from satisfying one another` above, against synthetic samples. The
+    // day `packages/custody` lands, this assertion is what has to be changed by
+    // hand — which is the point. It cannot be satisfied by nobody looking.
+    // The closed set itself is excluded, and it is the only exclusion. It
+    // *defines* the label, so it necessarily contains both the key and the
+    // constant — that is what "in the closed set and rendered nowhere" means,
+    // and counting the definition as a carrier would make the state
+    // unrepresentable. Every other file in every workspace is in scope.
+    const definition = 'packages/shared/src/status-labels.ts';
+    const carriers = sources()
+      .filter(({ text }) => CARRIES_THE_AGENT_KEY_LABEL.test(text))
+      .map(({ path }) => path)
+      .filter((path) => path !== definition);
+    expect(carriers).toEqual([]);
+
+    // And the exclusion is not silently covering an empty scan: the definition
+    // really is there to be excluded.
+    expect(sources().map(({ path }) => path)).toContain(definition);
   });
 
   it('says what a passkey does not do, not only what it does', () => {
