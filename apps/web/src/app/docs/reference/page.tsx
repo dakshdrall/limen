@@ -98,7 +98,13 @@ const ENVIRONMENT = [
     name: 'LIMEN_ERROR_WEBHOOK',
     scope: 'server',
     required: false,
-    note: 'Where error reports are delivered. Server-side only, because a webhook URL is a credential. Unset, a report is logged and not sent.',
+    note: 'Where error reports are delivered. Server-side only, because a webhook URL is a credential. Set for preview deployments as well as production; preview reports are prefixed with their environment so they do not read as production incidents. Unset, a report is logged and not sent.',
+  },
+  {
+    name: 'VERCEL_ENV',
+    scope: 'server',
+    required: false,
+    note: 'Which deployment this is — production, preview or development. Read only to label an error report, so a preview experiment does not read as a production incident in the same channel. Set by the platform, not by hand; absent, the label is omitted rather than guessed.',
   },
   {
     name: 'NEXT_PUBLIC_LIMEN_RELEASE',

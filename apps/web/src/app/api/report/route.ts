@@ -63,9 +63,43 @@ const MAX_BODY = 8_192;
  * Plain text rather than an embed or a block kit attachment for the same
  * reason: the moment this formats a rich payload it has picked a platform.
  */
+/**
+ * Which deployment a report came from, read on the server and never reported by
+ * the browser.
+ *
+ * `LIMEN_ERROR_WEBHOOK` is set for **preview** deployments as well as
+ * production, because most of V8's testing happens on previews and an error
+ * that only logs to a function's stdout is an error nobody reads. That is the
+ * right call and it has one consequence worth handling: two deployments now
+ * post into the same channel, and a preview experiment arriving unlabelled
+ * reads exactly like a production incident.
+ *
+ * `release` — the short commit SHA — technically distinguishes them, but only
+ * for a reader who already knows which SHA is deployed where, at the moment
+ * they are least likely to be looking it up carefully.
+ *
+ * So the environment is named. Deliberately read here rather than added to
+ * `REPORT_FIELDS`: that allowlist is what may leave the *browser*, and every
+ * entry in it is a decision somebody has to defend. A server knows which
+ * deployment it is without being told, so telling it would widen the allowlist
+ * for nothing. Vercel sets `VERCEL_ENV` to `production`, `preview` or
+ * `development` on every deployment; absent it, the label is omitted rather
+ * than guessed.
+ */
+function deploymentLabel(): string | undefined {
+  const environment = process.env.VERCEL_ENV;
+  if (environment === undefined || environment.length === 0) return undefined;
+  // Production is the unmarked case: a channel whose ordinary traffic is
+  // production incidents should not prefix every one of them. The label exists
+  // to mark the ones that are *not* that.
+  if (environment === 'production') return undefined;
+  return environment.toUpperCase();
+}
+
 function webhookBody(report: ErrorReport): string {
+  const environment = deploymentLabel();
   const lines = [
-    `**${report.kind}** · ${report.path}`,
+    `${environment !== undefined ? `[${environment}] ` : ''}**${report.kind}** · ${report.path}`,
     report.message,
     [
       report.release !== undefined ? `build ${report.release}` : undefined,
@@ -108,10 +142,17 @@ export async function POST(request: Request): Promise<Response> {
 
   const webhook = process.env.LIMEN_ERROR_WEBHOOK;
   if (webhook === undefined || webhook.length === 0) {
-    // Not a failure. A local `next dev`, a preview deploy and a Playwright run
-    // all land here, and a log is where a developer already is — the pipeline
-    // is exercised end to end either way, which is what makes the console
-    // fallback worth having rather than a silent return.
+    // Not a failure. A local `next dev` and a Playwright run land here, and a
+    // log is where a developer already is — the pipeline is exercised end to
+    // end either way, which is what makes the console fallback worth having
+    // rather than a silent return.
+    //
+    // This used to say "a preview deploy" too, and that stopped being true when
+    // `LIMEN_ERROR_WEBHOOK` was set for preview deployments as well as
+    // production: most of V8's testing happens on previews, and a preview error
+    // that only reached a function log was an error nobody read. Preview
+    // reports are delivered now, and `deploymentLabel` marks them so they do
+    // not read as production incidents in the same channel.
     console.error(`limen report: ${JSON.stringify(report)}`);
     return new Response(null, { status: 204 });
   }
