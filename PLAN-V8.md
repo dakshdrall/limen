@@ -375,7 +375,15 @@ a log line. Any key that can move funds here was generated in your browser, stay
 in it, and is destroyed when you clear site data."*
 
 **Defined:** `apps/web/src/lib/status-labels.ts:44-45`.
-**Rendered:** `apps/web/src/app/page.tsx:68` (hero), `apps/web/src/app/docs/page.tsx:30`.
+**Rendered as a label:** `apps/web/src/app/page.tsx:68` (hero),
+`apps/web/src/app/docs/page.tsx:30`.
+**Rendered a third time, as prose, and this one is easy to miss:**
+`apps/web/src/app/docs/page.tsx:73` and `apps/web/src/app/page.tsx:424` each
+restate the claim in a limits list — *"No custody. No key of yours reaches a
+Limen server… Any key that can move funds here was generated in your browser and
+stays in it."* Found while restoring the caveat fence in M0. It is not the label
+constant, so a search-and-replace on `NO CUSTODY` would leave both standing, and
+the sentence is the part a reader actually reads.
 Deliberately **absent** from `/app/accounts/new` and `/app/try`, both of which
 document why in their headers.
 **Pinned:** the closed-set membership test in `local-key-label.test.ts:269-318`.
@@ -821,6 +829,45 @@ undisplayed. This also becomes a documented hosting requirement in
 `app/page.tsx:70` — *"The boundary is derived, not authored."* Brief §36 demotes
 it. Still true, still the differentiator, moves below the fold. No test change
 beyond the copy fences.
+
+## B12 — Two claims that left the landing during the V6 rebuild. Found by M0.
+
+Not caused by the repositioning, and not caused by anything becoming false.
+Surfaced by restoring `caveats.test.ts`, and recorded here because M0 is a repair
+of the fence and landing copy is a product decision.
+
+**B12.1 — the landing's limits list lost two entries.** It used to state *no
+wallet, and no key recovery* and *one contract per boundary*. The rebuilt list
+states five: `Testnet only`, `Not audited`, `Composition only`, `No custody`,
+`Single-transaction derivation`. Both dropped limits are **still true** and both
+are **still in the README** — the wallet finding under *Why there is no wallet
+button*, the recovery caveat under *Your account is stranded if you clear your
+browser*, the contract limit under *Only single-token transfer flows can be
+installed*. They were not retired; they left the page.
+
+The comment on the test that used to pin them read: *"a limits list that quietly
+shortens as features land reads as marketing."* The list then quietly shortened,
+in the same rebuild that deleted the test.
+
+**B12.2 — the landing no longer mentions the browser run.** Neither the retired
+*"the browser has not signed anything yet"*, nor the replacement *"the browser
+has signed, and no person has clicked"*, nor the driver caveat. Defensible on its
+own terms: the V6 landing argues from the recorded deny-axis survey rather than
+from the browser lifecycle run, so a caveat about the lifecycle run has nothing
+on that page to qualify. Pinned in M0 as a **conditional** — if the landing ever
+cites the run again, it must cite the limit with it.
+
+**Proposal for both: decide during M8, when the landing is rewritten anyway.**
+The V8 landing will make claims neither of these lists anticipated, so restoring
+two entries to a list that is about to be replaced is churn. What M0 guarantees
+in the meantime is that neither claim can now be lost from the README as well,
+and that the browser-run caveat cannot come back without its limit.
+
+**What this pair is actually evidence for.** Both are small. Neither is a
+falsehood. The point is that they happened *in the same rebuild that deleted the
+suite that would have caught them*, and stayed unnoticed for two versions — which
+is the case for M0 blocking everything, made out of this repository's own history
+rather than out of principle.
 
 ## B11 — Claims that survive untouched, stated so they are not re-argued
 
@@ -1595,6 +1642,31 @@ repair must already have landed rather than being held hostage to it.
 **Done when:** the suite is green, deleting any pinned caveat turns it red,
 adding an unscanned workspace turns it red, and the PR is merged to `main`
 independently of anything else in this plan.
+
+**Delivered — PR [#15](https://github.com/dakshdrall/limen/pull/15),
+`m0-restore-caveat-fence`, branched from `main` at `3cfce13`.**
+
+- `caveats.test.ts` restored. 45 of its 60 original assertions still passed
+  against the rebuilt tree; of the 15 that did not, **none had become false** —
+  every one was a claim that had moved (the label set to `lib/status-labels.ts`,
+  four verdict sentences to `lib/verdict.ts`, the two-runs seam into the
+  deployments file, four docs claims into the README when V6 split `/docs`). Each
+  is re-pointed with the move recorded at the assertion.
+- **The README needed no edit.** Both cited claims are genuinely pinned in both
+  directions by the restored suite, verified by name — so restoring made the
+  sentences true rather than requiring them to be rewritten, which is the
+  outcome that keeps the evidence of the failure.
+- The guard lives in `evidence.test.ts`, not in `caveats.test.ts`: *every file
+  the README cites is a file that exists*, two-sided, scoped to this
+  repository's own directories so the quoted OpenZeppelin sources are not read
+  as missing. A suite cannot assert its own existence, and being deleted again
+  is the fault being guarded.
+- The keygen tripwire's roots are **discovered**, not enumerated. Verified by
+  putting a `Keypair.random()` in a `packages/custody/src` and watching the
+  suite go red — the precise B4 scenario — then removing it.
+- Two findings surfaced and recorded as **B12** rather than repaired.
+- 615 tests over 26 files, up from 544 over 25. `evidence.json` regenerated,
+  `evidence:check` up to date, lint and build clean.
 
 ### M1 — Foundations, and the process boundary
 
