@@ -8,12 +8,12 @@ import { PasskeyOwnerControl, type OwnerKind } from '@/components/app/PasskeyOwn
 import { WriteResult } from '@/components/app/WriteResult';
 import { Section } from '@/components/Section';
 import { StatusLabel } from '@/components/StatusLabel';
-import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@limen/shared/status-labels';
 import { usePasskeySigner } from '@/lib/use-passkey';
 import { ACCOUNT_WASM_HASH, ED25519_VERIFIER, WASM_SOURCE } from '@/lib/chain-config';
 import { deployAccount } from '@/lib/chain-actions';
 import { fundFromFriendbot } from '@/lib/chain-write';
-import { NOT_EXPORTABLE } from '@/lib/key-roles';
+import { NOT_EXPORTABLE } from '@limen/shared/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
 import { rememberAccount } from '@/lib/store';
 import { useLocalKeyPublics, useSigners } from '@/lib/use-local-keys';

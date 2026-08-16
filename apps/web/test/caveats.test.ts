@@ -32,6 +32,7 @@
  * *moved*:
  *
  *   - the closed label set, `components/StatusLabel.tsx` -> `lib/status-labels.ts`
+ *     (and again, in V8 M1, to `packages/shared/src/status-labels.ts`)
  *   - the four verdict sentences, `AgentRunSteps.tsx` -> `lib/verdict.ts`
  *   - the two-runs seam, from typed JSX -> read out of the deployments file
  *   - four docs claims, from one `/docs` page -> the README, when V6 split it
@@ -65,6 +66,18 @@ function flat(text: string): string {
 
 const source = (relative: string) =>
   flat(readFileSync(fileURLToPath(new URL(`../src/${relative}`, import.meta.url)), 'utf8'));
+
+/**
+ * The same, for a claim that no longer lives inside this app.
+ *
+ * V8 M1 lifted the closed label set, the key roles and the redactor into
+ * `packages/shared`, because `apps/web` is about to stop being the only surface
+ * that states a limit to a person. A caveat suite that could only read
+ * `apps/web/src` would have quietly stopped guarding them — which is the
+ * failure this whole file was restored to close, one directory over.
+ */
+const shared = (relative: string) =>
+  flat(readFileSync(fileURLToPath(new URL(`../../../packages/shared/src/${relative}`, import.meta.url)), 'utf8'));
 
 const README = flat(readFileSync(fileURLToPath(new URL('../../../README.md', import.meta.url)), 'utf8'));
 
@@ -214,13 +227,19 @@ describe('the custody claim stays accurate as signers are added', () => {
   });
 
   it('keeps the NO CUSTODY label a claim about custody, not about capability', () => {
-    // Re-pointed in the M0 restore. V6 moved the closed label set from
-    // `components/StatusLabel.tsx` to `lib/status-labels.ts`, because
-    // `lib/local-key.ts` was importing a string from the rendering layer and the
-    // rule that every key-handling file names its label was resting on a
-    // component file continuing to exist. The claim is unchanged; only the file
-    // holding it moved.
-    const labels = source('lib/status-labels.ts');
+    // Re-pointed twice, and neither time did the claim change.
+    //
+    // V6 moved the closed label set from `components/StatusLabel.tsx` to
+    // `lib/status-labels.ts`, because `lib/local-key.ts` was importing a string
+    // from the rendering layer and the rule that every key-handling file names
+    // its label was resting on a component file continuing to exist. The M0
+    // restore re-pointed this assertion at that new home.
+    //
+    // V8 M1 moved it again, to `packages/shared/src/status-labels.ts`, for the
+    // reason one level up: the runtime and the Telegram adapter will state
+    // limits too, and a closed set inside `apps/web` is not closed against
+    // them.
+    const labels = shared('status-labels.ts');
     expect(labels).not.toContain('There is no code path here that can move your funds');
     expect(labels).toContain('No key of yours reaches a Limen server');
     expect(labels).toContain('generated in your browser, stays in it');

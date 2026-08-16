@@ -38,7 +38,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { REDACTED, redact, redactPath } from '@/lib/redact';
+import { REDACTED, redact, redactPath } from '@limen/shared/redact';
 import { REPORT_FIELDS, REPORT_KINDS, serializeReport } from '@/lib/report';
 
 /**

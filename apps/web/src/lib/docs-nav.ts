@@ -18,7 +18,8 @@
  *
  * So the data lives here, outside the boundary, and both the client sidebar and
  * the server overview are consumers. This is the second time the rebuild has
- * produced this shape — `lib/status-labels.ts` is the first — and it is the same
+ * produced this shape — the closed label set, now `@limen/shared/status-labels`,
+ * is the first — and it is the same
  * rule each time: content is not markup, and a module in the rendering layer is
  * the wrong place to keep it.
  */

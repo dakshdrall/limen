@@ -51,9 +51,9 @@
 
 import { Keypair } from '@stellar/stellar-sdk';
 import { assertTestnet, toHex, type Ed25519Signer } from '@limen/chain/browser';
-import { KEY_ROLES, NOT_EXPORTABLE, type KeyRole } from '@/lib/key-roles';
+import { KEY_ROLES, NOT_EXPORTABLE, type KeyRole } from '@limen/shared/key-roles';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL } from '@limen/shared/status-labels';
 
 /**
  * The label, re-exported so a caller that renders it does not have to know it
@@ -65,8 +65,10 @@ import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
  * by retyping the string and letting the two drift.
  *
  * V6 moved the constant from `components/StatusLabel.tsx` to
- * `lib/status-labels.ts`. Only the import path changed; see that module for why
- * the old direction was backwards.
+ * `lib/status-labels.ts`, and V8 M1 moved it again to
+ * `@limen/shared/status-labels`. Only the import path changed either time; see
+ * that module for why the first direction was backwards, and why one app is no
+ * longer the right home for a set that has to be closed against several.
  */
 export { LOCAL_KEY_LABEL };
 

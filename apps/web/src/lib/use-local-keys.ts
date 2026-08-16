@@ -9,7 +9,7 @@ import {
   subscribeToLocalKeys,
   type LocalKey,
 } from '@/lib/local-key';
-import { KEY_ROLES, type KeyRole } from '@/lib/key-roles';
+import { KEY_ROLES, type KeyRole } from '@limen/shared/key-roles';
 
 /**
  * Which keys this browser holds, as a screen sees them.

@@ -6,7 +6,7 @@ import { Address } from '@/components/Address';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
 import { StatusLabel } from '@/components/StatusLabel';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL } from '@limen/shared/status-labels';
 import type { InstallPlan } from '@limen/chain/plan';
 import { installBoundary } from '@/lib/chain-actions';
 import { formatPolicyId } from '@/lib/policy-id';

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { LocalKeyBadge } from '@/components/app/LocalKeyBadge';
 import { WriteResult } from '@/components/app/WriteResult';
 import { StatusLabel } from '@/components/StatusLabel';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL } from '@limen/shared/status-labels';
 import {
   OBSERVED_AMOUNT,
   SEED_AMOUNT,

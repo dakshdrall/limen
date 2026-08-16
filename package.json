@@ -10,6 +10,7 @@
     "build": "npm run build -w @limen/web",
     "build:core": "npm run build -w @limen/core",
     "build:chain": "npm run build -w @limen/core && npm run build -w @limen/chain",
+    "build:shared": "npm run build -w @limen/shared",
     "test": "npm run build -w @limen/core && npm run test -w @limen/core && npm run test -w @limen/chain && npm run test -w @limen/web",
     "lint": "npm run lint -w @limen/web",
     "evidence": "node scripts/evidence.mjs",

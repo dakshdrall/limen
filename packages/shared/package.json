@@ -1,0 +1,36 @@
+{
+  "name": "@limen/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The vocabulary every Limen surface states its limits in: the closed label set, the key roles, and the redactor. No dependencies, no network, no DOM.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./redact": {
+      "types": "./dist/redact.d.ts",
+      "default": "./dist/redact.js"
+    },
+    "./status-labels": {
+      "types": "./dist/status-labels.d.ts",
+      "default": "./dist/status-labels.js"
+    },
+    "./key-roles": {
+      "types": "./dist/key-roles.d.ts",
+      "default": "./dist/key-roles.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

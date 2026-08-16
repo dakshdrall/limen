@@ -414,6 +414,10 @@ packages/core/      @limen/core — dependency-free, no network IO, no DOM
   synthesize.ts     deterministic derivation
   evaluate.ts       independent adjudication
   denycases.ts      single-axis mutations
+packages/shared/    @limen/shared — the words every surface states its limits in
+  status-labels.ts  the closed label set; a screen cannot invent a member
+  key-roles.ts      which key is acting, and the sentences that go with it
+  redact.ts         what must never reach a log, a report, or a webhook
 packages/chain/     @limen/chain — everything that touches the network
   lower.ts          PolicyProposal -> InstallPlan; refuses what it cannot enforce
   plan.ts           plan types and the OpenZeppelin limits they respect
@@ -445,6 +449,16 @@ able to reach back and change what was derived.
 
 `lower.ts` is pure — no SDK, no network, no clock — for the same reason
 `synthesize` is: it can then be tested exhaustively without either.
+
+`packages/shared` is dependency-free for a different reason than `packages/core`
+is. `core` is dependency-free so a deterministic synthesizer can be checked in
+isolation. `shared` is dependency-free because of where it runs: the redactor
+executes in a browser, in a route handler, in a Node test, and — once the agent
+runtime lands — in a long-lived worker, and a dependency there would put a third
+party between a value and the decision to remove it in four runtimes at once.
+Its three modules were in `apps/web/src/lib/` until they stopped being about the
+web app: a closed label set that lives inside one of the surfaces it constrains
+is closed by convention rather than by construction.
 
 ### Reproducing the chain layer
 

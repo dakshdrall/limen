@@ -1,5 +1,5 @@
 import { StatusLabels } from '@/components/StatusLabel';
-import type { StatusLabelName } from '@/lib/status-labels';
+import type { StatusLabelName } from '@limen/shared/status-labels';
 
 /**
  * The block every screen opens with: where you are, what this is, what it is

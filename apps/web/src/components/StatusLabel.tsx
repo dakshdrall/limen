@@ -1,10 +1,10 @@
-import { STATUS_LABELS, type StatusLabelName } from '@/lib/status-labels';
+import { STATUS_LABELS, type StatusLabelName } from '@limen/shared/status-labels';
 
 /**
  * A limit, rendered.
  *
- * The vocabulary itself is in `lib/status-labels.ts` and this is a consumer of
- * it. Through V5 the constants lived in this file and `lib/local-key.ts`
+ * The vocabulary itself is in `@limen/shared/status-labels` and this is a
+ * consumer of it. Through V5 the constants lived in this file and `lib/local-key.ts`
  * imported one of them from here — the data layer reaching up into the
  * rendering layer, which became a type error the first time the rendering layer
  * was deleted. The set is content; this is markup; the dependency runs one way.

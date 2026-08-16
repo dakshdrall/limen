@@ -48,7 +48,7 @@
  * imports nothing.
  */
 
-import { redact, redactPath } from '@/lib/redact';
+import { redact, redactPath } from '@limen/shared/redact';
 
 /**
  * Where the failure was caught, which is the first thing a reader needs and the

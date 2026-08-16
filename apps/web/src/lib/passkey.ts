@@ -66,7 +66,7 @@ import {
   type Ed25519Signer,
 } from '@limen/chain/browser';
 import { NETWORK_PASSPHRASE } from '@/lib/network';
-import { PASSKEY_LABEL } from '@/lib/status-labels';
+import { PASSKEY_LABEL } from '@limen/shared/status-labels';
 
 /**
  * The label, re-exported for the same reason `local-key.ts` re-exports its own:

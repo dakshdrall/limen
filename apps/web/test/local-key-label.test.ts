@@ -340,12 +340,22 @@ describe('the detectors can fire', () => {
 });
 
 describe('the label exists once, in the closed set', () => {
-  // V6 moved the closed set from `components/StatusLabel.tsx` to
-  // `lib/status-labels.ts`. The rule is unchanged; only the file it reads is.
-  // The move happened because `lib/local-key.ts` imported the constant from the
-  // component layer, so this safety rule was resting on a component file
-  // continuing to exist — which the rebuild disproved on its first build.
-  const statusLabel = readFileSync(join(SRC, 'lib/status-labels.ts'), 'utf8');
+  // The closed set has moved twice, and the rule has not changed either time —
+  // only the file it reads.
+  //
+  // V6 moved it from `components/StatusLabel.tsx` to `lib/status-labels.ts`,
+  // because `lib/local-key.ts` imported the constant from the component layer
+  // and this safety rule was therefore resting on a component file continuing
+  // to exist — which the rebuild disproved on its first build.
+  //
+  // V8 M1 moved it again, out of `apps/web` and into `packages/shared`. The
+  // reason is the same shape one level up: `apps/web` is about to stop being
+  // the only surface that states a limit to a person, and a closed set living
+  // inside one of the things it constrains is closed by convention rather than
+  // by construction. Reading it from outside `SRC` is the point — this test is
+  // in `apps/web` and the vocabulary no longer is.
+  const SHARED = fileURLToPath(new URL('../../../packages/shared/src/', import.meta.url));
+  const statusLabel = readFileSync(join(SHARED, 'status-labels.ts'), 'utf8');
 
   it('is a member of STATUS_LABELS, not a string a screen invented', () => {
     expect(statusLabel).toContain("'TESTNET ONLY · LOCAL KEY'");
@@ -397,7 +407,7 @@ describe('the passkey announces itself too', () => {
       .map(({ path }) => path);
 
     // If this fails: the passkey path landed without its label. Import
-    // `PASSKEY_LABEL` from `lib/status-labels` and name it where the credential
+    // `PASSKEY_LABEL` from `@limen/shared/status-labels` and name it where the credential
     // is created or used. Deleting this test is not the fix.
     expect(unlabelled).toEqual([]);
   });

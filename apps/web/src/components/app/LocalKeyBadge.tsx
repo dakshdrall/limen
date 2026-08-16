@@ -1,7 +1,7 @@
 import { Address } from '@/components/Address';
 import { StatusLabel } from '@/components/StatusLabel';
-import { LOCAL_KEY_LABEL } from '@/lib/status-labels';
-import { NOT_EXPORTABLE, type KeyRole } from '@/lib/key-roles';
+import { LOCAL_KEY_LABEL } from '@limen/shared/status-labels';
+import { NOT_EXPORTABLE, type KeyRole } from '@limen/shared/key-roles';
 
 /**
  * Which key is about to act, and what that key is.
@@ -22,7 +22,7 @@ import { NOT_EXPORTABLE, type KeyRole } from '@/lib/key-roles';
  * beside a button the label is context, not a warning, and a warning that
  * appears everywhere is one nobody reads anywhere.
  *
- * The label is imported from `lib/status-labels.ts` rather than from the
+ * The label is imported from `@limen/shared/status-labels` rather than from the
  * component that renders it. Through V5 it came from `components/StatusLabel`,
  * and `lib/local-key.ts` imported it from there too — the data layer reaching up
  * into the rendering layer for a string, which became a type error the moment

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StatusLabels } from '@/components/StatusLabel';
-import type { StatusLabelName } from '@/lib/status-labels';
+import type { StatusLabelName } from '@limen/shared/status-labels';
 
 /**
  * A documentation page: heading, limits, contents rail, body.

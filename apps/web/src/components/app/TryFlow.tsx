@@ -39,10 +39,10 @@ import {
 import { fundFromFriendbot, type WriteOutcome } from '@/lib/chain-write';
 import { decimalise } from '@/lib/format';
 import type { IngestError } from '@/lib/ingest-contract';
-import { NOT_EXPORTABLE, PASSKEY_STILL_LOCAL } from '@/lib/key-roles';
+import { NOT_EXPORTABLE, PASSKEY_STILL_LOCAL } from '@limen/shared/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
 import { listAccounts, rememberAccount, rememberObserved, rememberProvenance } from '@/lib/store';
-import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@/lib/status-labels';
+import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@limen/shared/status-labels';
 import { useAccountSnapshot } from '@/lib/use-account-snapshot';
 import { useLastRead } from '@/lib/use-last-read';
 import { useLocalKeyPublics, useLocalKeyRawPublics, useSigners } from '@/lib/use-local-keys';

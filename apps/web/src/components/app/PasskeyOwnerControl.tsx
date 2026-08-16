@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { StatusLabel } from '@/components/StatusLabel';
-import { PASSKEY_LABEL } from '@/lib/status-labels';
-import { PASSKEY_KEEPS_ACCOUNT, PASSKEY_STILL_LOCAL } from '@/lib/key-roles';
+import { PASSKEY_LABEL } from '@limen/shared/status-labels';
+import { PASSKEY_KEEPS_ACCOUNT, PASSKEY_STILL_LOCAL } from '@limen/shared/key-roles';
 import { createPasskey } from '@/lib/passkey';
 import { usePasskeyPublic, usePasskeysAvailable } from '@/lib/use-passkey';
 
