@@ -39,10 +39,45 @@ const SRC = fileURLToPath(new URL('../src/', import.meta.url));
  * label — and requiring it to means the obligation is visible at the line that
  * makes the key rather than inferred by whoever wires up the screen later.
  */
-const ROOTS = [
-  { name: 'apps/web/src', dir: SRC },
-  { name: 'packages/chain/src', dir: fileURLToPath(new URL('../../../packages/chain/src/', import.meta.url)) },
-] as const;
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+/**
+ * Every workspace, discovered — not a list somebody has to remember to extend.
+ *
+ * This was two hand-written entries, `apps/web/src` and `packages/chain/src`,
+ * and the second was added only because PLAN-V3 happened to say where the agent
+ * signer would land. That is the shape of a fence that fails by omission: it
+ * catches a key generated in a directory somebody thought of, and says nothing
+ * about one generated in a directory somebody added later.
+ *
+ * PLAN-V8 makes that concrete rather than hypothetical. Its §3 answer puts a
+ * server-side keygen in a **new** package — `packages/custody` — which under
+ * the old list would have landed outside every fence in this repository with
+ * nothing going red. The generation scan, the storage scan and the import scan
+ * would all have passed by not looking.
+ *
+ * So the roots are read off the filesystem: every `apps/*​/src` and every
+ * `packages/*​/src` that exists. A new workspace is scanned the day it is
+ * created, by nobody doing anything. `the scan covers every workspace` below
+ * asserts the discovery is non-empty and still finds the two that were listed
+ * by hand, so a broken glob fails loudly instead of quietly scanning nothing.
+ */
+function discoverRoots(): { name: string; dir: string }[] {
+  const found: { name: string; dir: string }[] = [];
+  for (const group of ['apps', 'packages']) {
+    const groupDir = join(REPO_ROOT, group);
+    if (!existsSync(groupDir)) continue;
+    for (const workspace of readdirSync(groupDir, { withFileTypes: true })) {
+      if (!workspace.isDirectory()) continue;
+      const dir = join(groupDir, workspace.name, 'src');
+      if (!existsSync(dir)) continue;
+      found.push({ name: `${group}/${workspace.name}/src`, dir });
+    }
+  }
+  return found.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+const ROOTS = discoverRoots();
 
 /** The one module the local key is expected to live in when it lands. */
 const LOCAL_KEY_MODULE = 'lib/local-key.ts';
@@ -148,6 +183,44 @@ const IMPORTS_THE_LOCAL_KEY_MODULE =
 
 /** The label reaching a screen, rather than sitting in a string somewhere. */
 const RENDERS_THE_LABEL = /<StatusLabel\b[\s\S]{0,80}?(?:LOCAL_KEY_LABEL|TESTNET ONLY · LOCAL KEY)/;
+
+describe('the scan covers every workspace, and is not scanning nothing', () => {
+  it('discovers the two roots that used to be listed by hand', () => {
+    const names = ROOTS.map((root) => root.name);
+    expect(names).toContain('apps/web/src');
+    expect(names).toContain('packages/chain/src');
+  });
+
+  it('discovers every workspace that has a src directory, including new ones', () => {
+    // Read independently of `discoverRoots`, so a bug in the discovery cannot
+    // agree with itself — the same argument that keeps `evaluate` separate from
+    // `synthesize`.
+    const expected: string[] = [];
+    for (const group of ['apps', 'packages']) {
+      const groupDir = join(REPO_ROOT, group);
+      if (!existsSync(groupDir)) continue;
+      for (const entry of readdirSync(groupDir, { withFileTypes: true })) {
+        if (entry.isDirectory() && existsSync(join(groupDir, entry.name, 'src'))) {
+          expected.push(`${group}/${entry.name}/src`);
+        }
+      }
+    }
+
+    // If this fails after adding a workspace: nothing to fix here. It means the
+    // new workspace is now scanned, which is the point — go and label whatever
+    // in it generates or stores a key.
+    expect(ROOTS.map((root) => root.name).sort()).toEqual(expected.sort());
+  });
+
+  it('is reading files, so an empty sweep cannot pass as a clean one', () => {
+    // Every assertion below is of the form "no file matches X and fails Y". All
+    // of them pass trivially against zero files, which is exactly how a fence
+    // whose roots stopped resolving would report a clean bill of health.
+    const scanned = sources();
+    expect(scanned.length).toBeGreaterThan(50);
+    expect(scanned.some(({ path }) => path === `apps/web/src/${LOCAL_KEY_MODULE}`)).toBe(true);
+  });
+});
 
 describe('the detectors can fire', () => {
   it('recognises the shapes browser keygen is likely to take', () => {

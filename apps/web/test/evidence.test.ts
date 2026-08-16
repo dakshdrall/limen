@@ -20,7 +20,8 @@
  * counting. Those come from the run, and `--check` is what keeps them current.
  */
 
-import { type Dirent, readdirSync, readFileSync } from 'node:fs';
+import { type Dirent, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { EVIDENCE } from '../src/lib/evidence';
@@ -153,6 +154,86 @@ describe('the test totals are internally consistent', () => {
   it('covers all three workspaces, so a suite cannot be dropped and go unnoticed', () => {
     const workspaces = EVIDENCE.tests.suites.map((suite) => suite.workspace);
     expect(new Set(workspaces)).toEqual(new Set(['@limen/core', '@limen/chain', '@limen/web']));
+  });
+});
+
+/**
+ * Every file the README points at exists.
+ *
+ * This check exists because the fault it catches had already happened and had
+ * survived three plans.
+ *
+ * `apps/web/test/caveats.test.ts` was deleted in `c034cb8`, with the rendering
+ * layer whose sentences it pinned. `README.md` went on citing it in two places
+ * as *"pinned in both directions by apps/web/test/caveats.test.ts"* — naming a
+ * nonexistent test as the guarantee for two of the project's caveats. Every
+ * suite stayed green for the whole of V6 and V7, because nothing anywhere
+ * asserted that a file the README cites is a file that exists.
+ *
+ * `scripts/evidence.mjs` noticed the same deletion in a comment of its own and
+ * the README was not updated with it, which is the detail worth keeping: the
+ * information existed in the repository and did not reach the claim.
+ *
+ * The scan is deliberately general rather than a special case for one path. It
+ * is scoped to this repository's own top-level directories, because the README
+ * also cites OpenZeppelin sources — `packages/accounts/src/...` — which
+ * correctly do not exist here.
+ *
+ * This lives in `evidence.test.ts` rather than in `caveats.test.ts` on purpose.
+ * A suite cannot assert its own existence, and the specific failure being
+ * guarded against is that suite being deleted again.
+ */
+describe('every file the README cites is a file that exists', () => {
+  const README_PATH = fileURLToPath(new URL('../../../README.md', import.meta.url));
+  const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+  /**
+   * Backticked paths under this repository's own directories, with any trailing
+   * `:12` or `:12-34` line reference stripped.
+   *
+   * `packages/(core|chain)` rather than `packages/`: the README quotes
+   * `packages/accounts/src/smart_account/storage.rs:353` from the OpenZeppelin
+   * sources to show what runs inside `__check_auth`, and that file is not in
+   * this tree and is not supposed to be.
+   */
+  const CITATION =
+    /`((?:apps|scripts)\/[A-Za-z0-9._/-]+|packages\/(?:core|chain)\/[A-Za-z0-9._/-]+)`/g;
+
+  const cited = (): string[] => {
+    const readme = readFileSync(README_PATH, 'utf8');
+    const found = new Set<string>();
+    for (const match of readme.matchAll(CITATION)) {
+      found.add(match[1]!.replace(/:\d+(?:-\d+)?$/, ''));
+    }
+    return [...found].sort();
+  };
+
+  it('finds citations, so an empty scan cannot pass as a clean one', () => {
+    // The same two-sided shape every negative check in `ci.yml` uses. A regex
+    // that silently stopped matching would report a clean bill of health
+    // forever.
+    const paths = cited();
+    expect(paths.length).toBeGreaterThan(5);
+    expect(
+      paths.some((path) => path.endsWith('.test.ts')),
+      'the README cites no test file, so this check cannot catch the fault it exists for',
+    ).toBe(true);
+  });
+
+  it('can fire, proven against a path that is not there', () => {
+    // And that the existence check itself works, rather than being a `some()`
+    // over an empty list or an `existsSync` on a path that is always true.
+    expect(existsSync(join(REPO_ROOT, 'apps/web/test/caveats.test.ts'))).toBe(true);
+    expect(existsSync(join(REPO_ROOT, 'apps/web/test/no-such-suite.test.ts'))).toBe(false);
+  });
+
+  it('points at nothing that has been deleted or renamed', () => {
+    const missing = cited().filter((path) => !existsSync(join(REPO_ROOT, path)));
+
+    // If this fails: the README describes a file that is not there. Either
+    // restore the file or correct the sentence — but do not delete the citation
+    // and leave the claim, which is how this went unnoticed for two versions.
+    expect(missing).toEqual([]);
   });
 });
 
