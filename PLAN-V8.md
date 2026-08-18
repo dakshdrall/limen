@@ -1062,6 +1062,9 @@ packages/agent       NEW                 the runtime: model abstraction, tool lo
 packages/tools       NEW                 tool definitions. Every on-chain tool calls packages/chain.
 packages/db          NEW                 schema + migrations + typed queries.
 packages/shared      NEW                 redaction, status labels, key roles, formatting.
+packages/kv          NEW                 shared state: rate limits, the tx cache, the queue.
+                                         Two access paths like db — HTTP for web, TCP for the
+                                         runtime, because the queue has to block.
 
 apps/web             REFACTOR            builder, dashboard, docs, landing.
 apps/runtime         NEW                 the agent API + worker + scheduler. One Node service.
@@ -1518,6 +1521,46 @@ one driver's behaviour, and holding four commits of foundations on a Neon
 account that does not exist yet would have been the wrong trade. `web.ts`'s
 header states the same thing at the code, so a reader of the module is told
 before a reader of this plan.
+
+#### UNRUN — the shared-store contract against a real service
+
+**Status: partially run.** `packages/kv/test/contract.test.ts` exists, is
+parameterised over implementations, and named this record before it was written
+— so this closes a promise the code was already making.
+
+**What ran.** `MemoryKeyValue`, fully, on every case in the suite. What did not:
+`RuntimeKeyValue`, which needs a Redis and runs when `REDIS_URL` is set, and
+`UpstashKeyValue`, which needs an Upstash account and an HTTP protocol no
+container speaks. The local run of this milestone had neither, which means the
+suite as executed here **proved that the in-memory implementation agrees with
+itself** — and it says so on stderr rather than passing quietly.
+
+**Why the suite is shaped this way anyway.** Two implementations of an interface
+covered by two different suites are two things that share a type; everything
+passes locally and the behaviour differs in production where no test was written
+to look. One suite over every implementation is what makes the local fake worth
+having, and it means a real instance can be checked against the identical
+assertions the moment one exists — no new test to write at the moment somebody
+is least inclined to write one.
+
+**What is genuinely unverified.** That Upstash's HTTP `INCR` is atomic in the way
+the rate limiter depends on. It is documented as executing server-side like any
+Redis command, and an HTTP transport does not make a Redis command non-atomic.
+Unlike the `neon-http` question above, there is **no plausible silent-wrong-answer
+mode**: `INCR` either returns a monotonically increasing number or it does not,
+and the contract suite would say which. That asymmetry is why this one was
+acceptable to proceed on and that one was not.
+
+**What would close it.** In CI, a Redis service and `REDIS_URL` — the suite
+already fails rather than skips in CI for not having one, the same two-sided
+shape as `@limen/db`'s append-only fence. For Upstash, the account that
+production needs regardless.
+
+**Provisioning is not done and is not doable here.** There are no Vercel or
+Upstash credentials in this environment. Until the instance exists, the
+production deployment refuses to start — which is the designed behaviour rather
+than a regression, and is the reason that refusal was built before the traffic
+arrived rather than after.
 
 ### 7.5.3 KMS: build the interface, not the dependency
 
