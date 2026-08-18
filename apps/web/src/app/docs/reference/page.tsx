@@ -119,6 +119,24 @@ const ENVIRONMENT = [
     note: 'Credential for the above. Both are needed together — either one alone counts as unset, because half a configuration is not a store.',
   },
   {
+    name: 'LIMEN_WEBAUTHN_RP_ID',
+    scope: 'server',
+    required: true,
+    note: 'The relying party a passkey is bound to — a registrable domain such as limen.app, never an origin. Required on the production deployment, which refuses to start without it: the alternative is deriving the expected origin from the request, and the Origin and Host headers are supplied by the caller, so that check would accept a replayed assertion from any site while looking exactly like a working login. Outside production it defaults to localhost so the ceremony still runs.',
+  },
+  {
+    name: 'LIMEN_WEBAUTHN_ORIGINS',
+    scope: 'server',
+    required: true,
+    note: 'Comma-separated list of origins an assertion may come from, matched exactly and never by prefix. Checked because the on-chain verifier validates neither origin nor rpIdHash, so a valid assertion proves which credential signed but not which site asked.',
+  },
+  {
+    name: 'VERCEL_URL',
+    scope: 'platform',
+    required: false,
+    note: "This deployment's own hostname, set by the platform and not by hand. Added to the accepted passkey origins so a preview can run the login ceremony without its URL being configured per branch. Safe in a way a request header is not, because it comes from the deployment's environment rather than the caller — though a passkey registered on production still will not work on a preview, since the two are different relying parties.",
+  },
+  {
     name: 'NODE_ENV',
     scope: 'platform',
     required: false,
@@ -338,13 +356,14 @@ export default function ReferencePage() {
 
       <DocSectionBlock id="env" title="Environment variables">
         <P>
-          None of these is required to read the site or the documentation, and all but one have a
-          fallback or a route that declines cleanly in their absence — a missing variable never
-          degrades into a screen that silently shows something wrong. The exception is the shared
-          store: the <em>production</em>{' '}
-          deployment refuses to start without it, deliberately,
-          because the fallback there would be a rate limit counted per instance rather than in
-          total. Everywhere else that fallback is allowed and says so on stderr.
+          None of these is required to read the site or the documentation, and most have a fallback
+          or a route that declines cleanly in their absence — a missing variable never degrades into
+          a screen that silently shows something wrong. Two are exceptions, and both refuse rather
+          than degrade on the <em>production</em>{' '}
+          deployment: the shared store, because the fallback there would be a rate limit counted per
+          instance rather than in total; and the passkey relying party, because the fallback would
+          be trusting the caller&rsquo;s own headers to say which site an assertion came from.
+          Elsewhere both fall back and say so.
         </P>
         <div className="scroll-x on-ground w-fit max-w-full">
           <table className="tbl tbl-fit">

@@ -145,6 +145,8 @@ payload — runs with no RPC access and no API key.
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
 | `UPSTASH_REDIS_REST_URL` | Rate limits and the transaction cache fall back to a process-local store, which counts per instance and resets on redeploy — the pre-V8 behaviour. Allowed on a preview and in development, where it is logged to stderr; **refused outright on the production deployment**, which will not serve without it. |
 | `UPSTASH_REDIS_REST_TOKEN` | As above; both are required together, and either one alone counts as unset. |
+| `LIMEN_WEBAUTHN_RP_ID` | Passkey login falls back to a `localhost` relying party, which is right for `next dev` and wrong for anything served. **Refused on the production deployment**, which will not start without it — the alternative is deriving the expected origin from the caller's own headers, which would accept a replayed assertion from any site. |
+| `LIMEN_WEBAUTHN_ORIGINS` | As above; comma-separated, matched exactly and never by prefix. The on-chain verifier checks neither origin nor `rpIdHash`, so this is where that check happens. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
 | `NEXT_PUBLIC_SITE_URL` | OG and Twitter card URLs resolve against Vercel's production hostname, or `http://localhost:3000` outside it. |
 
