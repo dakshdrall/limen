@@ -189,6 +189,32 @@ export const sessions = pgTable(
     createdAt: instant('created_at').notNull().defaultNow(),
     expiresAt: instant('expires_at').notNull(),
     /**
+     * SHA-256 of the cookie's token. **Never the token itself.**
+     *
+     * Added when sessions were actually implemented, because the shape this
+     * table had without it forced the wrong design: with no token column the
+     * cookie has to carry `id`, and then every live session token in the system
+     * is sitting in a column in plaintext. A read-only database compromise
+     * would hand over the ability to act as any logged-in user.
+     *
+     * That matters here more than it does in most applications because N10 —
+     * the row this project's threat table calls *"the whole argument"* — is
+     * built on a database compromise being survivable. The claim is that
+     * an attacker with the database can forge Limen's own opinion but cannot
+     * widen an agent's authority, since the chain is what enforces. Handing
+     * that same attacker every user's session would not break the on-chain
+     * guarantee, but it would let them act as the user everywhere the chain is
+     * not the boundary, and it would make N10 a narrower claim than it reads
+     * as.
+     *
+     * A hash is a one-way function of a value the server never needs to
+     * reproduce — it only needs to recognise one — so there is no cost to
+     * storing it this way and no reason not to. Unique, because two sessions
+     * hashing the same is a token collision and should be a constraint
+     * violation rather than an ambiguous lookup.
+     */
+    tokenHash: text('token_hash').notNull(),
+    /**
      * Hashed, and the IP itself is never stored.
      *
      * It is here to make "this session moved continent mid-life" answerable
@@ -198,7 +224,11 @@ export const sessions = pgTable(
      */
     createdIpHash: text('created_ip_hash'),
   },
-  (table) => [index('sessions_user_id_idx').on(table.userId), index('sessions_expires_at_idx').on(table.expiresAt)],
+  (table) => [
+    index('sessions_user_id_idx').on(table.userId),
+    index('sessions_expires_at_idx').on(table.expiresAt),
+    uniqueIndex('sessions_token_hash_key').on(table.tokenHash),
+  ],
 );
 
 export const telegramLinks = pgTable(

@@ -1514,6 +1514,17 @@ is case 3, and `createWebDb` grows a fence that makes `transaction` unreachable
 the same reason: a limitation that only shows up as silent wrong behaviour has
 to be turned into a loud refusal.
 
+**The session store shares this constraint, and is handled the same way.**
+`apps/web/src/lib/session.ts` reaches Postgres over the same `neon-http` path,
+so a local container cannot exercise its binding either. The response is to make
+the untestable part as small as possible rather than to pretend it is covered: a
+`SessionStore` interface holds every decision — token hashing, expiry filtering
+in the lookup rather than after it, cookie attributes, immediate revocation —
+and all of it is proved against a fake. What is unproven is the Drizzle binding
+underneath, which is thin by design and is a handful of statements. The
+distinction worth keeping is that this one has no silent-wrong-answer mode
+either: a session lookup that does not work fails visibly at the first login.
+
 **Why M1 proceeded without it.** The two properties M1 actually has to
 establish — that the migration applies, and that the schema fences fire — are
 both provable against local Postgres, and both were. This is a question about

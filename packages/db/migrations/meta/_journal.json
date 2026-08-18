@@ -15,6 +15,13 @@
       "when": 1786897719015,
       "tag": "0001_audit_events_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787074171681,
+      "tag": "0002_session_token_hash",
+      "breakpoints": true
     }
   ]
 }
