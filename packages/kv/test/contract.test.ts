@@ -16,9 +16,10 @@
  *
  * `UpstashKeyValue` is the one implementation not covered here: it needs an
  * Upstash account, and Upstash's HTTP protocol is not something a container
- * speaks. It is recorded as UNRUN in PLAN-V8 §7.5, in the same register as the
- * `neon-http` measurement, with the same reasoning — the suite exists and can
- * be pointed at a real instance the moment there is one.
+ * speaks. It is the remaining half of PLAN-V8 §7.5's *"PARTLY RUN — the shared
+ * store contract"* record; `RuntimeKeyValue` has since been exercised against a
+ * real Redis, and this suite runs 35 cases with `REDIS_URL` set against 25
+ * without, which is the difference that coverage makes.
  */
 
 import { afterAll, describe, expect, it } from 'vitest';

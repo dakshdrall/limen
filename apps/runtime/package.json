@@ -1,0 +1,26 @@
+{
+  "name": "@limen/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The agent runtime: queue, worker loop and scheduler. One long-lived Node process, separate from apps/web by decision §7.5.4.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "node --watch dist/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@limen/db": "*",
+    "@limen/kv": "*",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}
