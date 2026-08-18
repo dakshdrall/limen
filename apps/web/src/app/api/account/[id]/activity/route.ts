@@ -31,7 +31,7 @@ export const runtime = 'nodejs';
  * retention-window scan is over twenty upstream calls. This is the most
  * expensive endpoint in the application and is metered like it.
  */
-const limit = createRateLimit({ max: 8, windowMs: 10 * 60 * 1000 });
+const limit = createRateLimit({ max: 8, windowMs: 10 * 60 * 1000, namespace: 'activity' });
 
 function fail(code: AccountReadErrorCode, message: string, status: number, detail?: string): Response {
   const body: AccountReadError = {
@@ -64,7 +64,7 @@ export async function GET(
     );
   }
 
-  if (limit.check(clientIp(request))) {
+  if (await limit.check(clientIp(request))) {
     return fail('rate_limited', 'too many activity scans from this address; try again shortly', 429);
   }
 

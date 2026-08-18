@@ -39,11 +39,11 @@ import { serializeReport, type ErrorReport } from '@/lib/report';
  * it in front of a webhook that will happily deliver every one of them to a
  * channel a person is trying to read.
  *
- * Process-local, with the same honest accounting as everywhere else in this
- * repository: it raises the cost of a flood rather than bounding it, because
- * two instances keep two counters. See `lib/rate-limit.ts`.
+ * Shared across instances as of V8 M1, so twenty per five minutes is twenty in
+ * total rather than twenty per instance. It bounds a flood now rather than
+ * raising its cost. See `lib/rate-limit.ts`.
  */
-const limit = createRateLimit({ max: 20, windowMs: 5 * 60 * 1000 });
+const limit = createRateLimit({ max: 20, windowMs: 5 * 60 * 1000, namespace: 'report' });
 
 /**
  * A report is eight short strings. Anything an order of magnitude past that is
@@ -117,7 +117,7 @@ function webhookBody(report: ErrorReport): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (limit.check(clientIp(request))) {
+  if (await limit.check(clientIp(request))) {
     // No body. Nothing here is worth telling a caller that is over its budget.
     return new Response(null, { status: 429 });
   }

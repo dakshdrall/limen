@@ -58,9 +58,11 @@ interface WaitlistEntry {
 
 /* --- rate limit ---------------------------------------------------------- */
 
-// Shared with /api/ingest. See `lib/rate-limit.ts` for the honest accounting of
-// what a process-local counter does and does not bound.
-const limit = createRateLimit({ max: 5, windowMs: 10 * 60 * 1000 });
+// Tighter than /api/ingest's twenty, and on its own namespace so the two count
+// separately rather than one spending the other's budget. The counter is shared
+// across instances as of V8 M1; the waitlist *store* below is still a file, and
+// is still process-local. See `lib/rate-limit.ts`.
+const limit = createRateLimit({ max: 5, windowMs: 10 * 60 * 1000, namespace: 'waitlist' });
 
 /* --- store --------------------------------------------------------------- */
 
@@ -94,7 +96,7 @@ function bad(message: string, status: number) {
 
 export async function POST(request: Request): Promise<Response> {
   const now = Date.now();
-  if (limit.check(clientIp(request), now)) {
+  if (await limit.check(clientIp(request))) {
     return bad('Too many submissions from this address. Try again later.', 429);
   }
 

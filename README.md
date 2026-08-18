@@ -143,6 +143,8 @@ payload — runs with no RPC access and no API key.
 | `LIMEN_DEMO_DESTINATION` | As above. The fixed account the demo transfer is sent to. |
 | `ANTHROPIC_API_KEY` | The plain-English explanation is skipped and the raw structured rationale is shown instead. The deny table is unaffected. |
 | `NEXT_PUBLIC_SMART_ACCOUNT_ID` | Install renders the exact payload that would be submitted, with signing disabled. |
+| `UPSTASH_REDIS_REST_URL` | Rate limits and the transaction cache fall back to a process-local store, which counts per instance and resets on redeploy — the pre-V8 behaviour. Allowed on a preview and in development, where it is logged to stderr; **refused outright on the production deployment**, which will not serve without it. |
+| `UPSTASH_REDIS_REST_TOKEN` | As above; both are required together, and either one alone counts as unset. |
 | `WAITLIST_STORE_PATH` | Waitlist entries are written to a JSON file in the system temp directory, which a serverless host erases when the instance recycles. Set it to somewhere durable. `TODO(roadmap)`: a real backend. |
 | `NEXT_PUBLIC_SITE_URL` | OG and Twitter card URLs resolve against Vercel's production hostname, or `http://localhost:3000` outside it. |
 
@@ -627,11 +629,16 @@ pretend otherwise.
   what testnet actually contains. Every unknown shape it meets will either
   extract correctly or refuse and name the field; neither of those is silent
   corruption, but the refusal rate on real traffic is unmeasured.
-- **The cache and the rate limits are process-local.** Both live in memory, so
-  they reset on a cold start and do not compose across instances. They raise the
-  cost of a flood rather than bounding it. This is a deliberate choice — it
-  survives a Vercel cold start with no new dependency and no provisioning — not
-  an oversight. `TODO(roadmap)`: a shared backing store, alongside the waitlist.
+- ~~**The cache and the rate limits are process-local**~~ — they are shared.
+  Both moved to Redis in V8 M1 (`packages/kv`), so a limit of twenty per five
+  minutes is twenty in total rather than twenty per instance, and the counter
+  survives a redeploy. The production deployment **refuses to start** without
+  the credentials rather than falling back to the old behaviour, because a
+  fallback that silently reinstates per-instance counters retires the comment
+  instead of the problem. Two honest remainders: a *preview* deployment without
+  credentials does still run per-instance counters, and says so on stderr — the
+  strictness is where the traffic is; and the **waitlist store is still a file**
+  and still process-local, with its own `TODO(roadmap)` below.
 - **Fixture transactions are illustrative.** Their addresses are real
   StrKey-valid Stellar addresses, but the transactions were not observed on a
   live network. They are marked `"network": "simulated"` for that reason.

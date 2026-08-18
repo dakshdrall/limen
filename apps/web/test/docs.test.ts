@@ -23,6 +23,25 @@ import { DOCS_NAV } from '../src/lib/docs-nav';
 const src = (relative: string) => fileURLToPath(new URL(`../src/${relative}`, import.meta.url));
 const read = (relative: string) => readFileSync(src(relative), 'utf8');
 
+/**
+ * Where the application reads environment variables from.
+ *
+ * `apps/web/src` is not the whole of it any more. V8 M1 moved the rate limiter
+ * and the transaction cache into `@limen/kv`, which reads two variables the
+ * production deployment refuses to start without — and a fence that only
+ * scanned this app would have called that table complete while the two entries
+ * an operator most needs were missing from it.
+ *
+ * Only packages the *web app* imports belong here. `@limen/db` and
+ * `@limen/custody` read their own variables, but nothing in `apps/web` imports
+ * either yet, so documenting them on this page would describe a deployment that
+ * does not exist. They join this list in the milestone that wires them up.
+ */
+const ENV_ROOTS = [
+  fileURLToPath(new URL('../src/', import.meta.url)),
+  fileURLToPath(new URL('../../../packages/kv/src/', import.meta.url)),
+];
+
 /** Every documentation page, as `[route, source]`. */
 const PAGES = DOCS_NAV.flatMap((group) => group.entries).map((entry) => {
   const segments = entry.href.split('/').filter(Boolean);
@@ -91,11 +110,11 @@ describe('the environment table matches what the code reads', () => {
     [...reference.matchAll(/name:\s*'([A-Z0-9_]+)'/g)].map(([, name]) => name),
   );
 
-  /** Names the application actually reads, scanned out of `src/`. */
-  function scan(dir = ''): string[] {
-    return readdirSync(src(dir), { withFileTypes: true }).flatMap((entry) => {
+  /** Names the application actually reads, scanned out of every root above. */
+  function scan(root: string, dir = ''): string[] {
+    return readdirSync(`${root}${dir}`, { withFileTypes: true }).flatMap((entry) => {
       const path = dir === '' ? entry.name : `${dir}/${entry.name}`;
-      if (entry.isDirectory()) return scan(path);
+      if (entry.isDirectory()) return scan(root, path);
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) return [];
       // The reference page names every variable in prose and in the table, so
       // scanning it would make this test compare the page to itself.
@@ -103,14 +122,23 @@ describe('the environment table matches what the code reads', () => {
       // Comments stripped, so a docstring explaining `process.env.X` is not
       // mistaken for a read. The same argument `local-key-label.test.ts` makes:
       // prose must not be able to accuse a file of something it does not do.
-      const code = read(path)
+      const code = readFileSync(`${root}${path}`, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, ' ')
         .replace(/(^|[^:])\/\/.*$/gm, '$1');
-      return [...code.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map(([, name]) => name);
+      return [
+        // `process.env.X`, and the bare `env.X` a module takes as a parameter
+        // so it can be handed a fake in a test.
+        ...[...code.matchAll(/(?:process\.)?\benv\.([A-Z0-9_]+)/g)].map(([, name]) => name),
+        // `env[UPSTASH_URL_ENV]`, where the name is an exported constant so
+        // callers can refer to it without spelling it twice. The indirection is
+        // deliberate in `@limen/kv`; without this the scan would read that file
+        // and conclude it touches no environment at all.
+        ...[...code.matchAll(/_ENV = '([A-Z0-9_]+)'/g)].map(([, name]) => name),
+      ];
     });
   }
 
-  const read_ = new Set(scan());
+  const read_ = new Set(ENV_ROOTS.flatMap((root) => scan(root)));
 
   it('finds variables to check', () => {
     expect(read_.size).toBeGreaterThan(0);

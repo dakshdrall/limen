@@ -104,7 +104,25 @@ const ENVIRONMENT = [
     name: 'VERCEL_ENV',
     scope: 'server',
     required: false,
-    note: 'Which deployment this is — production, preview or development. Read only to label an error report, so a preview experiment does not read as a production incident in the same channel. Set by the platform, not by hand; absent, the label is omitted rather than guessed.',
+    note: 'Which deployment this is — production, preview or development. Read for two things: labelling an error report, so a preview experiment does not read as a production incident in the same channel; and deciding whether a missing shared store is a refusal or a fallback, since Vercel sets NODE_ENV=production for previews too and it therefore cannot answer that question. Set by the platform, not by hand; absent, the label is omitted rather than guessed.',
+  },
+  {
+    name: 'UPSTASH_REDIS_REST_URL',
+    scope: 'server',
+    required: true,
+    note: 'The shared store behind the rate limits and the transaction cache, over HTTP because a serverless function has no connection to pool. This is the one entry in this table the production deployment will not start without: falling back to per-instance counters there would enforce a limit per instance rather than in total, which is the behaviour V8 M1 set out to retire. On a preview or in development the fallback is allowed and is logged to stderr.',
+  },
+  {
+    name: 'UPSTASH_REDIS_REST_TOKEN',
+    scope: 'server',
+    required: true,
+    note: 'Credential for the above. Both are needed together — either one alone counts as unset, because half a configuration is not a store.',
+  },
+  {
+    name: 'NODE_ENV',
+    scope: 'platform',
+    required: false,
+    note: 'Set by the toolchain, never by hand. Read only as the fallback answer to "is this production" where the platform does not say — a self-hosted container, which has no preview concept. On Vercel it is production for preview builds too, which is why VERCEL_ENV is preferred over it.',
   },
   {
     name: 'NEXT_PUBLIC_LIMEN_RELEASE',
@@ -320,9 +338,13 @@ export default function ReferencePage() {
 
       <DocSectionBlock id="env" title="Environment variables">
         <P>
-          None of these is required to read the site or the documentation. Every one has a fallback
-          or a route that declines cleanly in its absence — a missing variable never degrades into a
-          screen that silently shows something wrong.
+          None of these is required to read the site or the documentation, and all but one have a
+          fallback or a route that declines cleanly in their absence — a missing variable never
+          degrades into a screen that silently shows something wrong. The exception is the shared
+          store: the <em>production</em>{' '}
+          deployment refuses to start without it, deliberately,
+          because the fallback there would be a rate limit counted per instance rather than in
+          total. Everywhere else that fallback is allowed and says so on stderr.
         </P>
         <div className="scroll-x on-ground w-fit max-w-full">
           <table className="tbl tbl-fit">

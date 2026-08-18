@@ -1,0 +1,29 @@
+{
+  "name": "@limen/kv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared state: rate limits, the transaction cache, and the queue the runtime blocks on. Two access paths, one interface.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./web": { "types": "./dist/web.d.ts", "default": "./dist/web.js" },
+    "./runtime": { "types": "./dist/runtime.d.ts", "default": "./dist/runtime.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.38.2",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}

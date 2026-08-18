@@ -21,8 +21,8 @@ export const runtime = 'nodejs';
  * ceiling that bounds the account's burn rate regardless of how many addresses
  * are asking.
  */
-const perAddress = createRateLimit({ max: 1, windowMs: 5 * 60 * 1000 });
-const global = createRateLimit({ max: 30, windowMs: 5 * 60 * 1000 });
+const perAddress = createRateLimit({ max: 1, windowMs: 5 * 60 * 1000, namespace: 'demo-per-address' });
+const global = createRateLimit({ max: 30, windowMs: 5 * 60 * 1000, namespace: 'demo-global' });
 
 export interface DemoPerformResponse {
   hash: string;
@@ -47,14 +47,14 @@ export async function GET(): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (perAddress.check(clientIp(request))) {
+  if (await perAddress.check(clientIp(request))) {
     return fail(
       'rate_limited',
       'the demo account is shared; wait a few minutes before performing another transaction',
       429,
     );
   }
-  if (global.check('global')) {
+  if (await global.check('global')) {
     return fail(
       'rate_limited',
       'the demo account is busy right now; try again in a few minutes, or start from a shipped preset',

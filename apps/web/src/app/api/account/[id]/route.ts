@@ -41,7 +41,7 @@ export const runtime = 'nodejs';
  * it is metered more tightly than ingest. The ceiling is per address rather
  * than global so one reviewer refreshing cannot lock out another.
  */
-const limit = createRateLimit({ max: 30, windowMs: 10 * 60 * 1000 });
+const limit = createRateLimit({ max: 30, windowMs: 10 * 60 * 1000, namespace: 'account' });
 
 function fail(code: AccountReadErrorCode, message: string, status: number, detail?: string): Response {
   const body: AccountReadError = {
@@ -146,7 +146,7 @@ export async function GET(
     );
   }
 
-  if (limit.check(clientIp(request))) {
+  if (await limit.check(clientIp(request))) {
     return fail('rate_limited', 'too many account reads from this address; try again shortly', 429);
   }
 

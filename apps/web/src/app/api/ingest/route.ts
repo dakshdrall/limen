@@ -30,7 +30,7 @@ function fail(code: IngestErrorCode, message: string, status: number, detail?: s
  * Live ingest costs an upstream RPC call, so it is metered. Cache hits and
  * fixtures skip the limiter — neither touches the network.
  */
-const limit = createRateLimit({ max: 20, windowMs: 10 * 60 * 1000 });
+const limit = createRateLimit({ max: 20, windowMs: 10 * 60 * 1000, namespace: 'ingest' });
 
 interface IngestRequest {
   hash?: unknown;
@@ -84,10 +84,10 @@ export async function POST(request: Request): Promise<Response> {
 
   // A confirmed transaction is immutable, so a hit is always as good as a
   // fresh fetch — and costs no upstream call, hence no rate-limit charge.
-  const cached = getCached(hash);
+  const cached = await getCached(hash);
   if (cached !== undefined) return Response.json(cached);
 
-  if (limit.check(clientIp(request))) {
+  if (await limit.check(clientIp(request))) {
     return fail('rate_limited', 'too many live lookups from this address; try again shortly', 429);
   }
 
@@ -148,6 +148,6 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  putCached(hash, observed);
+  await putCached(hash, observed);
   return Response.json(observed);
 }
