@@ -59,6 +59,16 @@ const SUITES = [
     directory: 'packages/custody',
     covers: 'key wrapping, and the fence that keeps the env-var master off mainnet',
   },
+  {
+    workspace: '@limen/kv',
+    directory: 'packages/kv',
+    covers: 'the shared store, and the fallback that production refuses',
+  },
+  {
+    workspace: '@limen/runtime',
+    directory: 'apps/runtime',
+    covers: 'queue delivery, the worker loop, and the startup refusal',
+  },
   // `covers` named `caveats` until the V6 rebuild. `caveats.test.ts` was one of
   // the four suites step 1 deleted with the rendering layer — it pinned
   // sentences on a landing page that no longer exists — so the description

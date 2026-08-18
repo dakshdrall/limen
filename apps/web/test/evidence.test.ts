@@ -148,11 +148,13 @@ describe('the test totals are internally consistent', () => {
   it('sums the per-suite counts', () => {
     const summed = EVIDENCE.tests.suites.reduce((total, suite) => total + suite.tests, 0);
     expect(EVIDENCE.tests.total).toBe(summed);
-    expect(EVIDENCE.tests.suites).toHaveLength(5);
+    expect(EVIDENCE.tests.suites).toHaveLength(7);
   });
 
-  it('covers all five workspaces, so a suite cannot be dropped and go unnoticed', () => {
-    // Three until V8 M1 added `@limen/db`, then `@limen/custody`.
+  it('covers all seven workspaces, so a suite cannot be dropped and go unnoticed', () => {
+    // Three until V8 M1 added `@limen/db`, then `@limen/custody`, then
+    // `@limen/kv` and `@limen/runtime` together — the shared store and the
+    // process that consumes it.
     //
     // Adding a workspace to `SUITES` hits the same bootstrap circularity that
     // `evidence.mjs --chain-only` exists for, one step removed: regenerating
@@ -168,7 +170,15 @@ describe('the test totals are internally consistent', () => {
     // arriving in them should be a decision rather than a side effect.
     const workspaces = EVIDENCE.tests.suites.map((suite) => suite.workspace);
     expect(new Set(workspaces)).toEqual(
-      new Set(['@limen/core', '@limen/chain', '@limen/db', '@limen/custody', '@limen/web']),
+      new Set([
+        '@limen/core',
+        '@limen/chain',
+        '@limen/db',
+        '@limen/custody',
+        '@limen/kv',
+        '@limen/runtime',
+        '@limen/web',
+      ]),
     );
   });
 });
