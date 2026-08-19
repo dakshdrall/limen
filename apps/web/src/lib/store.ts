@@ -17,8 +17,33 @@
  * show as live. For a permissions tool that is the worst available failure, and
  * it is worth a round trip on every load to not have it.
  *
- * No user accounts, no passwords, no email, no server. An address is a public
- * identifier, not a credential, so nothing secret is keyed by it either.
+ * ## There is a server now, and this says what it holds instead
+ *
+ * This paragraph used to claim four absences: user accounts, passwords, email,
+ * and a server. Three of the four stopped being true in V8 M1, in the commit
+ * that added `/api/auth` — there are user accounts, there are sessions, and
+ * this browser now talks to a Postgres it did not have.
+ *
+ * (The retired sentence is deliberately not quoted here. `caveats.test.ts`
+ * asserts it is absent from this file, and a file that quotes its own retired
+ * claim in order to explain it would fail that check — or, worse, would pass a
+ * differently-written one and let the claim live on as a comment about itself.)
+ *
+ * **No passwords** survives, and it survives for the reason it was worth
+ * writing: the credential is a passkey, so there is nothing to type, to reuse,
+ * or to phish.
+ *
+ * What remains true of *this module* is narrower and still worth stating: no
+ * part of this store is sent anywhere, nothing here is keyed by a secret, and
+ * an address is a public identifier rather than a credential.
+ *
+ * What the server holds instead is `packages/db/src/schema.ts` — a user, a
+ * session as a hash of the cookie's token and never the token itself, and
+ * pointers to accounts and policies. What it deliberately cannot hold is the
+ * box at the top of that file, and **its rule 2 is this module's rule,
+ * inherited**: no cached claim about chain state, for exactly the reason given
+ * above. That was the valuable half of the discipline here, and it is now a
+ * property of both stores rather than a habit of one.
  */
 
 const KEY = 'limen.v1';

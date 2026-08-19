@@ -119,6 +119,12 @@ const ENVIRONMENT = [
     note: 'Credential for the above. Both are needed together — either one alone counts as unset, because half a configuration is not a store.',
   },
   {
+    name: 'DATABASE_URL',
+    scope: 'server',
+    required: true,
+    note: 'Postgres, holding users and sessions as of V8 M1. Reached over neon-http from the web app, which sends each query as an HTTP request and therefore has no connection to exhaust across many function instances — and, as the cost of that, cannot run interactive transactions. There is no fallback: a route that needs the database refuses and names this variable, because a session that does not survive the next request is not a session. Migrations use the direct, unpooled endpoint rather than this one.',
+  },
+  {
     name: 'LIMEN_WEBAUTHN_RP_ID',
     scope: 'server',
     required: true,

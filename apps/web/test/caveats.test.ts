@@ -380,6 +380,41 @@ describe('the custody claim stays accurate as signers are added', () => {
     expect(localKey).toContain('No server involvement of any kind — in this module');
   });
 
+  it('retires store.ts\'s "no server", in the commit that made it false', () => {
+    // PLAN-V8 B6, and the rule the plan states for it: the prose changes in the
+    // commit that changes the fact, never before and never after. `/api/auth`
+    // is what makes this sentence false — there are user accounts and there is
+    // a server — so the sentence goes in the same commit as the routes.
+    const store = source('lib/store.ts');
+    expect(store).not.toContain('No user accounts, no passwords, no email, no server');
+  });
+
+  it('replaces it with what the browser holds and what the server holds instead', () => {
+    // Both halves, because deleting the claim and stopping there would leave a
+    // module whose header describes a world it no longer lives in. The
+    // replacement has to say where the data went.
+    const store = source('lib/store.ts');
+    expect(store).toContain('There is a server now');
+    expect(store).toContain('packages/db/src/schema.ts');
+    // The half of the retired sentence that is still true, kept rather than
+    // dropped with the rest: a passkey means there is nothing to type.
+    expect(store).toContain('**No passwords** survives');
+  });
+
+  it('keeps the rule the server inherits, which was the valuable half', () => {
+    // The discipline this module is actually worth having — no cached claim
+    // about chain state — is unaffected by any of the above, and the schema
+    // took it on for the same reason. Pinned in both places so that neither can
+    // quietly acquire a `current_cap` column.
+    expect(source('lib/store.ts')).toContain('no cached claim about chain state');
+    const schema = readFileSync(
+      fileURLToPath(new URL('../../../packages/db/src/schema.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(schema).toContain('A cached claim about chain state');
+    expect(schema).toContain("This is `lib/store.ts`'s rule, inherited by the server");
+  });
+
   it('keeps the label out of the rendering layer, which is why it survived the rebuild', () => {
     // The other direction of that move, and the reason it is worth pinning: if
     // the constant drifts back into the component, the next deletion of the

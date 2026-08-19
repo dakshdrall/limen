@@ -357,6 +357,14 @@ jobs:
       # reason this step exists — it found a live defect the first time anything
       # ran it, and until now it ran when somebody remembered.
       #
+      # V8 M1 added a third, and it is not a layout check. `passkey-registration.
+      # spec.ts` drives Chrome's virtual authenticator over CDP and runs the
+      # server-side attestation parser against the registration responses it
+      # produces. It belongs here for the same reason the layout checks do — it
+      # spends nothing — and it is worth a per-push gate because what it measures
+      # is what a real browser puts in an attestation object, which is precisely
+      # the thing a unit suite cannot see change.
+      #
       # It reuses the `.next` built above rather than building its own.
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -368,7 +376,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Check layout in a browser (overflow, column overlap)
+      - name: Check in a browser (layout, and the passkey attestation parser)
         run: npm run e2e:ci -w @limen/web
 
       # Only on failure, and only the trace: a layout assertion that fires on a

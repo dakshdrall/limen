@@ -1,0 +1,112 @@
+/**
+ * The Drizzle half of `UserStore` and `SessionStore` — the part no test here
+ * can reach.
+ *
+ * `session.ts` explains why these interfaces exist: `apps/web` reaches Postgres
+ * over `neon-http`, which speaks Neon's HTTP protocol, so a local Postgres
+ * container cannot exercise this path at all. Everything above the interface is
+ * provable against a fake, and this file is what is left over. It is written to
+ * be as small and as boring as it can be, because *small and boring* is the
+ * only quality control available to code that cannot be run in CI.
+ *
+ * So: no conditionals, no partial updates, no query built from a variable, one
+ * statement per method. Each is a single non-interactive query, which is the
+ * constraint `@limen/db/web` documents — nothing here wants a transaction, and
+ * if something ever does, the rule is that it moves to `apps/runtime` rather
+ * than that this file grows a driver exception.
+ *
+ * ## Bytes in the database, bytes in the interface
+ *
+ * `passkey_credential_id` and `passkey_public_key` are `bytea`, surfaced by the
+ * schema's custom type as `Uint8Array`. They stay bytes the whole way through:
+ * the base64url spelling exists only at the HTTP boundary, in the routes, and
+ * a lookup compares bytes to bytes. Two spellings of the same credential id —
+ * padded and unpadded base64url, say — would be two different rows.
+ */
+
+import 'server-only';
+import { and, eq, gt } from 'drizzle-orm';
+import { sessions, users } from '@limen/db';
+import type { WebDb } from '@limen/db/web';
+import type { UserRecord, UserStore } from './auth';
+import type { SessionRecord, SessionStore } from './session';
+import { webDb } from './db';
+
+function toUser(row: {
+  id: string;
+  displayName: string | null;
+  passkeyCredentialId: Uint8Array | null;
+  passkeyPublicKey: Uint8Array | null;
+}): UserRecord | undefined {
+  // A passkey user with either column null is a row that cannot log in. It is
+  // returned as "no such user" rather than as a user with an empty key,
+  // because the alternative is a `verifyAssertion` call against zero bytes and
+  // an error from WebCrypto about key import, three layers from the cause.
+  if (row.passkeyCredentialId === null || row.passkeyPublicKey === null) return undefined;
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    credentialId: row.passkeyCredentialId,
+    publicKey: row.passkeyPublicKey,
+  };
+}
+
+export function drizzleUserStore(db: WebDb = webDb()): UserStore {
+  return {
+    async findByCredentialId(credentialId) {
+      const [row] = await db.select().from(users).where(eq(users.passkeyCredentialId, credentialId)).limit(1);
+      return row === undefined ? undefined : toUser(row);
+    },
+
+    async findById(id) {
+      const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      return row === undefined ? undefined : toUser(row);
+    },
+
+    async createPasskeyUser({ credentialId, publicKey, displayName }) {
+      const [row] = await db
+        .insert(users)
+        .values({ authMethod: 'passkey', passkeyCredentialId: credentialId, passkeyPublicKey: publicKey, displayName })
+        .returning();
+      const created = row === undefined ? undefined : toUser(row);
+      if (created === undefined) {
+        // Unreachable unless the insert above stops writing both columns. It
+        // throws rather than returning undefined so that a future edit which
+        // breaks the pair fails here instead of at the next login.
+        throw new Error('stores: the inserted user came back without a credential.');
+      }
+      return created;
+    },
+  };
+}
+
+export function drizzleSessionStore(db: WebDb = webDb()): SessionStore {
+  return {
+    async create({ userId, tokenHash, expiresAt, createdIpHash }): Promise<SessionRecord> {
+      const [row] = await db.insert(sessions).values({ userId, tokenHash, expiresAt, createdIpHash }).returning();
+      if (row === undefined) throw new Error('stores: the inserted session came back empty.');
+      return { id: row.id, userId: row.userId, expiresAt: row.expiresAt };
+    },
+
+    async findValid(tokenHash, now) {
+      // Expiry is in the query, never after it — `session.ts`'s third rule.
+      // `gt` and not `gte`: a session expiring on this exact instant has
+      // expired, and the boundary should fall on the safe side of a clock that
+      // two processes read a millisecond apart.
+      const [row] = await db
+        .select()
+        .from(sessions)
+        .where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, now)))
+        .limit(1);
+      return row === undefined ? undefined : { id: row.id, userId: row.userId, expiresAt: row.expiresAt };
+    },
+
+    async deleteByTokenHash(tokenHash) {
+      await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    },
+
+    async deleteAllForUser(userId) {
+      await db.delete(sessions).where(eq(sessions.userId, userId));
+    },
+  };
+}

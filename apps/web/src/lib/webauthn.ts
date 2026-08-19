@@ -61,6 +61,8 @@
 
 import 'server-only';
 import { createHash, webcrypto } from 'node:crypto';
+import { parseAttestationObject, type AttestedCredential } from './attestation';
+import { WebAuthnError } from './webauthn-error';
 
 /** What a caller must prove it expected, rather than what this module assumes. */
 export interface Expectation {
@@ -80,14 +82,15 @@ export interface VerifiedAssertion {
   userVerified: boolean;
 }
 
-export class WebAuthnError extends Error {
-  readonly reason: string;
-  constructor(reason: string, message: string) {
-    super(message);
-    this.name = 'WebAuthnError';
-    this.reason = reason;
-  }
-}
+/**
+ * Re-exported rather than defined here.
+ *
+ * The class moved to `webauthn-error.ts` when `attestation.ts` started throwing
+ * it, because this module is `server-only` and that one must not be. Every
+ * existing importer still gets it from `./webauthn`, which is where the rest of
+ * this path lives.
+ */
+export { WebAuthnError };
 
 export function base64UrlToBytes(value: string): Uint8Array {
   // Padding restored rather than assumed: `Buffer.from(x, 'base64url')` is
@@ -103,11 +106,16 @@ export function bytesToBase64Url(bytes: Uint8Array): string {
 /**
  * Constant-time equality.
  *
- * The challenge comparison is the one that matters: a byte-at-a-time compare
+ * Exported because `auth.ts` compares credential ids with it. That comparison
+ * does not need to be constant-time — a credential id is a public identifier —
+ * but having one byte-comparison in this path means nobody has to decide, per
+ * call site, whether this is one of the cases where it matters.
+ *
+ * The challenge comparison is the one that does matter: a byte-at-a-time compare
  * that returns early leaks how much of a guess was right, and a challenge is
  * exactly the kind of value an attacker gets unlimited attempts at.
  */
-function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let difference = 0;
   for (let i = 0; i < a.length; i += 1) difference |= (a[i] ?? 0) ^ (b[i] ?? 0);
@@ -305,4 +313,116 @@ export function derToRawSignature(der: Uint8Array): Uint8Array {
   raw.set(r, 0);
   raw.set(s, 32);
   return raw;
+}
+
+/**
+ * Which challenge a response is answering, read before anything is trusted.
+ *
+ * This is deliberately not a check. The value comes from `clientDataJSON`, which
+ * the caller supplied, so it is a *claim* about which challenge is being
+ * answered — and it is used for exactly one thing: naming the key to spend in
+ * the challenge store.
+ *
+ * That is what makes it safe. Spending is the check: `consumeChallenge` returns
+ * true only for a value this server issued, for this purpose, that has not
+ * already been spent and has not expired. A caller that names a challenge
+ * nobody issued gets nothing to spend, and one that names somebody else's
+ * unspent challenge cannot then produce an assertion over it. `verifyAssertion`
+ * is afterwards handed the spent value as the expectation, so the loop closes:
+ * the challenge is ours, and the signature is over it.
+ *
+ * Returns the empty string rather than throwing when the body is not usable, so
+ * a malformed request spends nothing and fails at the same place a wrong one
+ * does.
+ */
+export function readChallenge(clientDataJSON: Uint8Array): string {
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(clientDataJSON)) as { challenge?: unknown };
+    return typeof parsed.challenge === 'string' ? parsed.challenge : '';
+  } catch {
+    return '';
+  }
+}
+
+/** What a registration yields, which is exactly the credential inside it. */
+export type VerifiedRegistration = AttestedCredential;
+
+/**
+ * A registration response, checked as far as a registration response can be
+ * checked.
+ *
+ * The same checks as `verifyAssertion` minus the one that cannot exist:
+ * `attestation: 'none'` means `attStmt` is empty and **nothing signs
+ * `authData`**, so there is no signature to verify here. `attestation.ts`'s
+ * header states what that does and does not prove, and the short version is
+ * that possession is proved at login rather than at registration.
+ *
+ * What is still worth checking, and is:
+ *
+ *   1. `type` is `webauthn.create` — a login assertion posted to this path is
+ *      the same confusion attack in the other direction.
+ *   2. The challenge is the one just spent, and the origin is one this
+ *      deployment serves. Neither is weaker for a registration: a credential
+ *      registered from an attacker's page is an account they can then log into.
+ *   3. `rpIdHash` matches, so the credential is bound to this relying party.
+ *   4. UP and UV, for the reason the header gives — a credential registered
+ *      without UV is one the on-chain verifier will refuse, and discovering that
+ *      at the moment an account is created is much later than discovering it
+ *      here.
+ *   5. **The point is on the curve.** This is the check with no counterpart in
+ *      the assertion path, and it belongs here rather than there: `x` and `y`
+ *      arrive as 64 bytes that are syntactically fine and need not name a point
+ *      at all. WebCrypto's `importKey` performs the validation, so the check is
+ *      an import that is allowed to fail rather than arithmetic written here.
+ *      Doing it at registration means the bytes in `users.passkey_public_key`
+ *      are known to be a usable key from the moment they are written, instead of
+ *      every future login and every future signer install having to wonder.
+ */
+export async function verifyRegistration(
+  { clientDataJSON, attestationObject }: { clientDataJSON: Uint8Array; attestationObject: Uint8Array },
+  expected: Expectation,
+): Promise<VerifiedRegistration> {
+  if (expected.type !== 'webauthn.create') {
+    // A caller that passed a login expectation would get a check that looks
+    // thorough and tests the wrong ceremony.
+    throw new WebAuthnError(
+      'wrong_expectation',
+      `verifyRegistration was given an expectation of type '${expected.type}'. Use expectationFor('register', …).`,
+    );
+  }
+
+  parseClientData(clientDataJSON, expected);
+
+  const credential = parseAttestationObject(attestationObject);
+
+  const expectedRpIdHash = new Uint8Array(createHash('sha256').update(expected.rpId).digest());
+  if (!equalBytes(credential.rpIdHash, expectedRpIdHash)) {
+    throw new WebAuthnError(
+      'rp_id_mismatch',
+      `The registration is bound to a different relying party than '${expected.rpId}'.`,
+    );
+  }
+
+  if (!credential.userPresent) {
+    throw new WebAuthnError('user_not_present', 'Authenticator did not assert user presence during registration.');
+  }
+  if (!credential.userVerified) {
+    throw new WebAuthnError(
+      'user_not_verified',
+      'Authenticator did not verify the user during registration. passkey.ts asks for userVerification=required, and a credential registered without it cannot own an account.',
+    );
+  }
+
+  try {
+    await webcrypto.subtle.importKey('raw', credential.publicKey, { name: 'ECDSA', namedCurve: 'P-256' }, false, [
+      'verify',
+    ]);
+  } catch {
+    throw new WebAuthnError(
+      'bad_public_key',
+      'The credential public key is 64 well-formed bytes that are not a point on P-256, so no signature could ever verify against it.',
+    );
+  }
+
+  return credential;
 }

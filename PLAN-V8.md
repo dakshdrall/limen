@@ -1867,6 +1867,137 @@ adds users, sessions and Postgres — and false the moment it lands. Same rule:
 the prose changes in the commit that makes it change, never before and never
 after.
 
+#### AMENDED at M1: B6 landed with the auth routes, not with sessions
+
+The line above says B6 lands *"in the sessions commit"*. It landed one commit
+later, with `/api/auth`, and the deviation is recorded rather than absorbed
+because the rule it follows is the same one: **the prose changes in the commit
+that changes the fact.**
+
+The sessions commit added a `sessions` table and the code to issue and read one.
+It did not add a user, and nothing in the application could create a session,
+so `store.ts`'s four absences were all still true the moment that commit landed.
+The commit that made three of them false is the one that registers a passkey as
+a user and hands back a cookie. Landing the prose a commit early would have been
+the same error as landing it a commit late, in the other direction.
+
+Both directions are pinned in `caveats.test.ts`, and the retirement was proved
+non-vacuous by putting the sentence back and watching the test name it.
+
+One consequence for anyone reading `store.ts`: it does **not** quote its own
+retired sentence. A file that quotes a claim in order to explain that the claim
+is retired still contains the claim, and the absence test cannot tell the two
+apart. The header says so, so that the next person to want the quote finds the
+reason instead.
+
+#### The credential public key is parsed server-side. Recorded here because the alternative was defensible.
+
+§7.3 requires the login path to check origin and challenge itself, because the
+deployed verifier checks neither. **The same argument decides where the public
+key comes from**, and the answer is not the obvious one.
+
+`navigator.credentials.create` hands the page two views of the same credential:
+`response.getPublicKey()`, which the browser decodes to SPKI, and
+`attestationObject`, which is what the authenticator produced. Posting the first
+is smaller, simpler, and needs no CBOR at all. The exposure from doing so is
+genuinely narrow — a caller registering a key it controls is what registration
+*is*, so there is no live exploit here.
+
+It was still rejected, and the reason is the shape rather than an attack: **a
+server-side signature check whose root of trust is a value the client computed
+is a trust boundary with a seam in it.** Every future change to auth has to
+re-derive why that is safe, and that reasoning is subtle enough to eventually be
+got wrong. `users.passkey_public_key` is now written from
+`parseAttestationObject` and from nowhere else.
+
+**What was built is not a CBOR library.** It reads one map with three known
+keys and one map with five known integer labels, requires exactly `alg: -7`,
+`kty: 2`, `crv: 1`, and refuses everything else — including encodings that are
+merely unusual rather than malformed, such as a length written in more bytes
+than it needs. Indefinite lengths, tags, arrays, floats and 64-bit lengths are
+all refused at the first byte. A parser that refuses everything it was not
+written for is smaller than one that copes, and every shape it refuses is one
+that cannot then reach a key, a column or a signer.
+
+**Attestation is `none`, and what that does and does not prove is written down**
+in `attestation.ts`'s header rather than left to be inferred from the absence of
+a signature check. `attStmt` is empty, so nothing signs `authData`; registration
+establishes that a ceremony named a credential, and *possession* is proved at
+login. The rule that follows and is enforced in `auth.ts`: a registration
+creates a user and never adopts one.
+
+#### The parser was measured against a real browser, and the measurement is the deliverable
+
+`e2e/passkey-registration.spec.ts` drives Chrome's virtual authenticator over
+CDP — the way `passkey-owner.spec.ts` does — and runs the shipped parser against
+the registration responses it produces. It spends nothing, so unlike that suite
+it is tagged `@ci` and gates every push.
+
+It follows that file's discipline about instruments. Before any assertion about
+the parser, a **general** CBOR decoder written out in the spec asserts the
+authenticator actually produced the shapes the parser was written for; the
+extracted point is compared against the browser's own SPKI decoding as a third
+opinion; and the refusals are exercised on genuine bytes with one thing changed,
+so a parser that accepted everything could not pass.
+
+**RUN RECORD**, `npm run e2e:ci -w @limen/web`, 2026-08-19:
+
+```
+{"registrations":8,"discoverable":3,"formats":["none"],"algorithms":[-7],
+ "keyTypes":[2],"curves":[1],"attStmtEntries":[0],"extensionDataFlag":false,
+ "aaguidAllZero":false,"comparedAgainstBrowser":8,"refusedWrongAlg":"cose_alg",
+ "refusedNoAttestedCredential":"no_attested_credential",
+ "refusedTruncated":"cbor_truncated","assertionAuthDataBytes":37,
+ "refusedAssertion":"no_attested_credential",
+ "rs256":"authenticator declined to create one"}
+```
+
+Read out of it, in the order it matters:
+
+- Eight real registration responses, all `fmt: none` with an empty `attStmt`,
+  all ES256 on P-256. The parser produced the same 65 bytes as the independent
+  decode **and** as the browser's own SPKI decoding, 8 of 8.
+- Four refusals fired on real bytes: `alg` changed from −7 to −8 → `cose_alg`;
+  the AT flag cleared → `no_attested_credential`; the response truncated →
+  `cbor_truncated`; and a **real assertion** from the same credential posted to
+  the registration path → `no_attested_credential`.
+- **`rs256: "authenticator declined to create one"`.** Chrome's virtual
+  authenticator will not make an RS256 credential, so the run could not prove
+  the parser refuses one from a real browser. The unit suite covers it with a
+  built response, and the spec reports the gap rather than implying it was
+  closed.
+- **`extensionDataFlag: false`.** No response set the ED flag, so the branch
+  that ignores an extension tail was not exercised this run. Same treatment:
+  reported, not implied.
+
+**Two instrument limits, measured rather than assumed:**
+
+- **Chrome's virtual authenticator stores exactly three discoverable
+  credentials.** A fourth `create` with `residentKey: 'required'` fails with
+  `NotAllowedError` before the authenticator is consulted. The first version of
+  the spec asked for eight and got three successes and five refusals. The sample
+  is therefore three discoverable — the case `passkey.ts` actually runs — plus
+  five non-discoverable for volume.
+- A user gesture does not lift it. Playwright-driven clicks between calls made
+  no difference, which is what identifies it as a storage cap rather than a
+  Chrome activation throttle.
+
+#### UNRUN at M1: no auth route has run against a real database
+
+`registerPasskey` and `loginWithPasskey` are proved against fakes, and the
+parser is proved against a real browser. **The Drizzle binding in `stores.ts`
+has been executed by nothing.** This is the same hole §7.5.2 already records for
+`neon-http` and it is the same reason: `apps/web` reaches Postgres over Neon's
+HTTP protocol, and the local Postgres this repository runs for `@limen/db`'s
+suite cannot speak it.
+
+What is done about it is what `session.ts` already prescribes — the untestable
+part is kept as small as it can be. `stores.ts` is one statement per method, no
+conditionals, no query built from a variable, and everything above it is behind
+`UserStore` and `SessionStore`. What would settle it is the same ten minutes
+against a real Neon instance that §7.5.2 is still waiting on, and it is recorded
+here rather than quietly treated as covered.
+
 ### M2 — Custody
 
 `packages/custody`. Server-side keygen, envelope encryption (per-agent data key,
