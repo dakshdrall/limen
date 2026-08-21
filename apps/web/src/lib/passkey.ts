@@ -136,13 +136,22 @@ export function passkeysAvailable(): boolean {
 
 /* --- base64url, both directions ------------------------------------------ */
 
-function toBase64Url(bytes: Uint8Array): string {
+/**
+ * Exported because `identity.ts` speaks to the auth routes in this alphabet and
+ * must not carry a second implementation of it.
+ *
+ * There is a `bytesToBase64Url` in `webauthn.ts` already, and it is not the one
+ * to reuse: that module is `server-only` and built on `Buffer`. These two are
+ * the browser's `btoa`/`atob`, which is the whole difference \u2014 same alphabet,
+ * different runtime.
+ */
+export function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromBase64Url(value: string): Uint8Array {
+export function fromBase64Url(value: string): Uint8Array {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -263,26 +272,46 @@ async function uncompressedPoint(spki: ArrayBuffer): Promise<Uint8Array> {
 
 /* --- creating one --------------------------------------------------------- */
 
-/**
- * Create a passkey and remember its public half.
- *
- * `residentKey: 'required'` so the credential is discoverable — a passkey the
- * user has to be told the id of is a password with extra steps. `ES256` only:
- * the verifier is secp256r1 and nothing else will verify, so offering RS256 as
- * a fallback would produce a credential that cannot sign for this account.
- */
-export async function createPasskey(label: string): Promise<Passkey> {
-  // The same gate `local-key.ts` applies at the same point, and for the same
-  // reason: a credential created to own an account on a network this build
-  // refuses to sign for has no honest reason to exist.
-  assertTestnet(NETWORK_PASSPHRASE);
+/** One registration response, in the pieces both callers need it in. */
+export interface CreatedCredential {
+  /** base64url, as `allowCredentials` and the register route both want it. */
+  credentialId: string;
+  /** The 65-byte uncompressed SEC1 point, imported rather than sliced. */
+  point: Uint8Array;
+  /** What the authenticator produced. The server parses its own key out of this. */
+  attestationObject: Uint8Array;
+  clientDataJSON: Uint8Array;
+}
 
+/**
+ * The one `navigator.credentials.create` call in this application.
+ *
+ * Extracted from `createPasskey` when `identity.ts` needed the same ceremony
+ * with a **server-minted** challenge, and extracted rather than copied for the
+ * reason every duplicated ceremony in this file's header is about: the options
+ * below are not preferences. `residentKey: 'required'` is what makes the
+ * credential discoverable, so a login needs no `allowCredentials` and therefore
+ * no list of who is registered here. `ES256` alone is what the on-chain
+ * verifier will accept. `userVerification: 'required'` is what makes the
+ * authenticator set UV, which both the contract and `webauthn.ts` refuse an
+ * assertion without. A second copy of this block would eventually differ in one
+ * of the three, and the credential it produced would register successfully and
+ * then be unable to own an account.
+ *
+ * `challenge` is a parameter and not a `getRandomValues` call, because that is
+ * the entire difference between the two callers. A credential created against a
+ * challenge this page invented proves nothing to a server; one created against
+ * a challenge the server issued and spends is a registration. Both are real
+ * uses — see `createPasskey` — and the distinction is worth being visible at
+ * the call site rather than buried here.
+ */
+export async function createCredential(label: string, challenge: Uint8Array): Promise<CreatedCredential> {
   if (!passkeysAvailable()) throw new Error('This browser does not support passkeys.');
 
   const userId = crypto.getRandomValues(new Uint8Array(16));
   const credential = (await navigator.credentials.create({
     publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      challenge: challenge as unknown as BufferSource,
       rp: { name: RP_NAME },
       user: { id: userId, name: label, displayName: label },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
@@ -301,8 +330,39 @@ export async function createPasskey(label: string): Promise<Passkey> {
   const spki = response.getPublicKey();
   if (spki === null) throw new Error('The authenticator returned no public key.');
 
-  const point = await uncompressedPoint(spki);
-  const credentialId = toBase64Url(new Uint8Array(credential.rawId));
+  return {
+    credentialId: toBase64Url(new Uint8Array(credential.rawId)),
+    point: await uncompressedPoint(spki),
+    attestationObject: new Uint8Array(response.attestationObject),
+    clientDataJSON: new Uint8Array(response.clientDataJSON),
+  };
+}
+
+/**
+ * Create a passkey and remember its public half.
+ *
+ * The owner path, and it is deliberately still reachable with no server at all:
+ * the challenge is local because nothing on this path is proving anything to
+ * Limen — the account is on a public ledger and the credential's authority
+ * comes from being written into a context rule, not from a row here. `README`'s
+ * *no credentials are required* covers this screen, and routing it through
+ * `/api/auth/challenge` would have quietly made a database a prerequisite for
+ * creating a testnet account.
+ *
+ * `identity.ts` is the other caller of `createCredential`, and it is the one
+ * that mints its challenge server-side, because there the whole point is what
+ * the server will believe afterwards.
+ */
+export async function createPasskey(label: string): Promise<Passkey> {
+  // The same gate `local-key.ts` applies at the same point, and for the same
+  // reason: a credential created to own an account on a network this build
+  // refuses to sign for has no honest reason to exist.
+  assertTestnet(NETWORK_PASSPHRASE);
+
+  const { credentialId, point } = await createCredential(
+    label,
+    crypto.getRandomValues(new Uint8Array(32)),
+  );
 
   const stored: StoredPasskey = {
     version: 1,
@@ -312,11 +372,45 @@ export async function createPasskey(label: string): Promise<Passkey> {
   };
   if (!write(stored)) {
     throw new Error(
-      'This browser refused to store the passkey’s public details — private mode, or a full quota. The passkey itself may still exist on your device; nothing was created here.',
+      'This browser refused to store the passkey\u2019s public details \u2014 private mode, or a full quota. The passkey itself may still exist on your device; nothing was created here.',
     );
   }
 
   return toPasskey(stored, point);
+}
+
+/** What `rememberCredential` did, which a caller has to be able to say out loud. */
+export type Remembered = 'stored' | 'kept-existing' | 'refused';
+
+/**
+ * Adopt a credential as the one this browser signs with \u2014 unless there
+ * already is one, in which case do nothing.
+ *
+ * **Never replaces**, and that is the whole of the function. \u00a77.3 makes the
+ * passkey both the identity and the owner, so the record below is not a cache
+ * of who is signed in: it names the credential that may already be written into
+ * a `Signer::External` on a deployed account. Overwriting it would leave this
+ * browser holding the wrong key for an account it can no longer act on, and the
+ * symptom would be an ownership check that silently never matches \u2014 which
+ * `local-key.ts` records having actually happened, from comparing two
+ * representations of one key.
+ *
+ * So registration adopts on a browser that holds nothing, signing in adopts on
+ * a browser that has been cleared, and neither disturbs a credential already
+ * here. The consequence, stated because it is a real one: a person who created
+ * an owner passkey first and registered afterwards has two credentials on their
+ * device, and this browser keeps signing with the first. That is the safe
+ * direction of the two.
+ */
+export function rememberCredential(credentialId: string, point: Uint8Array): Remembered {
+  if (read() !== undefined) return 'kept-existing';
+  const stored: StoredPasskey = {
+    version: 1,
+    credentialId,
+    publicKeyHex: toHex(point),
+    createdAt: new Date().toISOString(),
+  };
+  return write(stored) ? 'stored' : 'refused';
 }
 
 /** The passkey this browser knows about, or `undefined`. */
@@ -351,24 +445,51 @@ function toPasskey(stored: StoredPasskey, point: Uint8Array): Passkey {
   };
 }
 
+/** One assertion, in the pieces the two callers need it in. */
+export interface AssertedCredential {
+  /** base64url of `rawId` \u2014 which credential actually answered. */
+  credentialId: string;
+  clientDataJSON: Uint8Array;
+  authenticatorData: Uint8Array;
+  /**
+   * **ASN.1 DER, exactly as the authenticator emitted it.**
+   *
+   * Not normalised, not unpacked. The two consumers want different things from
+   * these bytes and the difference is not cosmetic: `signAs` needs raw
+   * `r\u2016s` with S folded into the low half, because the Stellar host rejects
+   * high-S beneath the contract; `webauthn.ts` must **not** normalise, because
+   * WebCrypto verifies both and folding S at login would refuse a valid
+   * assertion from an authenticator that happens to emit one. Handing both of
+   * them the untouched signature is what keeps that divergence deliberate
+   * instead of accidental.
+   */
+  signature: Uint8Array;
+}
+
 /**
- * One assertion over `digest`, encoded the way the verifier reads it.
+ * The one `navigator.credentials.get` call in this application.
  *
- * `digest` is the account's `auth_digest` — `signAs` computes it and hands it
- * here, and `storage.rs::authenticate` is what settles that the verifier is
- * given the digest rather than the host's `signature_payload`. Passing it as
- * the WebAuthn challenge is what makes `clientDataJSON.challenge` the base64url
- * of it, which is the equality the contract checks.
- *
- * This prompts the authenticator, so it is asynchronous — which is why
- * `Ed25519Signer.sign` may return a promise. Before V7 §5 it could not, and no
- * passkey could have signed through this path at all.
+ * `credentialId` is optional, and its absence is the login case rather than a
+ * convenience. Passing it pins the assertion to a known credential, which is
+ * what the chain path wants \u2014 it is signing for one specific account and
+ * any other credential's signature would simply not verify. Omitting it asks
+ * the authenticator to offer whichever of its discoverable credentials the
+ * person picks, which is what `residentKey: 'required'` was for and what lets a
+ * login send no list of registered credentials to a browser that has not proved
+ * anything yet.
  */
-async function assert(digest: Uint8Array, credentialId: Uint8Array): Promise<Uint8Array> {
+export async function assertCredential(
+  challenge: Uint8Array,
+  credentialId?: Uint8Array,
+): Promise<AssertedCredential> {
+  if (!passkeysAvailable()) throw new Error('This browser does not support passkeys.');
+
   const credential = (await navigator.credentials.get({
     publicKey: {
-      challenge: digest as unknown as BufferSource,
-      allowCredentials: [{ type: 'public-key', id: credentialId as unknown as BufferSource }],
+      challenge: challenge as unknown as BufferSource,
+      ...(credentialId === undefined
+        ? {}
+        : { allowCredentials: [{ type: 'public-key' as const, id: credentialId as unknown as BufferSource }] }),
       userVerification: 'required',
       timeout: 120_000,
     },
@@ -377,10 +498,34 @@ async function assert(digest: Uint8Array, credentialId: Uint8Array): Promise<Uin
   if (credential === null) throw new Error('The passkey did not sign.');
   const response = credential.response as AuthenticatorAssertionResponse;
 
+  return {
+    credentialId: toBase64Url(new Uint8Array(credential.rawId)),
+    clientDataJSON: new Uint8Array(response.clientDataJSON),
+    authenticatorData: new Uint8Array(response.authenticatorData),
+    signature: new Uint8Array(response.signature),
+  };
+}
+
+/**
+ * One assertion over `digest`, encoded the way the verifier reads it.
+ *
+ * `digest` is the account\u2019s `auth_digest` \u2014 `signAs` computes it and hands it
+ * here, and `storage.rs::authenticate` is what settles that the verifier is
+ * given the digest rather than the host\u2019s `signature_payload`. Passing it as
+ * the WebAuthn challenge is what makes `clientDataJSON.challenge` the base64url
+ * of it, which is the equality the contract checks.
+ *
+ * This prompts the authenticator, so it is asynchronous \u2014 which is why
+ * `Ed25519Signer.sign` may return a promise. Before V7 \u00a75 it could not, and no
+ * passkey could have signed through this path at all.
+ */
+async function assert(digest: Uint8Array, credentialId: Uint8Array): Promise<Uint8Array> {
+  const asserted = await assertCredential(digest, credentialId);
+
   const sigData = structMap([
-    ['authenticator_data', scvBytes(new Uint8Array(response.authenticatorData))],
-    ['client_data', scvBytes(new Uint8Array(response.clientDataJSON))],
-    ['signature', scvBytes(rawSignature(new Uint8Array(response.signature)))],
+    ['authenticator_data', scvBytes(asserted.authenticatorData)],
+    ['client_data', scvBytes(asserted.clientDataJSON)],
+    ['signature', scvBytes(rawSignature(asserted.signature))],
   ]);
 
   return new Uint8Array(sigData.toXDR());

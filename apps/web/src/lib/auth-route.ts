@@ -16,7 +16,7 @@ import { drizzleSessionStore, drizzleUserStore } from './stores';
 import { expectationFor } from './webauthn-config';
 import { base64UrlToBytes, WebAuthnError } from './webauthn';
 import { clearedSessionCookieOptions, sessionCookieOptions, SESSION_COOKIE } from './session';
-import type { AuthDeps } from './auth';
+import type { AuthDeps, UserRecord } from './auth';
 
 /**
  * A registration response is a few hundred bytes and an assertion is smaller.
@@ -108,6 +108,46 @@ export function decodeField(body: Record<string, unknown>, name: string): Uint8A
 
 export function base64Url(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * The one projection of a user onto JSON, shared by all three routes that
+ * return one.
+ *
+ * Written here for the reason this module exists at all: `/api/auth/register`,
+ * `/api/auth/login` and `/api/auth/session` were returning the same four fields
+ * assembled three times, and three copies of a projection is three places for
+ * one of them to start returning a field the others do not.
+ *
+ * ## Why the public key is in it
+ *
+ * Because §7.3 says the passkey is **both** the identity and the owner, and
+ * without this field only half of that is reachable from a browser. A
+ * credential id identifies; the 65-byte point is what a context rule is built
+ * from. A person who signs in on a second device — or on the same one after
+ * clearing site data — has proved possession of the credential and would still
+ * have no way to learn the key that credential owns accounts with, so
+ * `passkey.ts`'s claim that clearing site data no longer strands the account
+ * would be true only of the chain, never of this application.
+ *
+ * It is not a disclosure. The key is the public half of a keypair whose private
+ * half is in an authenticator this server cannot reach, it is written verbatim
+ * into `Signer::External` on a public ledger the moment an account is deployed,
+ * and it is returned only to a request carrying a session cookie that names
+ * this exact user.
+ */
+export function publicUser(user: UserRecord): {
+  id: string;
+  displayName: string | null;
+  credentialId: string;
+  publicKey: string;
+} {
+  return {
+    id: user.id,
+    displayName: user.displayName,
+    credentialId: base64Url(user.credentialId),
+    publicKey: base64Url(user.publicKey),
+  };
 }
 
 export async function setSessionCookie(token: string, secure: boolean): Promise<void> {

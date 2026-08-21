@@ -15,7 +15,7 @@
 
 import { currentUser } from '@/lib/auth';
 import { drizzleSessionStore, drizzleUserStore } from '@/lib/stores';
-import { base64Url, failure, sessionToken } from '@/lib/auth-route';
+import { failure, publicUser, sessionToken } from '@/lib/auth-route';
 
 export async function GET(): Promise<Response> {
   try {
@@ -25,12 +25,7 @@ export async function GET(): Promise<Response> {
     );
 
     return Response.json(
-      {
-        user:
-          user === undefined
-            ? null
-            : { id: user.id, displayName: user.displayName, credentialId: base64Url(user.credentialId) },
-      },
+      { user: user === undefined ? null : publicUser(user) },
       { headers: { 'cache-control': 'no-store' } },
     );
   } catch (error) {

@@ -31,7 +31,12 @@ function purposeOf(body: Record<string, unknown>): ChallengePurpose {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    if (!(await limit.check(clientIp(request)))) {
+    // `check` answers *"is this call over the budget"*, so the refusal is the
+    // un-negated branch. Written the other way round this route refuses every
+    // request inside the budget and admits every request beyond it, and it
+    // fails **closed** on a store outage instead of open — which is how it read
+    // until the M1 close-out run put a browser in front of it.
+    if (await limit.check(clientIp(request))) {
       return Response.json({ error: 'rate_limited' }, { status: 429 });
     }
     const issued = await issueChallenge(purposeOf(await readBody(request)));

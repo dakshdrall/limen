@@ -189,9 +189,24 @@ const CARRIES_THE_PASSKEY_LABEL = /TESTNET ONLY · PASSKEY|PASSKEY_LABEL/;
  */
 const CARRIES_THE_AGENT_KEY_LABEL = /TESTNET ONLY · AGENT KEY \(LIMEN-HELD\)|AGENT_KEY_LABEL/;
 
-/** An import of either passkey module, by alias or relative path. */
+/**
+ * An import of any module on the passkey path, by alias or relative path.
+ *
+ * Four names, not two. `identity.ts` and `use-identity.ts` landed with the
+ * client wiring of `/api/auth`, and they are on this path in the way that
+ * matters: `identity.ts` runs both ceremonies, through `createCredential` and
+ * `assertCredential`, and a screen reaches them through the hook without ever
+ * naming `passkey`. A pattern that only knew the two original spellings would
+ * have let exactly the component that registers a credential — the header
+ * control — carry no label, and it would have passed by not matching, which is
+ * the failure this file exists to refuse.
+ *
+ * The direct detectors still cover `identity.ts` itself either way, since it
+ * imports `@/lib/passkey`. What this extension adds is the *next* hop: whatever
+ * renders the ceremony.
+ */
 const IMPORTS_THE_PASSKEY_MODULE =
-  /(?:from|import)\s*\(?\s*'(?:@\/lib\/(?:use-)?passkey|(?:\.\.?\/)+(?:lib\/)?(?:use-)?passkey)'/;
+  /(?:from|import)\s*\(?\s*'(?:@\/lib\/(?:use-)?(?:passkey|identity)|(?:\.\.?\/)+(?:lib\/)?(?:use-)?(?:passkey|identity))'/;
 
 /**
  * An import of the local key module, by alias or by relative path.
@@ -373,16 +388,24 @@ describe('the detectors can fire', () => {
     );
   });
 
-  it('recognises an import of either passkey module however it is spelled', () => {
+  it('recognises an import of any passkey-path module however it is spelled', () => {
     for (const sample of [
       "import { createPasskey } from '@/lib/passkey';",
       "import { usePasskeySigner } from '@/lib/use-passkey';",
       "import { getPasskey } from '../lib/passkey';",
       "const mod = await import('@/lib/passkey');",
+      // The ceremony modules. A screen reaches the passkey through these
+      // without ever spelling the word, which is the hole this closes.
+      "import { registerIdentity } from '@/lib/identity';",
+      "import { useIdentity } from '@/lib/use-identity';",
+      "import { signIn } from '../lib/identity';",
     ]) {
       expect(IMPORTS_THE_PASSKEY_MODULE.test(sample), sample).toBe(true);
     }
     expect(IMPORTS_THE_PASSKEY_MODULE.test("import { NETWORK } from '@/lib/network';")).toBe(false);
+    // Not every module whose name contains the word: the rule is about the two
+    // ceremony modules, not about anything a future file might call identity.
+    expect(IMPORTS_THE_PASSKEY_MODULE.test("import { x } from '@/lib/identity-provider';")).toBe(false);
   });
 
   it('recognises the label being rendered rather than only mentioned', () => {

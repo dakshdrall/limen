@@ -36,9 +36,12 @@ const inCi = process.env.CI !== undefined && process.env.CI !== '' && process.en
 describe('the durability claim is checked against a real service', () => {
   it('has a Redis, or fails in CI for not having one', () => {
     if (url.length === 0 && !inCi) {
-      console.error(
+      // `process.stderr`, not `console`: vitest's default reporter intercepts
+      // the latter and prints nothing from a passing test, and this notice only
+      // ever appears on a run that passed.
+      process.stderr.write(
         'queue-redis.test.ts: no REDIS_URL — the at-least-once delivery claim in queue.ts was NOT exercised. ' +
-          'Run a Redis and set REDIS_URL. This fails rather than skips in CI.',
+          'Run a Redis and set REDIS_URL. This fails rather than skips in CI.\n',
       );
     }
     if (inCi) expect(url.length, 'CI must provide REDIS_URL').toBeGreaterThan(0);

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LedgerCounter } from '@/components/LedgerCounter';
 import { Mark } from '@/components/Mark';
 import { useLedger } from '@/components/LedgerSource';
+import { SessionControl } from '@/components/site/SessionControl';
 import { HeaderSiteLinks } from '@/components/site/SiteLinks';
 import { NETWORK } from '@/lib/network';
 
@@ -18,6 +19,20 @@ import { NETWORK } from '@/lib/network';
  * second place for that fact to be written down is a second place for it to be
  * wrong, and the one it would be wrong on is the day a mainnet build ships —
  * where a bar confidently saying TESTNET is worse than no bar at all.
+ *
+ * ## Session state sits at the right, and often is not there at all
+ *
+ * `SessionControl` is the fourth job and it is the newest: whether you are
+ * signed in is a fact about this browser that every screen depends on and none
+ * owns, which is the same argument the network indicator is here under. It
+ * renders nothing on a deployment with no database, so this bar is unchanged on
+ * a build with no credentials — see that component.
+ *
+ * The bar is `relative` for it. The control's notice — a refused ceremony, a
+ * dismissed prompt — hangs below the bar rather than inside it, because a
+ * sentence does not fit in 48 pixels and a sentence is what a person needs when
+ * a passkey did not work. Positioning it against the bar rather than the
+ * viewport keeps it under the control it belongs to at every width.
  *
  * ## `built` is not dead code
  *
@@ -50,7 +65,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border-subtle bg-background/92 backdrop-blur-none">
-      <div className="mx-auto flex h-12 w-full max-w-[var(--bleed-max)] items-center gap-4 px-[var(--screen-pad)]">
+      <div className="relative mx-auto flex h-12 w-full max-w-[var(--bleed-max)] items-center gap-4 px-[var(--screen-pad)]">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 text-foreground"
@@ -92,6 +107,7 @@ export function SiteHeader() {
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
           <HeaderSiteLinks />
+          <SessionControl />
           <LedgerCounter sequence={sequence} />
           <span
             className="status-label"

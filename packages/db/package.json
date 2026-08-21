@@ -17,6 +17,7 @@
     "build": "tsc -p tsconfig.json",
     "generate": "drizzle-kit generate",
     "migrate": "node scripts/migrate.mjs",
+    "measure:web-transaction": "node scripts/measure-web-transaction.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

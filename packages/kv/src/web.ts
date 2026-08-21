@@ -15,17 +15,21 @@
  * queue lives in `apps/runtime`, on the TCP client, which is where the thing
  * whose job is to wait belongs.
  *
- * ## What is not verified here
+ * ## What the first run against a real Upstash found
  *
- * That Upstash's HTTP `INCR` is atomic in the way this depends on. It is
- * documented as executing server-side like any Redis command — an HTTP
- * transport does not make a Redis command non-atomic — and the rate limiter's
- * whole correctness rests on it. Unlike the `neon-http` transaction question in
- * §7.5.2, there is no plausible silent-wrong-answer mode here: an `INCR` either
- * returns a monotonically increasing number or it does not, and
- * `test/contract.test.ts` runs the same assertions against every
- * implementation, so a real instance can be checked against the identical suite
- * the moment one exists.
+ * `INCR` was the property this file expected to be waiting on, and it was not
+ * the one that broke. It is atomic, as documented — the contract suite's
+ * counter cases pass against a real instance. **The read path was wrong**, and
+ * it was wrong in the shape §7.5.2 claimed this store did not have: silently,
+ * with the types agreeing.
+ *
+ * The client JSON-parses every response by default. A stored `'42'` came back
+ * as the number `42`; a stored JSON document came back as an object, which
+ * `createTxCache` then handed to `JSON.parse`, so **every transaction-cache hit
+ * in production was a thrown error reported to `onError` and returned as a
+ * miss**. Writes were never involved: the client's serializer passes strings
+ * through verbatim, so only the read side guessed. Hence
+ * `automaticDeserialization: false` below, and the note on the constructor.
  */
 
 import { Redis } from '@upstash/redis';
@@ -46,13 +50,21 @@ export class UpstashKeyValue implements KeyValue {
     if (url.length === 0 || token.length === 0) {
       throw new Error('UpstashKeyValue needs both a URL and a token.');
     }
-    this.#redis = new Redis({ url, token });
+    // Deserialization off, and this is a measurement rather than a preference.
+    // With it on, `get` returns whatever `JSON.parse` makes of the stored bytes
+    // — a number for `'42'`, an object for a document — while the signature
+    // still says `string | null`. The type parameter on `get<string>` below
+    // looks like it settles that and does not: it is an assertion, not a
+    // configuration. Off, every value comes back as the bytes that were
+    // written, and `incr`, `expire` and `del` are unaffected because their
+    // results are already JSON numbers.
+    this.#redis = new Redis({ url, token, automaticDeserialization: false });
   }
 
   async get(key: string): Promise<string | null> {
-    // Upstash deserialises JSON by default, which would turn a stored string
-    // that happens to look like a number into a number. Everything on this
-    // interface is a string; `<string | null>` keeps the client from guessing.
+    // Raw, because the constructor turned deserialization off. Everything on
+    // this interface is a string, and this is the only place that was ever in a
+    // position to break that.
     return await this.#redis.get<string>(key);
   }
 

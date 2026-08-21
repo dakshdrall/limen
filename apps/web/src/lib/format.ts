@@ -30,6 +30,28 @@ export function truncateHash(hash: string, lead = 8, tail = 4): string {
 }
 
 /**
+ * A WebAuthn credential id, for the one place a person is shown which passkey
+ * they are signed in with.
+ *
+ * Its own function rather than `truncateHash` reused, for the reason that
+ * function gives about not being `truncateAddress` reused: it is a different
+ * value. A credential id is base64url rather than hex, has no fixed length at
+ * all — WebAuthn bounds it at 1023 bytes and a platform authenticator's is
+ * usually a fraction of that — and nothing searches an explorer for one. What
+ * it shares is the rule, which is that the truncation is written here and not
+ * at the call site, so the header and whatever renders one next cannot disagree
+ * about how much of it to show.
+ *
+ * The whole value belongs in a `title` wherever this is used. A reviewer must
+ * never be shown a value they cannot check, which is the same standard
+ * `Address` is built to.
+ */
+export function truncateCredentialId(credentialId: string, lead = 10, tail = 4): string {
+  if (credentialId.length <= lead + tail + 1) return credentialId;
+  return `${credentialId.slice(0, lead)}…${credentialId.slice(-tail)}`;
+}
+
+/**
  * Renders an integer smallest-unit amount with a decimal point inserted, for
  * reading only. The integer string remains the source of truth everywhere else;
  * this value is never fed back into any computation.

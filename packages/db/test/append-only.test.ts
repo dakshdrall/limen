@@ -80,10 +80,12 @@ describe('audit_events is append-only for the application role', () => {
   it('has a database to prove it against', () => {
     if (url.length === 0 && !inCi) {
       // Local, no database. Say so loudly rather than reporting a pass that
-      // means nothing.
-      console.error(
+      // means nothing — and through `process.stderr`, because vitest's default
+      // reporter intercepts `console` and prints nothing from a passing test,
+      // which is the only kind of run this warning is ever written on.
+      process.stderr.write(
         'append-only.test.ts: no TEST_DATABASE_URL — the append-only grant was NOT exercised. ' +
-          'Run a Postgres and set TEST_DATABASE_URL to prove it. This fails rather than skips in CI.',
+          'Run a Postgres and set TEST_DATABASE_URL to prove it. This fails rather than skips in CI.\n',
       );
     }
     // In CI this is the assertion that refuses to let an unproven fence pass.
