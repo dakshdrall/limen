@@ -232,6 +232,23 @@ function section(page: Page, heading: string): Locator {
 }
 
 /**
+ * The `<section>` that *is* the group whose `<h3>` is `heading`: the nearest
+ * `<section>` ancestor of that heading.
+ *
+ * `page.locator('section').filter({ has: h3 }).first()` is the obvious spelling
+ * and it is wrong here. Step 2's own `<section>` wraps both groups, so it
+ * satisfies the filter as well, and it starts earlier in the document, so it is
+ * what `.first()` returns. The partition assertions then read the whole step
+ * instead of one half of it, and "the per-payment ceiling is not in the
+ * on-chain group" silently becomes "it is somewhere on this page" — true of
+ * both groups, and so a check of nothing. It failed the first run this way,
+ * against a form that renders the partition correctly.
+ */
+function group(page: Page, heading: string): Locator {
+  return page.getByRole('heading', { level: 3, name: heading }).locator('xpath=ancestor::section[1]');
+}
+
+/**
  * What Postgres holds, read by this process rather than reported by the app.
  *
  * Raw SQL over `neon-http`, and deliberately not `drizzleAgentStore`: the
@@ -457,14 +474,8 @@ test('a browser describes an agent, reviews its boundary, and deploys it onto te
   // a person is told which is which — so they are asserted where a person reads
   // them, and the off-chain group is asserted to carry the sentence that says
   // the ledger does not enforce it.
-  const enforcedByNetwork = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { level: 3, name: 'Enforced by the network' }) })
-    .first();
-  const enforcedByLimen = page
-    .locator('section')
-    .filter({ has: page.getByRole('heading', { level: 3, name: 'Enforced by Limen' }) })
-    .first();
+  const enforcedByNetwork = group(page, 'Enforced by the network');
+  const enforcedByLimen = group(page, 'Enforced by Limen');
   await expect(enforcedByNetwork).toContainText('ON-CHAIN');
   await expect(enforcedByLimen).toContainText('COMPUTED LOCALLY');
   await expect(enforcedByLimen).toContainText('The ledger does not enforce these.');
