@@ -2243,20 +2243,85 @@ agreed with `deployments/testnet.json` on every field it checks: rule 5 on
 half — the checks pass when they should — and without it the 422 above would only
 prove the code can refuse.
 
-#### NOT RUN — the browser half of deploy, end to end
+#### RUN — the browser half of deploy, end to end
 
-**Stated plainly rather than implied by the run record above.** No smart account
-has been created *by this screen*. The four chain writes are `chain-actions.ts`
-unchanged and that module has recorded testnet runs behind it through `/app/try`,
-the server routes are exercised above, and the verification is exercised against
-real chain data — but the seam where the browser drives those four writes and
-reports back has been executed by neither a person nor a test.
+*This section replaced the "NOT RUN" entry that stood here. What it said: no
+smart account had been created by this screen, and the seam where a browser
+drives the four chain writes and reports back had been executed by neither a
+person nor a test. One has now been created by it.*
 
-What would close it: the Playwright shape `e2e/passkey-registration.spec.ts`
-already established, driving a virtual authenticator through registration and
-then through the four writes, with the resulting account and rule recorded in
-`deployments/testnet.json`. Until that exists, **M3's "done when" is not met**
-and this section is why.
+`apps/web/e2e/agent-builder.spec.ts` — the shape `e2e/passkey-registration.spec.ts`
+established: a real Chromium with a CDP virtual authenticator, a production
+`next start`, live Neon, live Upstash, live testnet. `page.route` appears
+nowhere in the file. A passkey the browser created, a session that is a row, a
+sentence typed into the form, a boundary derived server-side, and five
+submissions that closed on ledgers 4,273,973–4,273,978.
+
+**The run, 2026-08-22.** Recorded in full in `deployments/testnet.json` under
+`agentBuilderRun`.
+
+| | |
+|---|---|
+| smart account | `CBFLENP2CYSUAM5G45B52DQC6HX7VEIQYTKEIROXL4ETD36KZEBXLMYM` |
+| context rule id | `1` |
+| owner signer | `GCLDQBMWF4YARB5USS6SROQIZOK3YH2KX5NMQMWUFYT7TNG2NDE6GQST` |
+| agent signer | `GASX3ZQJUE4SSAJFSAK2FZ55Q6XKXCYQF5HUAMF7ITUVDGNDL6VTH3EJ` |
+| deploy | `0ce46f619bcec7408635935563e8184c92c3ecc57a654fc92bc72f4cb5a8ae1e` |
+| seed | `c72786df9a98450b128c2f47ad1247f46ae0da03ee135d520e15b66f8a274789` |
+| install | `d121671fe43b0253c653a9de0dd41c6a88bd5da325f8406eefadcd1872559c6b` |
+| cap installed | `1000000` (0.1 XLM at 7 dp), period `17280`, valid until `4394931` |
+
+The cap is the arithmetic claim, so it is stated as one: `headroom_bps = 10000`
+means the cap stored is the cap typed, and `1000000` is asserted against that
+constant rather than re-derived — a re-derivation would be this repository
+agreeing with itself.
+
+**What was verified, and by what.** Three reads, none of them the screen.
+`/api/agents/[id]/deployed` re-read the account's context rules over RPC, and
+the numbers matched the cap and window typed into the form. The `agents`,
+`agent_accounts` and `policies` rows were then read back out of Postgres by the
+test process over raw SQL rather than through `stores.ts`. All five hashes were
+afterwards confirmed `SUCCESS` against `soroban-testnet.stellar.org`. The
+deploy is not proved by the presence of a transaction id anywhere in this.
+
+**Without a model, deliberately.** `ANTHROPIC_API_KEY` was unset, so
+`/api/agents/generate` degraded to an empty draft carrying the description, and
+that is asserted as a working path — `generated: false`, the degraded sentence
+on screen, every draft field empty — rather than skipped. A run where a model
+answered would fail here rather than pass quietly, because the subject of this
+spec is the form a person fills in.
+
+**It is out of CI**, for the reason `account-lifecycle.spec.ts` and
+`passkey-owner.spec.ts` are: it spends five testnet fees and needs credentials a
+runner does not have. Untagged, so `playwright.ci.config.ts`'s `grep: /@ci/`
+cannot reach it by construction. On demand, from `apps/web`, and on `localhost`
+rather than `127.0.0.1` because an RP ID must be a registrable domain:
+
+    npx playwright test e2e/agent-builder.spec.ts
+
+**Three runs, and what the two failures were.** Both were defects in the spec,
+neither in the product, and both are worth keeping written down because each
+was a check that would have passed while proving nothing:
+
+1. `page.locator('section').filter({ has: h3 }).first()` also matches step 2's
+   own `<section>`, which wraps *both* halves of the partition. So "the
+   per-payment ceiling is not rendered under *Enforced by the network*" —
+   B8.2's structural requirement, and the one misrepresentation this project
+   cannot make — was reading the whole step and asserting something true of
+   either half. The form was right the whole time. `group()` now takes the
+   nearest `<section>` ancestor of the heading.
+2. One locator matches both friendbot panels, and `not.toContainText` is a
+   single-element assertion, so it died of strict mode with both fundings
+   already on a ledger. Each is settled on its own result now.
+
+The first run also surfaced that the WIP commit had landed a literal NUL byte
+inside a string literal, which made the file `data` rather than text — `grep`
+matched nothing in it, silently — and turned the degraded-reason assertion into
+a check for a NUL.
+
+**M3's "done when" is met.** The two agent rows left behind by the two failed
+runs were deleted; `agents`, `agent_accounts` and `policies` hold exactly the
+one run above.
 
 ### M4 — Runtime and tools
 

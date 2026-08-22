@@ -4,10 +4,14 @@ import { neon } from '@neondatabase/serverless';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * PLAN-V8's *"NOT RUN — the browser half of deploy"*, driven end to end.
+ * PLAN-V8's *"the browser half of deploy, end to end"*, driven end to end.
  *
- * That section states the gap precisely, and it is worth restating rather than
- * pointing at: the four chain writes behind `/app/agents/new` are
+ * That section stood as **NOT RUN** until this file ran on 2026-08-22. It now
+ * records the smart account, the context rule and the five hashes this spec
+ * produced, and `deployments/testnet.json` carries them under `agentBuilderRun`.
+ *
+ * The gap it stated is worth restating rather than pointing at: the four chain
+ * writes behind `/app/agents/new` are
  * `lib/chain-actions.ts` unchanged and that module has recorded testnet runs
  * behind it; the `/api/agents*` routes were exercised over HTTP against live
  * Neon and live testnet; the verification in `/deployed` was exercised against

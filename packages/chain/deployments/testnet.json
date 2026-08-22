@@ -275,5 +275,37 @@
     "verificationIsPerishable": "Re-running the verifier today does not reproduce that verdict in full, and this is a property of the network rather than of the runs. Contract error codes and the deploy's return value come from transaction meta, which only the Soroban RPC serves and which it keeps for `ledgerRetentionWindow` — 120960 ledgers, about seven days on testnet. Horizon keeps the transactions themselves far longer. So a run stays checkable for existence, success or failure, fee source, signature absence and ledger ordering indefinitely, and stops being checkable for error codes and the deployed address after roughly a week. As of 2026-08-15 the RPC's oldest ledger was 4031380 and the first two runs closed at 3997463-3997509, so eight checks across those two runs now report `n/a` rather than `ok`. The third run, at 4152021-4152038, still verifies in full. The verifier distinguishes the two cases and exits 0, because a check that cannot be made is not a check that did not hold — the same distinction §1 draws about refusals. It does not paper over them: they are counted and named per run.",
     "ownerSignatureNote": "For each of the agent's four transactions the verifier checks cryptographically that no envelope signature verifies against the owner's key and that no auth entry names the owner, and that the agent's own signature does. The agent transfers *to* the owner, so the owner's key does appear in those envelopes as a payee argument — being the recipient and having authorized it are different facts, and only the second is checked.",
     "foundByThisRun": "Three defects, none of which any Node test could reach, all fixed before the runs above. (1) Both ownership checks compared a `G…` StrKey against the hex a context rule stores, which can never be equal, so every account the browser created rendered as somebody else's and the flow after deploy was unreachable. (2) The write screens were mounted inside the snapshot's `ok` branch, and every write ends by re-reading the chain — so each transaction's hash vanished about a second after it landed, and after the revoke the steps never returned, making the tenth transaction unperformable. (3) `extract.ts` set `source` — documented in `@limen/core` as *the account the policy installs on* — to the envelope's fee source, which for this flow is the owner's classic account rather than the smart account that spent; `synthesize` counts a movement toward the cap only when it comes from `source`, so no cap was derived, and every boundary derived from a smart account's own transaction was refused at lowering. This is what §11 meant by the browser half being unrun."
+  },
+  "agentBuilderRun": {
+    "note": "PLAN-V8 M3's \"NOT RUN — the browser half of deploy\", closed. The four chain writes behind /app/agents/new had recorded testnet runs behind them, the /api/agents* routes had been exercised over HTTP, and the verification in /deployed had been run against real chain state — but the seam where a browser drives those writes and reports back had been executed by neither a person nor a test, and no smart account had ever been created by this screen. One now has. A passkey registered in the page, a sentence typed into the form, a boundary derived server-side and read on screen, and five submissions that closed on ledgers 4273973-4273978.",
+    "producedBy": "apps/web/e2e/agent-builder.spec.ts, driving a real Chromium with a CDP virtual authenticator against a production `next start`, live Neon and live Upstash. `page.route` appears nowhere in the file: nothing below the browser is stubbed.",
+    "signedBy": "ed25519 keypairs generated in the browser by `createLocalKeys` and held in localStorage. Two distinct keys, asserted distinct — an agent bounded by a rule its own key installed is not bounded.",
+    "withoutAModel": "ANTHROPIC_API_KEY was deliberately unset, so /api/agents/generate degraded to an empty draft carrying the description. Asserted as a working path — generated=false and every draft field empty — rather than skipped. The form a person fills in is this spec's subject, and a run where a model answered would be exercising something else.",
+    "ranAt": "2026-08-22",
+    "runs": [
+      {
+        "which": "first",
+        "smartAccount": "CBFLENP2CYSUAM5G45B52DQC6HX7VEIQYTKEIROXL4ETD36KZEBXLMYM",
+        "ownerSigner": "GCLDQBMWF4YARB5USS6SROQIZOK3YH2KX5NMQMWUFYT7TNG2NDE6GQST",
+        "agentSigner": "GASX3ZQJUE4SSAJFSAK2FZ55Q6XKXCYQF5HUAMF7ITUVDGNDL6VTH3EJ",
+        "ownerFundingTx": "a1b4f51e4af58bc9e0c411aa58270758e914ee2b59b2bc62af4c049b4b594a4c",
+        "agentFundingTx": "d5805dfc3bfc5db68fc92060546236e19207a8f9cfb099c9bd97dc79cfeb17a2",
+        "deployTx": "0ce46f619bcec7408635935563e8184c92c3ecc57a654fc92bc72f4cb5a8ae1e",
+        "seedTx": "c72786df9a98450b128c2f47ad1247f46ae0da03ee135d520e15b66f8a274789",
+        "installTx": "d121671fe43b0253c653a9de0dd41c6a88bd5da325f8406eefadcd1872559c6b",
+        "contextRuleId": 1,
+        "token": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        "limit": "1000000",
+        "limitNote": "0.1 XLM at 7 decimals. headroom_bps = 10000, so the cap stored is the cap typed, with nothing added — and 1000000 is asserted against that constant rather than re-derived, which is what makes it a measurement.",
+        "periodLedgers": 17280,
+        "derivedAtLedger": 4273971,
+        "validUntilLedger": 4394931,
+        "agentId": "faebc7b4-ead7-487b-b407-e2ffe7043018",
+        "ledgerRange": "4273973-4273978"
+      }
+    ],
+    "verifiedBy": "Three independent reads, none of them the screen. /api/agents/[id]/deployed re-read the account's context rules over RPC and the numbers matched the cap and window typed into the form. The agents, agent_accounts and policies rows were then read back out of Postgres by the test process over raw SQL rather than through the application's own store. All five hashes were afterwards confirmed SUCCESS against soroban-testnet.stellar.org by getTransaction.",
+    "agentKeyNote": "agent_keys is empty for this run and that is correct rather than missing: the browser-driven path generates the agent key in the page and keeps it in localStorage, so no server-side envelope-encrypted key is written. LIMEN_MASTER_KEY was set for the run and was not reached by it.",
+    "foundByThisRun": "Two defects in the spec, both fixed before the run that passed, neither in the product. `section.filter({ has: h3 }).first()` also matches step 2's own <section>, which wraps both halves of the partition, so the check that the per-payment ceiling is not in the on-chain group was reading the whole step and asserting nothing. And the two friendbot panels are matched by one locator, so the single-element `not.toContainText` on them died of strict mode with both fundings already on a ledger."
   }
 }
