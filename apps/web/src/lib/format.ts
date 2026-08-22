@@ -76,3 +76,16 @@ export function ledgersToDuration(ledgers: number): string {
   const hours = Math.round((seconds / 3_600) * 10) / 10;
   return `≈ ${hours} hour${hours === 1 ? '' : 's'}`;
 }
+
+/**
+ * Stroops as a person reads them.
+ *
+ * Here rather than in a component because two screens render a native-asset
+ * amount now, and this file is where "a fact is stated in one place" puts
+ * anything that decides how a value looks. `decimalise` already lives here; a
+ * second copy of the suffix beside a second copy of the call is how one screen
+ * ends up saying "XLM" and the other "lumens".
+ */
+export function describeAmount(stroops: bigint): string {
+  return `${decimalise(stroops.toString())} XLM`;
+}

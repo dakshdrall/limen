@@ -39,11 +39,11 @@
 
 import 'server-only';
 import { and, eq, gt } from 'drizzle-orm';
-import { agents, policies, sessions, users } from '@limen/db';
+import { agentAccounts, agents, policies, sessions, users } from '@limen/db';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
 import type { SessionRecord, SessionStore } from './session';
-import type { AgentRecord, AgentStatus, AgentStore } from './agents';
+import type { AgentRecord, AgentStatus, AgentStore, ProposedPolicy } from './agents';
 import { webDb } from './db';
 
 function toUser(row: {
@@ -256,6 +256,112 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         // CONFIGURED agent the caller believes does not exist.
         throw new Error('stores: the configured agent came back empty.');
       }
+      return toAgent(row);
+    },
+
+    /**
+     * The boundary this agent was configured with.
+     *
+     * Joined through `agents` so the owner scoping is in the query rather than
+     * in the caller, the same as everything else here — `policies` has no
+     * `user_id` of its own, so the scope has to come from the agent it hangs
+     * off.
+     */
+    async proposedPolicy(agentId, userId) {
+      const [row] = await db
+        .select({
+          id: policies.id,
+          proposalJson: policies.proposalJson,
+          installPlanJson: policies.installPlanJson,
+          validUntilLedger: policies.validUntilLedger,
+        })
+        .from(policies)
+        .innerJoin(agents, eq(policies.agentId, agents.id))
+        .where(
+          and(
+            eq(policies.agentId, agentId),
+            eq(policies.status, 'proposed'),
+            eq(agents.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (row === undefined) return undefined;
+      if (row.proposalJson === null || row.installPlanJson === null) {
+        // A proposed policy with no proposal is a row `configure` cannot have
+        // written. It throws rather than being reported as "not configured",
+        // because the two need different answers: one is "go and configure it"
+        // and the other is a bug.
+        throw new Error(`stores: policy ${row.id} is proposed but carries no proposal.`);
+      }
+
+      return {
+        id: row.id,
+        proposal: row.proposalJson as ProposedPolicy['proposal'],
+        installPlan: row.installPlanJson as ProposedPolicy['installPlan'],
+        validUntilLedger: row.validUntilLedger,
+      };
+    },
+
+    async markStatus({ agentId, userId, status }) {
+      const [row] = await db
+        .update(agents)
+        .set({ status })
+        .where(and(eq(agents.id, agentId), eq(agents.userId, userId)))
+        .returning();
+      if (row === undefined) throw new AgentNotFound(agentId);
+      return toAgent(row);
+    },
+
+    /**
+     * Three writes again, and atomic for a sharper reason than `configure`'s.
+     *
+     * A transaction has already reached a ledger by the time this is called.
+     * If the `agent_accounts` insert landed and the `policies` update did not,
+     * Limen would hold a deployed smart account whose boundary it still
+     * believes is merely proposed — and the screen that offers to deploy would
+     * offer to deploy it again, against an account that already has the rule.
+     * That is the one interleaving here that costs a second transaction on a
+     * real network.
+     */
+    async recordDeployment(input) {
+      const owned = await db
+        .select()
+        .from(agents)
+        .where(and(eq(agents.id, input.agentId), eq(agents.userId, input.userId)))
+        .limit(1);
+      if (owned[0] === undefined) throw new AgentNotFound(input.agentId);
+
+      const [, , updated] = await db.batch([
+        db.insert(agentAccounts).values({
+          agentId: input.agentId,
+          smartAccountContractId: input.smartAccountContractId,
+          deployTxHash: input.deployTxHash,
+          // The account's owner signer is the browser's local key on this
+          // path. A passkey-owned account is B9's work, not this flow's.
+          ownerSignerKind: 'ed25519',
+          ownerPublicKey: input.ownerPublicKey,
+          agentPublicKey: input.agentPublicKey,
+          contextRuleId: input.contextRuleId,
+          installTxHash: input.installTxHash,
+        }),
+        db
+          .update(policies)
+          .set({
+            status: 'installed',
+            installTxHash: input.installTxHash,
+            contextRuleId: input.contextRuleId,
+          })
+          .where(eq(policies.id, input.policyId)),
+        db
+          .update(agents)
+          .set({ status: 'ACTIVE', deployedAt: new Date() })
+          .where(and(eq(agents.id, input.agentId), eq(agents.userId, input.userId)))
+          .returning(),
+      ]);
+
+      const row = updated[0];
+      if (row === undefined) throw new Error('stores: the deployed agent came back empty.');
       return toAgent(row);
     },
   };

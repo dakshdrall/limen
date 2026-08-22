@@ -23,6 +23,7 @@ import type { SnapshotRule } from '@/lib/account-contract';
 import {
   NO_FOOTPRINT_YET,
   OBSERVED_AMOUNT,
+  STORAGE_REFUSED,
   SEED_AMOUNT,
   agentRepeats,
   agentRevokes,
@@ -37,7 +38,7 @@ import {
   type PermittedCall,
 } from '@/lib/chain-actions';
 import { fundFromFriendbot, type WriteOutcome } from '@/lib/chain-write';
-import { decimalise } from '@/lib/format';
+import { decimalise, describeAmount } from '@/lib/format';
 import type { IngestError } from '@/lib/ingest-contract';
 import { NOT_EXPORTABLE, PASSKEY_STILL_LOCAL } from '@limen/shared/key-roles';
 import { createLocalKeys } from '@/lib/local-key';
@@ -103,9 +104,6 @@ import { verdictFor } from '@/lib/verdict';
 
 /** The six steps, as a person reads them. */
 const STEPS = 6;
-
-const STORAGE_REFUSED =
-  'This browser refused to store the keys — private mode, or a full storage quota. Without storage the owner key would vanish on reload and the account would be stranded, so nothing was created.';
 
 export function TryFlow() {
   const publics = useLocalKeyPublics();
@@ -1171,6 +1169,4 @@ function NotThisBrowsersAccount({
  * Display only, and never fed back into anything: every amount that reaches a
  * transaction or a policy stays a `bigint` in stroops, per design rule 5.
  */
-function describeAmount(stroops: bigint): string {
-  return `${decimalise(stroops.toString())} XLM`;
-}
+

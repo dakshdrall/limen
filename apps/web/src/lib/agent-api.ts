@@ -38,6 +38,10 @@ export class AgentApiError extends Error {
 /** The sentence a person should read for each way a route refuses. */
 const REFUSALS: Record<string, string> = {
   unauthenticated: 'Your session has ended. Sign in again from the header.',
+  wrong_status: 'This agent is not in a state that can be deployed.',
+  not_configured: 'This agent has no reviewed boundary yet. Accept the limits first.',
+  rpc_unconfigured:
+    'This deployment cannot read the chain, so it will not record a deployment it has not checked.',
   unavailable: 'This deployment has no database, so agents cannot be stored.',
   rate_limited: 'That is more requests than this endpoint allows for now. Wait a minute.',
   not_found: 'That agent no longer exists, or it is not yours.',
@@ -184,4 +188,82 @@ export async function configureAgent(
 
   if (!response.ok) throw await refusalFrom(response);
   return (await response.json()) as ConfiguredAgent;
+}
+
+/** What `/api/agents/[id]/deploy` hands back: the boundary to install. */
+export interface DeploymentStart {
+  agent: AgentRecord;
+  policyId: string;
+  /**
+   * The reviewed plan, read out of `policies.install_plan_json`.
+   *
+   * The client does not send a plan and cannot influence one. It asks for the
+   * plan belonging to the agent it is deploying and installs that, so the rule
+   * that reaches `add_context_rule` is the rule that was on the review screen.
+   */
+  plan: InstallPlan;
+}
+
+export async function beginDeployment(agentId: string): Promise<DeploymentStart> {
+  const response = await fetch(`/api/agents/${agentId}/deploy`, { method: 'POST' });
+  if (!response.ok) throw await refusalFrom(response);
+  return (await response.json()) as DeploymentStart;
+}
+
+/** What the ledger said when the deployment was checked against it. */
+export interface VerifiedDeployment {
+  contextRuleId: number;
+  contract: string | null;
+  limit: string;
+  periodLedgers: number;
+  validUntilLedger: number | null;
+}
+
+export interface DeploymentRecorded {
+  agent: AgentRecord;
+  verified: VerifiedDeployment;
+}
+
+/**
+ * Report the deployment, and have the server check it against the chain.
+ *
+ * Every field here is a claim this browser is making. The route re-reads the
+ * account's context rules over RPC and refuses to write the row if the rule id,
+ * its contract, its cap, its window or its expiry disagree with the boundary
+ * that was reviewed — so a 422 from here is the ledger contradicting this
+ * browser, not a validation error.
+ */
+export async function recordDeployment(
+  agentId: string,
+  facts: {
+    smartAccountContractId: string;
+    deployTxHash: string;
+    installTxHash: string;
+    contextRuleId: number;
+    ownerPublicKey: string;
+    agentPublicKey: string;
+  },
+): Promise<DeploymentRecorded> {
+  const response = await fetch(`/api/agents/${agentId}/deployed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ok: true, ...facts }),
+  });
+  if (!response.ok) throw await refusalFrom(response);
+  return (await response.json()) as DeploymentRecorded;
+}
+
+/**
+ * The deployment did not finish, and the agent should say so.
+ *
+ * Deliberately best-effort at the call site: this is reported after something
+ * has already gone wrong, and a failure to report a failure must not replace
+ * the original message with its own.
+ */
+export async function recordDeploymentFailed(agentId: string): Promise<void> {
+  await fetch(`/api/agents/${agentId}/deployed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ok: false }),
+  });
 }

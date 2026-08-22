@@ -160,3 +160,5 @@ playwright-report/
 # measured; everything else is noise that would otherwise be committed by a
 # distracted `git add -A`.
 .scratch/
+.vercel
+.env*

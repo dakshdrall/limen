@@ -2174,6 +2174,90 @@ It also corrects a sentence this work had already written: the claim is *every
 field, every value*, and **not** "byte for byte". The stronger phrasing was in
 the route header for about twenty minutes and was false the whole time.
 
+### Deploy, and the verification that stands between a browser and a row
+
+The deploy path reuses `deployAccount`, `fundSmartAccount` and `installBoundary`
+from `lib/chain-actions.ts` **unchanged** — the four writes `/app/try` already
+makes, in the same order, through the same functions. The plan is not held in
+memory across the step: `POST /api/agents/[id]/deploy` reads it back out of
+`policies.install_plan_json` and hands it to the client, so the rule that
+reaches `add_context_rule` is the rule the review step wrote down, by
+construction rather than by two copies agreeing.
+
+**`POST /api/agents/[id]/deployed` does not believe the browser.** Every field a
+client reports is a claim, and `agent_accounts` is the only table in this flow
+that stores facts about a chain. So before the row is written the server re-reads
+the account's context rules over RPC — `readAllContextRules` and
+`readSpendingLimit`, the same functions `/api/account/[id]` has used since V4,
+needing no fee and no signature — and checks four things against the stored plan:
+the rule exists at that id, its contract is the token that was reviewed, its cap
+equals the reviewed cap, and its window and expiry match. Any disagreement is a
+422 and **nothing is written**.
+
+This does not make `status = 'ACTIVE'` a claim about the chain *now*, and
+`agents.ts` is explicit that it never is. It makes the row a record of a
+deployment that demonstrably happened, as the ledger described it at the moment
+it was written.
+
+#### Run record — the routes over HTTP against live Neon and live testnet, 2026-08-22
+
+Driven against `next start` with a session row inserted directly, since the
+passkey ceremony needs a browser. Deleted afterwards; the one session left in the
+table predates this work and belongs to another user.
+
+```
+GET  /api/auth/session          no cookie   → {"user":null}
+POST /api/agents                no cookie   → 401                    ← the auth gate
+POST /api/agents                cookie      → DRAFT row, id d2c61b33…
+POST /api/agents/…/generate     no API key  → generated:false, empty draft carrying
+                                              the description, degraded sentence   ← CI's path
+POST /api/agents/…/configure    no asset    → 422 invalid_config, problem on
+                                              assetContractId, "will not guess one"
+POST /api/agents/…/deploy       while DRAFT → 409 wrong_status
+POST /api/agents/…/configure    valid       → 200, agent CONFIGURED
+                                              derived at ledger 4,270,084
+                                              cap 500000000 = 50 XLM at 7 decimals
+                                              plan → one rule, limen-0, valid_until 4,788,484
+POST /api/agents/…/deploy                   → DEPLOYING, returns the stored plan
+POST /api/agents/…/deploy       again       → 409 wrong_status        ← no second account
+POST /api/agents/…/deployed     short hash  → 400
+POST /api/agents/…/deployed     real account CBNPFNPW…, real rule 5
+                                            → 422 unverified: "Context rule 5 expires at
+                                              4035836, and the reviewed boundary expires
+                                              at 4788484. Nothing was recorded."
+     after that refusal          agent_accounts 0 rows, policy still `proposed`
+                                 with install_tx_hash and context_rule_id null
+POST /api/agents/…/deployed     {ok:false}  → agent ERROR, still nothing else written
+```
+
+The 422 is the one worth reading twice. It is the verification refusing a rule
+that **genuinely exists on testnet** — rule 5 of the recorded walkthrough
+account — because its expiry is not the expiry that was reviewed. The check is
+reading real chain state and comparing it to the stored plan, not pattern-matching
+a shape.
+
+**Separately, the verification was pointed at the recorded walkthrough run** and
+agreed with `deployments/testnet.json` on every field it checks: rule 5 on
+`CBNPFNPW…` authorizes `CDLZFC3S…`, and its spending limit reads back
+`limit=1000000`, `periodLedgers=17280`, exactly as recorded. That is the positive
+half — the checks pass when they should — and without it the 422 above would only
+prove the code can refuse.
+
+#### NOT RUN — the browser half of deploy, end to end
+
+**Stated plainly rather than implied by the run record above.** No smart account
+has been created *by this screen*. The four chain writes are `chain-actions.ts`
+unchanged and that module has recorded testnet runs behind it through `/app/try`,
+the server routes are exercised above, and the verification is exercised against
+real chain data — but the seam where the browser drives those four writes and
+reports back has been executed by neither a person nor a test.
+
+What would close it: the Playwright shape `e2e/passkey-registration.spec.ts`
+already established, driving a virtual authenticator through registration and
+then through the four writes, with the resulting account and rule recorded in
+`deployments/testnet.json`. Until that exists, **M3's "done when" is not met**
+and this section is why.
+
 ### M4 — Runtime and tools
 
 `packages/agent`, `packages/tools`, `packages/policy`. Read tools first, then

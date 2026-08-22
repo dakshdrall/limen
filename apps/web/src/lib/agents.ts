@@ -75,6 +75,46 @@ export interface AgentStore {
    * `CONFIGURED`. Atomic, and see {@link ConfigureInput} for why that matters.
    */
   configure(input: ConfigureInput): Promise<AgentRecord>;
+  /** The boundary this agent was configured with, for the deploy step to install. */
+  proposedPolicy(agentId: string, userId: string): Promise<ProposedPolicy | undefined>;
+  /** `CONFIGURED` -> `DEPLOYING`, or `DEPLOYING` -> `ERROR`. */
+  markStatus(input: { agentId: string; userId: string; status: AgentStatus }): Promise<AgentRecord>;
+  /** The deployment happened and was verified against the ledger. */
+  recordDeployment(input: RecordDeploymentInput): Promise<AgentRecord>;
+}
+
+/** What was stored at `CONFIGURED`, read back so deploy installs exactly it. */
+export interface ProposedPolicy {
+  id: string;
+  proposal: PolicyProposal;
+  installPlan: InstallPlan;
+  validUntilLedger: number | null;
+}
+
+/**
+ * The facts of a deployment, after they have been checked against the ledger.
+ *
+ * Every field here is a claim a browser made, and the route that calls this has
+ * already re-read the account's context rules over RPC and confirmed the rule
+ * id, its contract and its cap against the stored plan. That ordering is the
+ * point: `agent_accounts` is the one table in this flow that records facts
+ * about the chain, and a row written from an unverified report would be a claim
+ * about a ledger nobody looked at.
+ *
+ * It is still not a cache of chain state — `schema.ts` forbids that, and there
+ * is no cap or liveness here. It records *what was deployed*, which the ledger
+ * cannot answer later once a rule is revoked and gone.
+ */
+export interface RecordDeploymentInput {
+  agentId: string;
+  userId: string;
+  policyId: string;
+  smartAccountContractId: string;
+  deployTxHash: string;
+  installTxHash: string;
+  contextRuleId: number;
+  ownerPublicKey: string;
+  agentPublicKey: string;
 }
 
 /**

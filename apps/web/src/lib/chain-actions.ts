@@ -665,3 +665,15 @@ export async function agentRepeats(
  */
 export const NO_FOOTPRINT_YET =
   'run step 01 first: this attempt is refused by the network, so it cannot produce a footprint of its own and has to borrow one from the call that works';
+
+/**
+ * What a browser that will not store a key gets told.
+ *
+ * Beside {@link NO_FOOTPRINT_YET} and for the same reason: two screens now
+ * create local keys — the guided flow and the agent builder — and a claim about
+ * what happens when storage refuses is a claim, not a caption. Two copies would
+ * be two chances to describe the same condition differently, and the one that
+ * drifted would be the one nobody hits in private-mode testing.
+ */
+export const STORAGE_REFUSED =
+  'This browser refused to store the keys \u2014 private mode, or a full storage quota. Without storage the owner key would vanish on reload and the account would be stranded, so nothing was created.';

@@ -32,6 +32,7 @@ import type {
   SnapshotRule,
 } from '@/lib/account-contract';
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
+import { simulationSource } from '@/lib/simulation-source';
 
 // Required: the Stellar SDK does not run on the Edge runtime.
 export const runtime = 'nodejs';
@@ -48,22 +49,6 @@ function fail(code: AccountReadErrorCode, message: string, status: number, detai
     error: detail === undefined ? { code, message } : { code, message, detail },
   };
   return Response.json(body, { status });
-}
-
-/**
- * The account reads are simulated from.
- *
- * It never signs and is never charged; simulation only needs an account that
- * exists so the transaction it builds has a sequence number. Any funded testnet
- * account does, which is why this falls back to the demo destination rather
- * than requiring its own configuration. It is emphatically not a signer, and
- * nothing about it reaches the browser.
- */
-function simulationSource(): string | undefined {
-  const explicit = process.env.LIMEN_SIMULATION_SOURCE;
-  if (explicit !== undefined && explicit.length > 0) return explicit;
-  const fallback = process.env.LIMEN_DEMO_DESTINATION;
-  return fallback !== undefined && fallback.length > 0 ? fallback : undefined;
 }
 
 /**
