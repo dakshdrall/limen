@@ -1,6 +1,6 @@
 /**
- * The Drizzle half of `UserStore` and `SessionStore` — the part no test here
- * can reach.
+ * The Drizzle half of `UserStore`, `SessionStore` and `AgentStore` — the part
+ * no test here can reach.
  *
  * `session.ts` explains why these interfaces exist: `apps/web` reaches Postgres
  * over `neon-http`, which speaks Neon's HTTP protocol, so a local Postgres
@@ -26,10 +26,11 @@
 
 import 'server-only';
 import { and, eq, gt } from 'drizzle-orm';
-import { sessions, users } from '@limen/db';
+import { agents, sessions, users } from '@limen/db';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
 import type { SessionRecord, SessionStore } from './session';
+import type { AgentRecord, AgentStatus, AgentStore } from './agents';
 import { webDb } from './db';
 
 function toUser(row: {
@@ -107,6 +108,81 @@ export function drizzleSessionStore(db: WebDb = webDb()): SessionStore {
 
     async deleteAllForUser(userId) {
       await db.delete(sessions).where(eq(sessions.userId, userId));
+    },
+  };
+}
+
+/**
+ * Agents, scoped to their owner in the query rather than by the caller.
+ *
+ * Both reads and both writes carry `user_id` in the `where`. There is no method
+ * here that takes an agent id alone, and `agents.ts` explains why: an agent id
+ * is a UUID in a URL, and an unscoped lookup would let any signed-in user
+ * configure and deploy any other user's agent by pasting one. A check the
+ * caller performs after the row comes back is one `if` away from not happening.
+ *
+ * `status` is narrowed on the way out. The column's enum has eight values and
+ * this flow uses five; a row carrying one of the other three — `PAUSED`,
+ * `REVOKED`, `EXPIRED`, all of which the runtime will write — is returned as
+ * itself rather than coerced, and `narrowStatus` throws instead of guessing. A
+ * silent fallback to `DRAFT` would let a revoked agent render as a fresh one.
+ */
+function narrowStatus(status: string): AgentStatus {
+  if (
+    status === 'DRAFT' ||
+    status === 'CONFIGURED' ||
+    status === 'DEPLOYING' ||
+    status === 'ACTIVE' ||
+    status === 'ERROR'
+  ) {
+    return status;
+  }
+  throw new Error(
+    `stores: agent status ${JSON.stringify(status)} is outside the set this screen renders. ` +
+      'It is a real value in the agent_status enum, so widen AgentStatus and the screen together rather than defaulting it.',
+  );
+}
+
+function toAgent(row: {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  status: string;
+}): AgentRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    name: row.name,
+    description: row.description,
+    status: narrowStatus(row.status),
+  };
+}
+
+export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
+  return {
+    async createDraft({ userId, name, description }) {
+      const [row] = await db.insert(agents).values({ userId, name, description }).returning();
+      if (row === undefined) throw new Error('stores: the inserted agent came back empty.');
+      return toAgent(row);
+    },
+
+    async updateDraft({ id, userId, name, description }) {
+      const [row] = await db
+        .update(agents)
+        .set({ name, description })
+        .where(and(eq(agents.id, id), eq(agents.userId, userId)))
+        .returning();
+      return row === undefined ? undefined : toAgent(row);
+    },
+
+    async findForUser(id, userId) {
+      const [row] = await db
+        .select()
+        .from(agents)
+        .where(and(eq(agents.id, id), eq(agents.userId, userId)))
+        .limit(1);
+      return row === undefined ? undefined : toAgent(row);
     },
   };
 }

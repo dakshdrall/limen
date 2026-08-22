@@ -13,6 +13,8 @@ import {
 import { useIdentity } from '@/lib/use-identity';
 import { PASSKEY_LABEL } from '@limen/shared/status-labels';
 import { StatusLabel } from '@/components/StatusLabel';
+import { AgentApiError, generateDraft, saveDraft } from '@/lib/agent-api';
+import type { GenerationNote } from '@/lib/agent-generation';
 
 /**
  * The four steps, and the one that is not automation.
@@ -73,6 +75,22 @@ export function AgentBuilder() {
   const [problems, setProblems] = useState<FieldProblem[]>([]);
 
   /**
+   * The `DRAFT` row this flow is working on, once there is one.
+   *
+   * Held so that rewriting the description updates the agent rather than
+   * creating a second one. Three attempts at describing the same agent are one
+   * agent — see `/api/agents/[id]`.
+   */
+  const [agentId, setAgentId] = useState<string | null>(null);
+
+  const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState<GenerationNote[]>([]);
+  /** Why the draft came back empty. Not an error — the ordinary unkeyed case. */
+  const [degraded, setDegraded] = useState<string | null>(null);
+  /** A route refused. Distinct from `degraded`: this one means try again. */
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  /**
    * `unknown` is the server render and the first client frame — reading a
    * cookie is a request-time API, so this component tree cannot know yet. It
    * says what it is waiting for rather than rendering the signed-out state and
@@ -123,12 +141,51 @@ export function AgentBuilder() {
     );
   }
 
-  const describe = () => {
-    // The sentence is carried into the draft rather than kept beside it, so
-    // `agents.description` holds what was actually written.
-    setDraft({ ...emptyDraft(), description: description.trim() });
-    setProblems([]);
-    setStage('review');
+  /**
+   * Generate, then record, then review.
+   *
+   * The order matters in one direction only: the row is written *after* the
+   * model answers, because the proposed name is what names it and a row named
+   * "Untitled agent" for every abandoned attempt is a worse artefact than no
+   * row. It is written before the review step rather than after, because a
+   * person who closes the tab mid-review should find the agent waiting rather
+   * than having to describe it again.
+   *
+   * A failure to record is fatal to the step and says so. Reviewing limits for
+   * an agent that was never written would end at a deploy button that could not
+   * work, which is the shape of dead control this application does not offer.
+   */
+  const generate = async () => {
+    const written = description.trim();
+    if (written.length === 0) return;
+
+    setBusy(true);
+    setRefusal(null);
+    setDegraded(null);
+    setNotes([]);
+
+    try {
+      const result = await generateDraft(written);
+      const agent = await saveDraft({ agentId, name: result.draft.name, description: written });
+
+      setAgentId(agent.id);
+      // The stored name wins over the proposed one: `cleanAgentName` may have
+      // replaced an empty proposal, and the form must show what was actually
+      // written rather than what was asked for.
+      setDraft({ ...result.draft, name: agent.name, description: written });
+      setNotes(result.notes);
+      setDegraded(result.degraded ?? null);
+      setProblems([]);
+      setStage('review');
+    } catch (error) {
+      setRefusal(
+        error instanceof AgentApiError
+          ? error.message
+          : 'That did not go through. Check your connection and try again.',
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onDraftChange = (next: AgentConfigDraft) => {
@@ -167,26 +224,24 @@ export function AgentBuilder() {
             onChange={(event) => setDescription(event.target.value)}
           />
 
-          {stage === 'describe' && (
-            <button
-              type="button"
-              className="btn self-start"
-              data-variant="primary"
-              onClick={describe}
-            >
-              Continue
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn self-start"
+            data-variant={stage === 'describe' ? 'primary' : 'secondary'}
+            disabled={busy || description.trim().length === 0}
+            onClick={() => void generate()}
+          >
+            {busy
+              ? 'Reading the description…'
+              : stage === 'describe'
+                ? 'Generate the limits'
+                : 'Generate again'}
+          </button>
 
-          {stage !== 'describe' && (
-            <button
-              type="button"
-              className="btn self-start"
-              data-variant="quiet"
-              onClick={() => setStage('describe')}
-            >
-              Rewrite the description
-            </button>
+          {refusal !== null && (
+            <p role="alert" className="measure text-[12.5px] leading-relaxed text-deny">
+              {refusal}
+            </p>
           )}
 
           <p className="measure text-[12.5px] leading-relaxed text-muted">
@@ -203,9 +258,44 @@ export function AgentBuilder() {
           caption="These are the fields that become the boundary. Correct anything that is wrong — this step is where a proposal becomes a permission, and it is the only place that happens."
           done={false}
         >
-          <AgentConfigForm draft={draft} problems={problems} onChange={onDraftChange} />
+          {degraded !== null && (
+            <div className="panel" data-tone="unproven">
+              <span className="col-head text-muted">nothing was generated</span>
+              <p className="measure text-[13px] leading-relaxed text-muted">{degraded}</p>
+              <p className="measure text-[12.5px] leading-relaxed text-muted-dim">
+                This is a working path rather than a broken one. The limits below are what bind the
+                agent, and they bind it the same whether a model proposed them or you typed them.
+              </p>
+            </div>
+          )}
 
-          <button type="button" className="btn self-start" data-variant="secondary" onClick={check}>
+          {notes.length > 0 && (
+            <div className="panel" data-tone="unproven">
+              <span className="col-head text-muted">what Limen changed on the way in</span>
+              <ul className="flex flex-col gap-1">
+                {notes.map((note) => (
+                  <li key={note.message} className="measure text-[12.5px] leading-relaxed text-muted">
+                    {note.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <AgentConfigForm
+            draft={draft}
+            problems={problems}
+            onChange={onDraftChange}
+            disabled={busy}
+          />
+
+          <button
+            type="button"
+            className="btn self-start"
+            data-variant="secondary"
+            disabled={busy}
+            onClick={check}
+          >
             Check these limits
           </button>
         </Stage>

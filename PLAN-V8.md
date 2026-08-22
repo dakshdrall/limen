@@ -1476,12 +1476,51 @@ before the schema is built on top of it. The driver's transaction limitation is
 documented; how it surfaces in Drizzle's API is the part worth ten minutes and a
 recorded result.
 
-#### UNRUN — the `neon-http` transaction measurement
+#### RUN — the `neon-http` transaction measurement
 
-**Status: not run. Not deferred, not waived, not checked by anybody.** Recorded
-in the register §11's by-hand run uses, because the failure mode of a
-measurement like this is that it silently becomes "checked" by nobody looking
-again.
+**Status: run against live Neon, 2026-08-21. Case 1-and-2, not case 3.** The
+result is recorded here in full rather than as a tick, because the whole point
+of the entry was that a measurement quietly becoming "checked" is the failure.
+
+**Result, measured rather than inferred:**
+
+- `db.transaction(...)` on a `createWebDb` handle **throws**
+  `"No transactions support in neon-http driver"`, and **leaves no rows
+  behind**. That is case 2 — the recoverable one — and it rules out case 3,
+  which was the case the measurement existed for.
+- `db.batch([...])` **is atomic**. Proved by the destructive half rather than
+  the happy path: a deliberate unique-constraint violation in the second
+  statement rolled the whole batch back, and zero rows survived.
+- Single statements work, as documented.
+
+**What follows, and what does not.**
+
+`createWebDb` does **not** grow a fence. The fence in the plan above was
+conditional on case 3 — a silent unwrap has to be turned into a loud refusal
+because nothing else would show it. A driver that already throws is already
+loud, and wrapping a throw in a different throw adds a mechanism with nothing
+left to catch.
+
+What the batch result buys is narrower and worth stating: **`apps/web` can write
+two rows atomically without an interactive transaction.** That is not a licence
+to move money-path work back into the web app — `web.ts`'s rule stands, and a
+route needing conditional logic between statements still moves to
+`apps/runtime`. It is what lets the agent builder write an `agents` row and a
+`policies` row as one unit, which is a pair of inserts with no logic between
+them, rather than as two writes with a window where the first can survive alone.
+
+Source reading agrees and is not the evidence: `drizzle-orm@0.45.2`'s
+`neon-http/session.js` maps `batch` onto `client.transaction(builtQueries)` and
+defines `transaction` as a bare throw. It is recorded because it explains the
+measurement, not because it substitutes for it.
+
+**Still outstanding, and it is one line under `packages/`.**
+`packages/db/src/web.ts:41` still says this measurement *"has **not** been run"*.
+That sentence is now false and is the exact drift-in-prose failure B0 exists
+about. It was left in place deliberately rather than edited in passing: the
+agent-builder work is fenced off from `packages/`, and a header rewrite there
+belongs to whoever is allowed to touch it. **It is the first thing the next
+change under `packages/db` should fix.**
 
 **What it would settle.** Neon documents that `neon-http` supports single
 non-interactive queries and not interactive transactions. What is *not*
@@ -2041,6 +2080,59 @@ Create → configure → deploy → active → pause → revoke. Both security m
 an account has been revoked with the runtime process stopped, with that hash
 recorded. Revocation-without-Limen is not a P1 item and does not slip; without
 it the §3 custody answer is not true and M3 is not done.
+
+#### PART-DELIVERED, 2026-08-22 — the described mode, on branch `m2-agent-builder`
+
+The **described** half of brief §17, as `/app/agents/new`. Create → configure is
+built; deploy → active is the same branch and is recorded below it when it
+lands. Pause, revoke and the B9 requirements are **not** in this work and M3
+stays open.
+
+The one design decision worth carrying forward, because the rest of M3 inherits
+it: **the row is written when the information for it exists, and not before.**
+`agents` gets a `DRAFT` row the moment a description is drafted, because a name
+and a description are all a draft is. `policies` gets nothing at that point —
+the model is structurally unable to propose a token contract id (there is no
+field for one in the output schema), so nothing compiles to a `PolicyProposal`
+until a person pastes one. A `policies` row with a null `proposal_json` would
+mean *"we had not finished asking"*, which is what `DRAFT` on the agent already
+says in the column built to say it. The policy lands at `CONFIGURED`.
+
+**No schema change was needed, and that was checked against the database rather
+than against `schema.ts`.** All 14 tables present, all three migrations applied,
+`agent_status` and `policy_source` carrying exactly the members the file
+declares. The described mode's asset and cap live inside
+`policies.proposal_json` — `PolicyProposal.policies[0]` is
+`{ kind, asset, limit, windowLedgers }` — which is what makes the absence of
+dedicated columns for them correct rather than a gap. `observed_tx_hash` stays
+null, and the null is the record that nothing was observed.
+
+**Run record — the agent store against live Neon, 2026-08-22.** `stores.ts` is
+the file `session.ts` calls *"the part no test here can reach"*, so the new
+`drizzleAgentStore` was exercised against the real instance once and the result
+recorded here rather than left to the first person to use the screen:
+
+```
+createDraft            → row written, status DRAFT by column default
+findForUser(id, owner) → found
+findForUser(id, other) → undefined          ← the scoping, which is the security property
+updateDraft(id, owner) → renamed
+updateDraft(id, other) → undefined, and the row was NOT modified
+delete                 → gone; agents table back to 0 rows
+```
+
+The two negative cases are the ones worth having run. `agents.id` is a UUID in a
+URL, and an unscoped lookup would let any signed-in user configure and deploy
+another user's agent by pasting one. The scoping is in the `where` clause rather
+than in a check the caller performs, for the reason `session.ts` gives about
+expiry: a row returned and then discarded by the caller is one `if` away from
+not being discarded.
+
+**What is not covered by any test, stated rather than implied.** The three
+`/api/agents*` routes are exercised by unit tests only above the store
+interface. Their end-to-end behaviour — cookie to row — has been run by hand and
+is not in CI, for the reason §7.5.2 already gives: CI has no Neon, and
+`neon-http` cannot be exercised by a local container.
 
 ### M4 — Runtime and tools
 
