@@ -433,7 +433,7 @@ test('a browser describes an agent, reviews its boundary, and deploys it onto te
   await expect(review, 'the degraded path did not say that nothing was generated').toContainText(
     'nothing was generated',
   );
-  await expect(review).toContainText(generated.degraded ?? ' ');
+  await expect(review).toContainText(degradedReason);
   // The form is what a person fills in, so it starts empty — and the name is
   // the row's placeholder rather than something a model chose.
   await expect(page.locator('#agent-cap')).toHaveValue('');
