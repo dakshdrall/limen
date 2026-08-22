@@ -37,9 +37,9 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const TITLE = "Limen — the permission layer for agentic money on Stellar";
+const TITLE = "Limen — describe an agent, deploy it on Stellar, and hold it to a limit";
 const DESCRIPTION =
-  "Derive the minimum smart-account context rule and policy set that permits one observed transaction, and refuses everything adjacent to it.";
+  "Build an agent from one sentence, review the limits it will run under, and deploy it to its own Stellar smart account — where the boundary is enforced by the account rather than by us.";
 
 /**
  * `metadataBase` resolves the generated OG and Twitter cards to absolute URLs,

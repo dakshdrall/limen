@@ -758,6 +758,66 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
   });
 });
 
+/**
+ * The agent-builder run, now that the landing cites it.
+ *
+ * Added with the repositioning, and it closes a gap the repositioning opened
+ * rather than one it found. The trap directly below — *does not cite the
+ * browser run on the landing without its limit* — is written against the **v4
+ * lifecycle run**: it matches `browser has signed`, `driven by a test` and `by
+ * a hand`, which are that run's words. Scene 03 now cites a different run,
+ * `agentBuilderRun`, in different words, and none of those patterns fire on it.
+ * So the landing gained a browser-driven claim that the file's existing fence
+ * cannot see.
+ *
+ * The gap is closed here rather than by widening the regex below, because the
+ * two runs need different limits stated and folding them into one check would
+ * make the message wrong for whichever one failed.
+ *
+ * Two limits have to travel with this citation, and they are not the same kind
+ * of thing:
+ *
+ *   1. **Nobody clicked it.** A Playwright spec drove the browser. The page may
+ *      say the path runs end to end; it may not say a person found it easy.
+ *   2. **No model answered.** `ANTHROPIC_API_KEY` was deliberately unset for
+ *      the run, so the draft step degraded to an empty draft. The scene above
+ *      it sells "describe an agent in a sentence" — and this recording is
+ *      evidence for the deploy path, not for the sentence. Citing it for both
+ *      is the specific overstatement available here.
+ */
+describe('the landing does not cite the agent-builder run without its two limits', () => {
+  const page = source('app/page.tsx');
+
+  const citesTheBuild = /RECORDED_AGENT_BUILD\b/.test(page);
+
+  it('cites it at all, or this whole block is vacuous', () => {
+    // The two-sided shape the rest of this file uses. If scene 03 is ever
+    // rewritten to drop the run, this fails and whoever dropped it decides
+    // deliberately whether the assertions below should go with it.
+    expect(citesTheBuild, 'the landing no longer cites the agent-builder run').toBe(true);
+  });
+
+  it('says a spec drove the browser rather than a person', () => {
+    expect(page).toContain('no person clicked');
+  });
+
+  it('carries the recording\'s own note that no model answered', () => {
+    // Read from the recording rather than restated, for the reason every other
+    // provenance line on this page is: a limit typed into JSX is a limit one
+    // edit from being untyped, and this one sits beside the hashes it
+    // qualifies in `testnet.json`.
+    expect(page).toContain('withoutAModel');
+  });
+
+  it('does not let the deploy run stand in as evidence for the sentence', () => {
+    // The overstatement in its shortest form. "Deployed from a sentence" is
+    // what the page would like to say about this run and is the one thing the
+    // run does not show.
+    expect(page).not.toContain('deployed from a sentence');
+    expect(page).not.toContain('a model wrote this one');
+  });
+});
+
 describe('a built write path is not a demonstrated one', () => {
   const page = source('app/page.tsx');
 

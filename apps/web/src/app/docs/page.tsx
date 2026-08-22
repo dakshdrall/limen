@@ -26,22 +26,32 @@ export default function DocsOverview() {
   return (
     <DocPage
       title="Documentation"
-      lead="Limen derives the narrowest smart-account permission boundary that permits one transaction you already made, and installs it. This is how it works and what it refuses to claim."
+      lead="Limen builds agents that can spend on Stellar, and gives each one a boundary the account enforces rather than the agent observes. This is how it works and what it refuses to claim."
       labels={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'NO OWNER CUSTODY']}
       contents={CONTENTS}
     >
       <DocSectionBlock id="what" title="What Limen does">
         <P>
-          You perform a transaction — an agent&rsquo;s first transfer, say. Limen reads that
-          transaction off the ledger and derives the minimum context rule and policy set that would
-          have permitted it: the contracts it touched, the functions it invoked, the outflow that
-          occurred, and a window. It then installs that rule on a Soroban smart account, where the
-          network enforces it.
+          You describe an agent in a sentence. Limen drafts it — the job, the token, a ceiling per
+          period, an expiry — and shows you those limits before anything is signed. When you
+          approve them it deploys the agent onto Stellar in one flow: a Soroban smart account of
+          its own, a signing key registered against that account, and the boundary installed on
+          that key. Then you message the agent, and it acts on your behalf.
         </P>
         <P>
-          The derived cap equals the observed outflow exactly. That equality is the design, not a
-          coincidence — a boundary rounded up to a comfortable number is a boundary somebody chose,
-          and choosing is the step this removes.
+          The boundary is the part worth reading twice. It is a context rule and a policy contract
+          on the account, checked by the account before a token moves — so what the agent may do is
+          not a rule it has been asked to follow. It is a rule it is unable to exceed, and it stays
+          enforced whether or not Limen is running.
+        </P>
+        <P>
+          Where a boundary comes from is the other half. Limen would rather read one off a
+          transaction that already happened than ask you to describe one in the abstract: given an
+          observed transfer, it derives the minimum context rule and policy set that would have
+          permitted it — the contracts it touched, the functions it invoked, the outflow that
+          occurred, and a window. The derived cap equals the observed outflow exactly. That
+          equality is the design, not a coincidence — a boundary rounded up to a comfortable number
+          is a boundary somebody chose, and choosing is the step this removes.
         </P>
       </DocSectionBlock>
 

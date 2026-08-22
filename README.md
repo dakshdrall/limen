@@ -3,13 +3,38 @@
 [![CI](https://github.com/dakshdrall/limen/actions/workflows/ci.yml/badge.svg)](https://github.com/dakshdrall/limen/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**The permission layer for agentic money on Stellar.**
+**Describe an agent in a sentence. Deploy it on Stellar. Hold it to a limit the
+network enforces.**
 
-A user performs a transaction once. Limen derives the minimum OpenZeppelin
-smart-account context rule and policy set that permits exactly that flow — and
-refuses everything adjacent to it. The user reviews it in plain English and
-installs it on their smart account. An agent then operates inside that boundary
-and never holds a key.
+You write one sentence about what an agent should do. Limen drafts it — the job,
+the token, a ceiling per period, an expiry — shows you those limits before
+anything is signed, and then deploys the agent in one flow: a Soroban smart
+account of its own, a signing key registered against that account, and a
+boundary installed on that key. The agent then acts on your behalf inside the
+boundary — which is the half that is not shipped yet: see
+[Not done yet](#not-done-yet) below, and `apps/web/src/app/page.tsx` scene 04,
+which says the same thing where a reader meets the claim rather than where a
+reader goes looking for it.
+
+The boundary is the part that makes the rest of it safe to want. It is an
+OpenZeppelin context rule and policy set on the account, checked by the account
+before a token moves — so it is not a rule the agent is asked to follow, it is
+one the agent cannot exceed. Where it comes from is the other half: rather than
+ask you to describe a limit correctly in advance, Limen derives the minimum rule
+that would have permitted one transaction you already made, and refuses
+everything adjacent to it.
+
+**The agent does hold a key.** It has to, or it cannot act while nobody is
+watching. The claim this repository defends is the narrow one — the key an agent
+holds cannot exceed the installed boundary, and cannot remove it — and not the
+flattering one every adjacent product makes. An earlier version of this
+paragraph said the agent *"never holds a key"*, which the agent-key section
+below has contradicted for two versions; it is corrected here rather than left
+to be discovered.
+
+Today that key is generated in the browser and stays there, so nothing signs
+while your browser is closed. A key Limen holds is the runtime's work and is not
+built.
 
 ---
 
@@ -520,6 +545,21 @@ rejected transaction above demonstrates.
 
 An honest list. None of the following is implemented, and the demo does not
 pretend otherwise.
+
+- **There is no agent runtime.** An agent can be described, deployed, bounded
+  and revoked today, and every one of those has hashes behind it. It is not
+  conversational and it does not act on its own. The reason is a key: the agent
+  key this flow creates is generated in the browser and stays there, so nothing
+  signs while the browser is closed — an agent that acts unattended needs a key
+  held elsewhere, which is `packages/custody` plus the runtime and is not wired
+  up. The landing's scene 04 describes the loop the boundary was built for and
+  says, on the page, which half of it runs.
+
+  Stated first in this list because it is the one a reader of the landing is
+  most likely to assume is finished. The boundary exists precisely so that this
+  half can be built without asking anyone for trust — but it is not built, and
+  a page that implied otherwise would be spending the credibility the rest of
+  this file is for.
 
 - **Your account is stranded if you clear your browser.** The owner key is
   generated in the page and stored there, and there is deliberately no export

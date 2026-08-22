@@ -66,13 +66,18 @@ export function SiteFooter() {
             <span className="col-head text-muted-dim">on this site</span>
             <ul className="flex flex-col gap-2.5">
               <Row>
+                <Link href="/app/agents/new" className="link">
+                  Build an agent
+                </Link>
+              </Row>
+              <Row>
                 <Link href="/docs" className="link">
                   Documentation
                 </Link>
               </Row>
               <Row>
                 <Link href="/app/try" className="link">
-                  Try it on testnet
+                  Walk the chain writes
                 </Link>
               </Row>
               <Row>

@@ -168,6 +168,41 @@ export interface RecordedRevocation {
   postRevokeIsRevokedRule: boolean;
 }
 
+/**
+ * The agent-builder run: a browser driving the four chain writes behind
+ * `/app/agents/new`, recorded under `agentBuilderRun`.
+ *
+ * A *subset* again, and the fields are chosen by what the product scenes claim
+ * rather than by what the block holds. The scenes say a deployment is four
+ * writes closing over a handful of ledgers, so `deployTx`, `seedTx`,
+ * `installTx`, `ownerFundingTx` and `ledgerRange` are all required: a scene that
+ * says "four writes" while rendering three is the kind of arithmetic nobody
+ * checks.
+ *
+ * The run's *provenance* is deliberately not on this type. `producedBy`,
+ * `ranAt` and `withoutAModel` describe the whole recording rather than one run
+ * and live on `RECORDED_AGENT_BUILD_RUN` — which is also what stops a scene
+ * rendering a hash from this account beside the walkthrough's without reaching
+ * for the sentence that says they are different accounts.
+ */
+export interface RecordedAgentBuild {
+  smartAccount: string;
+  contextRuleId: number;
+  ownerSigner: string;
+  agentSigner: string;
+  ownerFundingTx: string;
+  agentFundingTx: string;
+  deployTx: string;
+  seedTx: string;
+  installTx: string;
+  limit: string;
+  periodLedgers: number;
+  derivedAtLedger: number;
+  validUntilLedger: number;
+  /** As the recording spells it, e.g. `4273973-4273978`. Never recomputed. */
+  ledgerRange: string;
+}
+
 /** The verifier and policy contracts every account in this repository shares. */
 export interface SharedContracts {
   ed25519Verifier: { contract: string; deployTx: string };
@@ -212,6 +247,28 @@ export const RECORDED_SURVEY: RecordedSurvey = survey;
  * that will eventually be wrong.
  */
 export const SHARED_CONTRACTS = recorded.shared as SharedContracts;
+
+/**
+ * The agent-builder run's evidence. See `RecordedAgentBuild`.
+ *
+ * `runs[0]` rather than the whole array, and asserted non-empty by the type
+ * rather than guarded at each use: the recording has one run and the scenes
+ * describe one deployment. If a second is ever recorded, a scene that wants to
+ * say "two" should have to change to say it.
+ */
+export const RECORDED_AGENT_BUILD = (
+  recorded.agentBuilderRun as { runs: unknown[] } & Record<string, unknown>
+).runs[0] as RecordedAgentBuild;
+
+/** The prose the agent-builder run carries about itself — provenance and limits. */
+export const RECORDED_AGENT_BUILD_RUN = recorded.agentBuilderRun as {
+  note: string;
+  producedBy: string;
+  signedBy: string;
+  withoutAModel: string;
+  ranAt: string;
+  verifiedBy: string;
+};
 
 /** When the most recent run in the recording was made. */
 export const RECORDED_AT = recorded.recordedAt;

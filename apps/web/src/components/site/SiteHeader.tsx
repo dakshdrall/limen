@@ -51,6 +51,11 @@ interface Section {
 }
 
 const SECTIONS: Section[] = [
+  // The front door, and first because it is what the landing's primary points
+  // at. It was not in this bar while the landing argued for a permission layer
+  // — there was nothing to build — and a nav whose first entry is `Docs` tells
+  // a reader the product is a document.
+  { href: '/app/agents/new', label: 'Build', built: true },
   { href: '/docs', label: 'Docs', built: true },
   { href: '/app/accounts', label: 'App', built: true },
   // The guided path, PLAN-V7 §3. Distinct from `App`, which is the reference
