@@ -37,6 +37,7 @@ const recorded = JSON.parse(recordedText) as {
   walkthrough: { smartAccount: string; installTx: string; firstRun: { installTx: string } };
   v4ChainRun: { smartAccount: string; installTx: string };
   browserRun: { runs: { smartAccount: string; installTx: string }[] };
+  agentBuilderRun: { runs: { smartAccount: string; installTx: string }[] };
   webauthnRun: {
     smartAccount: string;
     browserRun: { smartAccount: string; installTx: string };
@@ -82,6 +83,13 @@ describe('the chain figures are what the deployments file says', () => {
       // than a local key. Listed separately because it is the one install here
       // whose owner signature came from an authenticator.
       recorded.webauthnRun.browserRun.installTx,
+      // The agent-builder run's install, added by hand after reading the
+      // recording: one run, one install, closed on ledgers 4273973-4273978.
+      // This is the seam `agentBuilderRun.note` describes — a browser driving
+      // the four chain writes behind /app/agents/new — and it is listed here
+      // rather than absorbed by a pattern so that the count going from nine to
+      // ten is something somebody confirmed.
+      ...recorded.agentBuilderRun.runs.map((run) => run.installTx),
     ]);
     expect(EVIDENCE.chain.contextRulesInstalled).toBe(installs.size);
   });
@@ -108,6 +116,11 @@ describe('the chain figures are what the deployments file says', () => {
       // is a second passkey-owned account rather than a re-run against the
       // first.
       recorded.webauthnRun.browserRun.smartAccount,
+      // The agent-builder run's account — the first one this screen ever
+      // created, which is the whole point of that run. A different address
+      // again, from a passkey registered in the page, so it is an eighth
+      // account and not a re-run against any of the seven above.
+      ...recorded.agentBuilderRun.runs.map((run) => run.smartAccount),
     ]);
     expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
     expect(accounts.size).toBeGreaterThan(1);

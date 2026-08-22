@@ -1572,6 +1572,77 @@ account that does not exist yet would have been the wrong trade. `web.ts`'s
 header states the same thing at the code, so a reader of the module is told
 before a reader of this plan.
 
+#### RUN — the append-only grant, refused by a real Postgres
+
+**Status: run against a local Postgres 16, 2026-08-22.** Recorded here for the
+reason the two entries around it are: `packages/db/test/append-only.test.ts` had
+been skipping its six real assertions on every machine without a database, and a
+fence that has never been exercised is a `GRANT` somebody typed rather than
+access somebody was refused.
+
+**The arrangement, which is the test's subject and not its scaffolding.**
+Postgres gives a table's owner every privilege on it regardless of grants, so
+"append-only" is a deployment fact. The run constructs exactly the deployment
+the property depends on: `limen_owner` owns the database and every table and is
+the role the migrations connect as; `limen_app` is the NOLOGIN group role `0001`
+creates; and the test creates `limen_test_app` per run — a login role that owns
+nothing and holds its privileges only through membership in `limen_app`.
+
+**Result, as refusals rather than as a tick.**
+
+| As `limen_test_app`, a non-owner | Postgres |
+|---|---|
+| `INSERT INTO audit_events` | `INSERT 0 1` |
+| `SELECT FROM audit_events` | permitted |
+| `UPDATE audit_events SET action = 'rewritten'` | `ERROR: permission denied for table audit_events` |
+| `DELETE FROM audit_events` | `ERROR: permission denied for table audit_events` |
+| `UPDATE agents` | permitted |
+
+The last row is what makes the two refusals mean something: a role with no
+privileges anywhere would produce the same two errors for the wrong reason.
+`\dp` agrees with both halves — `limen_app=ar/limen_owner` on `audit_events`
+against `limen_app=arwd/limen_owner` on `agents` — but the privilege table is a
+reading of the same SQL and is not the evidence. **The grant holds.**
+
+**One finding, and it is about PG16 rather than about the fence.** The suite was
+not re-runnable on first setup. PG16 changed `createrole_self_grant` to default
+to empty, so a `CREATEROLE` role now receives only `ADMIN OPTION` on roles it
+creates — not `SET` or `INHERIT`. `DROP OWNED BY` requires the *privileges of*
+the role, so the test's `afterAll` cleanup failed; and because that cleanup is
+deliberately `.catch()`-swallowed, it failed silently and left the throwaway
+role behind holding a database-level `CONNECT` grant. The next run's
+uncaught `DROP ROLE IF EXISTS` then died with *"cannot be dropped because some
+objects depend on it"*. Fixed in the environment and not in the test —
+`ALTER ROLE limen_owner SET createrole_self_grant = 'set, inherit'` — which
+restores the posture CI already has for free, since CI's container connects as
+the `limen` superuser. Two consecutive runs then passed. It is worth knowing
+that the test's re-runnability rests on a role attribute nothing in the
+repository states.
+
+**Standing it up, since `.env.m1` is gitignored and nothing else records this.**
+Ubuntu's `postgresql-16`, started with `pg_ctlcluster 16 main start` because a
+Codespace has no runlevel for `invoke-rc.d` to find:
+
+```sql
+CREATE ROLE limen_owner LOGIN PASSWORD '…' CREATEROLE;
+ALTER  ROLE limen_owner SET createrole_self_grant = 'set, inherit';
+CREATE DATABASE limen_test OWNER limen_owner;
+```
+
+Then `MIGRATE_DATABASE_URL=…limen_owner@127.0.0.1:5432/limen_test npm run
+migrate -w @limen/db`, and the same URL as `TEST_DATABASE_URL`. Note that
+`TEST_DATABASE_URL` is the **owner** connection, not the application one: the
+test creates the throwaway login role, grants it `limen_app` and grants it
+`CONNECT`, all of which is owner work, and *derives* the non-owner application
+connection from it by swapping the credentials. CI's `TEST_DATABASE_URL` is its
+container's superuser for the same reason.
+
+**What it costs the numbers.** `@limen/db` reports 34 passing and zero pending,
+which is the count `apps/web/src/generated/evidence.json` already carried —
+`scripts/evidence.mjs` refuses to record a skipped test as a passing one, so
+that figure could not have been generated without a database and is now
+reproducible outside CI.
+
 #### PARTLY RUN — the shared-store contract, and what a container can prove
 
 **Status: run against a real Redis, except for Upstash.** Recorded in the same
