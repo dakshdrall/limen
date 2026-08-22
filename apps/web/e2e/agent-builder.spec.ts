@@ -596,12 +596,23 @@ test('a browser describes an agent, reviews its boundary, and deploys it onto te
 
   await page.getByRole('button', { name: 'Deploy this agent' }).click();
 
-  await settle(page, 'Friendbot funding the owner');
-  await settle(page, 'Friendbot funding the agent');
-  await expect(
-    page.locator('div.panel').filter({ hasText: 'Friendbot funding the' }),
-    'friendbot refused one of the two accounts',
-  ).not.toContainText('not submitted');
+  // Each of the two, on its own settled result rather than on a locator that
+  // spans both. `filter({ hasText: 'Friendbot funding the' })` matches the
+  // owner's panel and the agent's, and `not.toContainText` is a single-element
+  // assertion, so it dies of strict mode before it reads either — which is how
+  // the second run failed, with both fundings already on a ledger behind it.
+  const funded = {
+    owner: await settle(page, 'Friendbot funding the owner'),
+    agent: await settle(page, 'Friendbot funding the agent'),
+  };
+  for (const [who, result] of Object.entries(funded)) {
+    expect(
+      result.kind,
+      `friendbot did not submit for the ${who}'s classic account: ${JSON.stringify(result)}`,
+    ).not.toBe('not-submitted');
+  }
+  record.ownerFundingTx = funded.owner.kind === 'not-submitted' ? null : funded.owner.hash;
+  record.agentFundingTx = funded.agent.kind === 'not-submitted' ? null : funded.agent.hash;
 
   record.deployTx = await landed(page, 'Creating the smart account');
   record.seedTx = await landed(page, 'Funding the smart account');
