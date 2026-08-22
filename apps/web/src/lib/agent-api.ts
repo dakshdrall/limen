@@ -18,7 +18,9 @@
  * treating "fill this in yourself" as a failure.
  */
 
-import type { AgentConfigDraft } from '@/lib/agent-config';
+import type { PolicyProposal } from '@limen/core';
+import type { AgentConfig, AgentConfigDraft, FieldProblem } from '@/lib/agent-config';
+import type { InstallPlan } from '@/lib/lower-contract';
 import type { AgentRecord } from '@/lib/agents';
 import type { GenerationNote } from '@/lib/agent-generation';
 
@@ -99,4 +101,87 @@ export async function saveDraft({
   if (!response.ok) throw await refusalFrom(response);
   const body = (await response.json()) as { agent: AgentRecord };
   return body.agent;
+}
+
+/**
+ * What `CONFIGURED` came back with: the boundary, and what it lowers to.
+ *
+ * `plan` is typed off `lower-contract.ts` rather than `@limen/chain` for the
+ * reason that module exists — `@limen/chain`'s index pulls the Stellar SDK, and
+ * a client component naming the type must not pull a signing library with it.
+ */
+export interface ConfiguredAgent {
+  agent: AgentRecord;
+  proposal: PolicyProposal;
+  plan: InstallPlan;
+  /**
+   * The server's own validated config, not the draft that was sent.
+   *
+   * The review screen renders the off-chain half from this so that what appears
+   * under "Enforced by Limen" is what reached `policies.enforced_offchain_json`
+   * — not what the form believed it was sending.
+   */
+  config: AgentConfig;
+}
+
+/** A refusal that belongs on the fields rather than in a banner. */
+export class ConfigRejected extends Error {
+  readonly problems: FieldProblem[];
+
+  constructor(problems: FieldProblem[]) {
+    super('The configuration was refused.');
+    this.name = 'ConfigRejected';
+    this.problems = problems;
+  }
+}
+
+/** Limen understood it completely and declined — see `lower.ts`. */
+export class NotEnforceableRefusal extends Error {
+  readonly constraint: string;
+
+  constructor(constraint: string, message: string) {
+    super(message);
+    this.name = 'NotEnforceableRefusal';
+    this.constraint = constraint;
+  }
+}
+
+/**
+ * The reviewed draft becomes a stored boundary.
+ *
+ * The server re-validates and re-derives; this function does not send a config,
+ * it sends the draft. Anything the form computed is a convenience that stops at
+ * the network boundary.
+ */
+export async function configureAgent(
+  agentId: string,
+  draft: AgentConfigDraft,
+): Promise<ConfiguredAgent> {
+  const response = await fetch(`/api/agents/${agentId}/configure`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ draft }),
+  });
+
+  if (response.status === 422) {
+    const body = (await response.json()) as {
+      error?: string;
+      problems?: FieldProblem[];
+      refusal?: { constraint: string; message: string };
+      message?: string;
+    };
+    if (body.error === 'invalid_config' && Array.isArray(body.problems)) {
+      throw new ConfigRejected(body.problems);
+    }
+    if (body.error === 'not_enforceable' && body.refusal !== undefined) {
+      throw new NotEnforceableRefusal(body.refusal.constraint, body.refusal.message);
+    }
+    throw new AgentApiError(
+      body.error ?? 'invalid_config',
+      body.message ?? 'These limits could not be turned into a boundary.',
+    );
+  }
+
+  if (!response.ok) throw await refusalFrom(response);
+  return (await response.json()) as ConfiguredAgent;
 }

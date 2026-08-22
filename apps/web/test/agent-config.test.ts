@@ -25,6 +25,7 @@ import {
   LEDGERS_PER_DAY,
   MAX_RECIPIENTS,
   WINDOW_OPTIONS,
+  DESCRIBED_SOURCE,
   compileToObservation,
   emptyDraft,
   fromSmallestUnits,
@@ -358,10 +359,7 @@ describe('a config compiles into the pipeline that already exists', () => {
     const result = validate(goodDraft({ cap: '50' }));
     if (!result.ok) throw new Error('expected a valid config');
 
-    const observed = compileToObservation(result.config, {
-      smartAccountId: ACCOUNT,
-      atLedger: 1_000_000,
-    });
+    const observed = compileToObservation(result.config, { atLedger: 1_000_000 });
     const proposal = synthesize(observed, synthesisOptionsFor(result.config));
 
     const limit = proposal.policies.find((policy) => policy.kind === 'spending_limit');
@@ -382,7 +380,7 @@ describe('a config compiles into the pipeline that already exists', () => {
     if (!result.ok) throw new Error('expected a valid config');
 
     const proposal = synthesize(
-      compileToObservation(result.config, { smartAccountId: ACCOUNT, atLedger: 1_000_000 }),
+      compileToObservation(result.config, { atLedger: 1_000_000 }),
       synthesisOptionsFor(result.config),
     );
     expect(proposal.contextRule.allowedFunctions).toEqual({ [TOKEN]: ['transfer'] });
@@ -393,10 +391,7 @@ describe('a config compiles into the pipeline that already exists', () => {
     const result = validate(goodDraft());
     if (!result.ok) throw new Error('expected a valid config');
 
-    const observed = compileToObservation(result.config, {
-      smartAccountId: ACCOUNT,
-      atLedger: 1_000_000,
-    });
+    const observed = compileToObservation(result.config, { atLedger: 1_000_000 });
     expect(observed.network).toBe('simulated');
     // No hash, because none exists. `policies.observed_tx_hash` stays null for
     // a described agent and the absence is the record that nothing was observed.
@@ -408,7 +403,7 @@ describe('a config compiles into the pipeline that already exists', () => {
     if (!result.ok) throw new Error('expected a valid config');
 
     const proposal = synthesize(
-      compileToObservation(result.config, { smartAccountId: ACCOUNT, atLedger: 2_000_000 }),
+      compileToObservation(result.config, { atLedger: 2_000_000 }),
       synthesisOptionsFor(result.config),
     );
     expect(proposal.contextRule.validFromLedger).toBe(2_000_000);
@@ -425,6 +420,53 @@ describe('a config compiles into the pipeline that already exists', () => {
     expect(synthesisOptionsFor(result.config).headroomBps).toBe(10_000);
   });
 
+  it('derives the same boundary whatever account it is derived for', () => {
+    /**
+     * The claim `compileToObservation` rests on, checked rather than asserted.
+     *
+     * The review step derives a proposal before a smart account exists, and the
+     * deploy step installs *that* proposal rather than re-deriving one. That is
+     * only sound if the account plays no part in the derivation. `synthesize`
+     * reads `source` solely to decide which movements are outflows and never
+     * copies it into the result — so the same config must produce a
+     * byte-identical proposal for any account, including the sentinel.
+     *
+     * If this ever fails, the deploy step must stop installing a stored
+     * proposal and start re-deriving against the real account.
+     */
+    const result = validate(goodDraft());
+    if (!result.ok) throw new Error('expected a valid config');
+
+    const options = synthesisOptionsFor(result.config);
+    const fromSentinel = synthesize(
+      compileToObservation(result.config, { atLedger: 1_000_000 }),
+      options,
+    );
+
+    for (const source of [ACCOUNT, SUPPLIER, DESCRIBED_SOURCE, 'anything at all']) {
+      const observed = {
+        ...compileToObservation(result.config, { atLedger: 1_000_000 }),
+        source,
+        movements: [
+          { asset: TOKEN, from: source, to: source, amount: result.config.onChain.cap },
+        ],
+      };
+      expect(JSON.stringify(synthesize(observed, options))).toBe(JSON.stringify(fromSentinel));
+    }
+  });
+
+  it('names no address at all in a described observation', () => {
+    // The sentinel is written to be obviously wrong if it ever reaches a
+    // screen. A placeholder that looked like an address would be a bug that
+    // renders as data.
+    expect(DESCRIBED_SOURCE).not.toMatch(/^[GC][A-Z2-7]{55}$/);
+
+    const result = validate(goodDraft());
+    if (!result.ok) throw new Error('expected a valid config');
+    const observed = compileToObservation(result.config, { atLedger: 1_000_000 });
+    expect(observed.source).toBe(DESCRIBED_SOURCE);
+  });
+
   it('carries no recipient into the derivation', () => {
     // The compiled observation must not name an approved recipient anywhere.
     // A destination inside the derivation would read as a constraint the
@@ -432,10 +474,7 @@ describe('a config compiles into the pipeline that already exists', () => {
     const result = validate(goodDraft({ recipients: [SUPPLIER, OTHER_SUPPLIER] }));
     if (!result.ok) throw new Error('expected a valid config');
 
-    const observed = compileToObservation(result.config, {
-      smartAccountId: ACCOUNT,
-      atLedger: 1_000_000,
-    });
+    const observed = compileToObservation(result.config, { atLedger: 1_000_000 });
     expect(JSON.stringify(observed)).not.toContain(SUPPLIER);
     expect(JSON.stringify(observed)).not.toContain(OTHER_SUPPLIER);
   });

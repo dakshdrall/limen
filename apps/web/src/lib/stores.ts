@@ -9,11 +9,24 @@
  * be as small and as boring as it can be, because *small and boring* is the
  * only quality control available to code that cannot be run in CI.
  *
- * So: no conditionals, no partial updates, no query built from a variable, one
- * statement per method. Each is a single non-interactive query, which is the
- * constraint `@limen/db/web` documents — nothing here wants a transaction, and
- * if something ever does, the rule is that it moves to `apps/runtime` rather
- * than that this file grows a driver exception.
+ * So: no conditionals, no partial updates, no query built from a variable, and
+ * one statement per method wherever one will do.
+ *
+ * ## The one method that is three statements, and why it did not move
+ *
+ * `configure` sends three writes through `db.batch`. The rule this header used
+ * to state without qualification — *if something ever wants a transaction, it
+ * moves to `apps/runtime`* — is about **interactive** transactions, which is
+ * what `neon-http` cannot do and what `web.ts` is careful to say. Three writes
+ * with no logic between them are not that, and PLAN-V8 §7.5.2's measurement
+ * against live Neon settled the behaviour rather than leaving it inferred:
+ * `db.transaction()` throws and leaves no rows, and `db.batch()` is atomic —
+ * proved by a deliberate constraint violation rolling the whole batch back.
+ *
+ * The exception is narrow on purpose. A method here that needed to *read* a row
+ * and then decide what to write based on it would still belong in the runtime,
+ * and `configure`'s ownership check is deliberately not that: it refuses before
+ * the batch rather than branching inside it. See `agents.ts`.
  *
  * ## Bytes in the database, bytes in the interface
  *
@@ -26,7 +39,7 @@
 
 import 'server-only';
 import { and, eq, gt } from 'drizzle-orm';
-import { agents, sessions, users } from '@limen/db';
+import { agents, policies, sessions, users } from '@limen/db';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
 import type { SessionRecord, SessionStore } from './session';
@@ -184,5 +197,80 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         .limit(1);
       return row === undefined ? undefined : toAgent(row);
     },
+
+    /**
+     * The one method here that is not a single statement, and the header's rule
+     * says such a thing moves to `apps/runtime`. It does not, and the exception
+     * is narrow enough to state: that rule is about **interactive** transactions
+     * — multi-statement work with logic between the statements — which
+     * `neon-http` genuinely cannot do. This is three writes sent together
+     * through `db.batch`, with no logic between them, which the §7.5.2
+     * measurement established is atomic on this driver.
+     *
+     * `agents.ts`'s `ConfigureInput` carries the rest of the argument, including
+     * why ownership is checked before the batch rather than inside it.
+     */
+    async configure(input) {
+      const owned = await db
+        .select()
+        .from(agents)
+        .where(and(eq(agents.id, input.agentId), eq(agents.userId, input.userId)))
+        .limit(1);
+      if (owned[0] === undefined) {
+        throw new AgentNotFound(input.agentId);
+      }
+
+      const [, , updated] = await db.batch([
+        // Reconfiguring replaces rather than accumulates. A second proposed
+        // policy on one agent would leave the screen choosing between them.
+        db
+          .delete(policies)
+          .where(and(eq(policies.agentId, input.agentId), eq(policies.status, 'proposed'))),
+        db.insert(policies).values({
+          agentId: input.agentId,
+          source: 'described',
+          // No observed transaction exists, so no hash. The null is the record
+          // that nothing was observed — see `agent-config.ts`.
+          observedTxHash: null,
+          observedLedger: input.observedLedger,
+          headroomBps: input.headroomBps,
+          windowLedgers: input.windowLedgers,
+          validUntilLedger: input.validUntilLedger,
+          proposalJson: input.proposal,
+          installPlanJson: input.installPlan,
+          enforcedOffchainJson: input.enforcedOffChain,
+          status: 'proposed',
+        }),
+        db
+          .update(agents)
+          .set({ name: input.name, status: 'CONFIGURED' })
+          .where(and(eq(agents.id, input.agentId), eq(agents.userId, input.userId)))
+          .returning(),
+      ]);
+
+      const row = updated[0];
+      if (row === undefined) {
+        // Unreachable: ownership was established above and nothing deletes an
+        // agent on this path. It throws rather than returning undefined so a
+        // future edit that breaks the pairing fails here instead of leaving a
+        // CONFIGURED agent the caller believes does not exist.
+        throw new Error('stores: the configured agent came back empty.');
+      }
+      return toAgent(row);
+    },
   };
+}
+
+/**
+ * The agent is not this user's, or is not there.
+ *
+ * One error for both, because telling an unauthorised caller that an id exists
+ * is the distinction worth not making. Its own type so a route can map it to a
+ * 404 without matching on a message.
+ */
+export class AgentNotFound extends Error {
+  constructor(id: string) {
+    super(`No agent ${id} for this user.`);
+    this.name = 'AgentNotFound';
+  }
 }

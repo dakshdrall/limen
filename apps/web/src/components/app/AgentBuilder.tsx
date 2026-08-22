@@ -13,7 +13,18 @@ import {
 import { useIdentity } from '@/lib/use-identity';
 import { PASSKEY_LABEL } from '@limen/shared/status-labels';
 import { StatusLabel } from '@/components/StatusLabel';
-import { AgentApiError, generateDraft, saveDraft } from '@/lib/agent-api';
+import {
+  AgentApiError,
+  ConfigRejected,
+  NotEnforceableRefusal,
+  configureAgent,
+  generateDraft,
+  saveDraft,
+  type ConfiguredAgent,
+} from '@/lib/agent-api';
+import { InstallPlanTable } from '@/components/app/InstallPlanTable';
+import { NotEnforceable } from '@/components/NotEnforceable';
+import { OffChainSummary } from '@/components/app/OffChainSummary';
 import type { GenerationNote } from '@/lib/agent-generation';
 
 /**
@@ -62,7 +73,7 @@ import type { GenerationNote } from '@/lib/agent-generation';
 export const AGENT_BUILDER_PASSKEY_LABEL = PASSKEY_LABEL;
 
 /** Where the flow has got to. Not a step number — a state with a name. */
-type Stage = 'describe' | 'review';
+type Stage = 'describe' | 'review' | 'configured';
 
 const PLACEHOLDER = 'an agent that can pay approved suppliers up to 50 USDC';
 
@@ -89,6 +100,21 @@ export function AgentBuilder() {
   const [degraded, setDegraded] = useState<string | null>(null);
   /** A route refused. Distinct from `degraded`: this one means try again. */
   const [refusal, setRefusal] = useState<string | null>(null);
+
+  /** The stored boundary, once the server has derived and written one. */
+  const [configured, setConfigured] = useState<ConfiguredAgent | null>(null);
+
+  /**
+   * Limen understood the limits completely and declined to install them.
+   *
+   * Its own state rather than a message, because it is not a mistake to
+   * correct — it is the composition-only rule doing its job, and it renders
+   * through `NotEnforceable` like every other refusal of the kind.
+   */
+  const [notEnforceable, setNotEnforceable] = useState<{
+    constraint: string;
+    message: string;
+  } | null>(null);
 
   /**
    * `unknown` is the server render and the first client frame — reading a
@@ -194,12 +220,75 @@ export function AgentBuilder() {
     // every keystroke means refusing a field a person is halfway through
     // typing, which trains them to ignore the messages.
     if (problems.length > 0) setProblems([]);
+
+    /**
+     * A derived boundary belongs to the fields it was derived from.
+     *
+     * Editing a limit while last derivation's install plan is still on screen
+     * would put a cap on the chain-facing table that no longer matches the cap
+     * in the input above it — the boundary and the numbers it came from
+     * disagreeing, with nothing saying so. So the boundary goes away on the
+     * first keystroke and has to be derived again.
+     *
+     * The stored `policies` row is untouched by this. It still holds the last
+     * configuration that was actually accepted, which is the correct thing for
+     * it to hold until another one is.
+     */
+    if (configured !== null) {
+      setConfigured(null);
+      setNotEnforceable(null);
+      setStage('review');
+    }
   };
 
-  const check = () => {
-    const result = validate(draft);
-    setProblems(result.ok ? [] : result.problems);
-    return result;
+  /**
+   * Accept the reviewed limits: derive the boundary, and store it.
+   *
+   * `validate` runs here first so the ordinary case — a field still empty —
+   * shows a message without a round trip. It is **not** the gate. The server
+   * re-validates the same draft and derives everything from its own result, for
+   * the reason B8.1 gives about checks that live only in a frontend: this
+   * function is a convenience, and `/api/agents/[id]/configure` is the check.
+   *
+   * A local pass is therefore not permission to skip the request, and a local
+   * failure is only a shortcut past one.
+   */
+  const accept = async () => {
+    if (agentId === null) return;
+
+    const local = validate(draft);
+    if (!local.ok) {
+      setProblems(local.problems);
+      return;
+    }
+
+    setBusy(true);
+    setProblems([]);
+    setRefusal(null);
+    setNotEnforceable(null);
+
+    try {
+      const result = await configureAgent(agentId, draft);
+      setConfigured(result);
+      setDraft((current) => ({ ...current, name: result.agent.name }));
+      setStage('configured');
+    } catch (error) {
+      if (error instanceof ConfigRejected) {
+        // The server disagreed with the form. Its answer wins and lands on the
+        // fields, which is the only way a person can act on it.
+        setProblems(error.problems);
+      } else if (error instanceof NotEnforceableRefusal) {
+        setNotEnforceable({ constraint: error.constraint, message: error.message });
+      } else {
+        setRefusal(
+          error instanceof AgentApiError
+            ? error.message
+            : 'That did not go through. Check your connection and try again.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -251,12 +340,12 @@ export function AgentBuilder() {
         </div>
       </Stage>
 
-      {stage === 'review' && (
+      {stage !== 'describe' && (
         <Stage
           n={2}
           title="Review the limits"
           caption="These are the fields that become the boundary. Correct anything that is wrong — this step is where a proposal becomes a permission, and it is the only place that happens."
-          done={false}
+          done={stage === 'configured'}
         >
           {degraded !== null && (
             <div className="panel" data-tone="unproven">
@@ -289,15 +378,54 @@ export function AgentBuilder() {
             disabled={busy}
           />
 
+          {notEnforceable !== null && (
+            <NotEnforceable
+              constraint={notEnforceable.constraint}
+              message={notEnforceable.message}
+            />
+          )}
+
+          {refusal !== null && (
+            <p role="alert" className="measure text-[12.5px] leading-relaxed text-deny">
+              {refusal}
+            </p>
+          )}
+
           <button
             type="button"
             className="btn self-start"
-            data-variant="secondary"
+            data-variant="primary"
             disabled={busy}
-            onClick={check}
+            onClick={() => void accept()}
           >
-            Check these limits
+            {busy ? 'Deriving the boundary…' : 'Accept these limits'}
           </button>
+        </Stage>
+      )}
+
+      {stage === 'configured' && configured !== null && (
+        <Stage
+          n={3}
+          title="The boundary"
+          caption="Derived from the limits above by the same deterministic synthesizer that derives one from a transaction that already happened, and lowered onto primitives an OpenZeppelin smart account can hold. This is what deploying writes."
+          done={false}
+        >
+          <div className="flex flex-col gap-8">
+            <InstallPlanTable plan={configured.plan} />
+
+            <OffChainSummary
+              perTransactionCap={configured.config.enforcedOffChain.perTransactionCap}
+              recipients={configured.config.enforcedOffChain.recipients}
+              assetLabel={configured.config.display.assetLabel}
+              assetDecimals={configured.config.display.assetDecimals}
+            />
+
+            <p className="measure text-[12.5px] leading-relaxed text-muted">
+              Editing anything above derives this again. The boundary that gets installed is this
+              one — Limen stores what you reviewed rather than re-deriving it at deploy time, so
+              the rule written to the chain is the rule on this screen.
+            </p>
+          </div>
         </Stage>
       )}
     </div>

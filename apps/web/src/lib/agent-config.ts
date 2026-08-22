@@ -501,6 +501,24 @@ export function synthesisOptionsFor(config: AgentConfig): SynthesisOptions {
 }
 
 /**
+ * The account a described observation names, which is not an account.
+ *
+ * Deliberately not a `C…`. A described agent's boundary is derived **before a
+ * smart account exists** — the review step comes before the deploy step — so
+ * there is no address to name, and naming a plausible one would be inventing a
+ * fact at the exact moment this flow is asking a person to check the facts.
+ *
+ * It is safe to be a non-address because nothing downstream reads it. See
+ * {@link compileToObservation} for the argument, which is checked by test
+ * rather than asserted here. The value never leaves memory: only the derived
+ * `PolicyProposal` is stored, and a proposal contains no source.
+ *
+ * Written to be obviously wrong if it ever does appear on a screen. A sentinel
+ * that looked like an address would be a bug that renders as data.
+ */
+export const DESCRIBED_SOURCE = 'described-agent:no-account-yet';
+
+/**
  * A config, as the transaction the boundary would have been derived from.
  *
  * This is the join between the described mode and everything that already
@@ -516,36 +534,51 @@ export function synthesisOptionsFor(config: AgentConfig): SynthesisOptions {
  * happened. There is no hash, and `policies.observed_tx_hash` stays null for a
  * described agent — the absence is the honest record that nothing was observed.
  *
- * `source` is the smart account, because that is the account the boundary is
- * installed on and `synthesize` sums outflow from it. `to` is the *account
- * itself*, which looks odd and is deliberate: a described agent has no
- * destination, the recipient allowlist is not enforced on chain, and naming any
- * real address here would put a destination into the derivation that the rule
- * does not constrain. `synthesize` reads `from` and never `to`.
+ * ## There is no account parameter, and that is a claim rather than a shortcut
+ *
+ * `synthesize` reads `source` for exactly one purpose: deciding which movements
+ * are outflows, by comparing it against `movement.from`. It never copies it
+ * into the result. A `PolicyProposal` has a context rule, policies, rationale
+ * and a flag, and not one of them names an account — the account is supplied
+ * separately, at install time, by `installFunctions(plan, { smartAccount })`.
+ *
+ * So the derived boundary is **the same boundary whatever account it is
+ * derived for**, and `test/agent-config.test.ts` proves it by deriving with
+ * several sources and comparing byte for byte. That is what lets the review
+ * step derive the real proposal before an account exists, and what lets the
+ * deploy step install *that* proposal rather than re-deriving a second one and
+ * hoping the two agree.
+ *
+ * `to` is the source again, for a related reason: a described agent has no
+ * destination, the recipient allowlist is not enforced on chain, and naming a
+ * real address here would put a destination into the derivation that the
+ * installed rule does not constrain. `synthesize` reads `from` and never `to`.
  */
 export function compileToObservation(
   config: AgentConfig,
-  { smartAccountId, atLedger }: { smartAccountId: Address; atLedger: number },
+  { atLedger }: { atLedger: number },
 ): ObservedTransaction {
+  const source: Address = DESCRIBED_SOURCE;
+
   return {
     // No hash exists, and inventing a plausible one would put a value in a
     // field every other part of this application treats as checkable.
     hash: '',
     network: 'simulated',
     ledger: atLedger,
-    source: smartAccountId,
+    source,
     invocations: [
       {
         contractId: config.onChain.assetContractId,
         functionName: 'transfer',
-        args: [smartAccountId, smartAccountId, config.onChain.cap],
+        args: [source, source, config.onChain.cap],
       },
     ],
     movements: [
       {
         asset: config.onChain.assetContractId,
-        from: smartAccountId,
-        to: smartAccountId,
+        from: source,
+        to: source,
         amount: config.onChain.cap,
       },
     ],

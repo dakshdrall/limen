@@ -33,6 +33,9 @@
  */
 
 import 'server-only';
+import type { PolicyProposal } from '@limen/core';
+import type { InstallPlan } from '@limen/chain/plan';
+import type { AgentConfig } from './agent-config';
 
 /** The lifecycle, as `agent_status` names it. A subset — this flow uses five. */
 export type AgentStatus = 'DRAFT' | 'CONFIGURED' | 'DEPLOYING' | 'ACTIVE' | 'ERROR';
@@ -67,6 +70,74 @@ export interface AgentStore {
     description: string;
   }): Promise<AgentRecord | undefined>;
   findForUser(id: string, userId: string): Promise<AgentRecord | undefined>;
+  /**
+   * The reviewed configuration becomes a `policies` row and the agent becomes
+   * `CONFIGURED`. Atomic, and see {@link ConfigureInput} for why that matters.
+   */
+  configure(input: ConfigureInput): Promise<AgentRecord>;
+}
+
+/**
+ * What `CONFIGURED` writes, and why it is one call rather than three.
+ *
+ * Three statements: drop any policy this agent had proposed before, insert the
+ * one just reviewed, move the agent's status. They go through `db.batch`,
+ * which the `neon-http` measurement in PLAN-V8 §7.5.2 established is atomic — a
+ * deliberate constraint violation in the second statement rolled the whole
+ * batch back with zero rows surviving.
+ *
+ * They have to be atomic because each of the interleavings is a bad state
+ * somebody would then have to reason about: an agent marked `CONFIGURED` with
+ * no policy row, or two proposed policies where the screen expects one, or a
+ * new policy attached to an agent still marked `DRAFT`. None of those is
+ * catastrophic — nothing has reached a chain at this point — but all three are
+ * states that exist only because a write was interrupted, and the cheapest time
+ * to not have them is now.
+ *
+ * This is **not** an interactive transaction and does not fall under
+ * `web.ts`'s rule that a route needing one moves to `apps/runtime`. There is no
+ * conditional logic between the statements; it is three writes sent together.
+ *
+ * ## Ownership is checked before the batch, not inside it
+ *
+ * The `agents` update carries `user_id` in its `where`, but the `policies`
+ * insert structurally cannot — that table has no owner column, only
+ * `agent_id`. So a batch alone would let a caller attach a policy to an agent
+ * that is not theirs even though the status update did nothing. The store
+ * reads the agent through `findForUser` first and refuses before writing
+ * anything.
+ *
+ * A read-before-write is a race in general and is not one here: an agent's
+ * owner is set at insert and there is no code path anywhere that changes it.
+ * If agent transfer is ever added, this becomes wrong and the comment is where
+ * to find that out.
+ */
+export interface ConfigureInput {
+  agentId: string;
+  userId: string;
+  /** The reviewed name. `CONFIGURED` is where a real one becomes required. */
+  name: string;
+  /**
+   * The derived boundary, stored whole so that what was reviewed is
+   * recoverable — and so the deploy step installs *this* rather than deriving
+   * a second one and hoping the two agree.
+   */
+  proposal: PolicyProposal;
+  /**
+   * What that proposal lowers to, stored beside it for the reason the schema
+   * gives: the review step renders the plan, so the plan is part of what was
+   * reviewed. It is derivable from the proposal — `lower` is pure — and stored
+   * anyway, because a column that says what was on screen is worth more after
+   * the fact than one that says what could be recomputed.
+   */
+  installPlan: InstallPlan;
+  /** Recipients and the per-payment ceiling. Enforced by nothing today. */
+  enforcedOffChain: AgentConfig['enforcedOffChain'];
+  headroomBps: number;
+  windowLedgers: number;
+  validUntilLedger: number;
+  /** `validFromLedger`. Local provenance — it has no on-chain counterpart. */
+  observedLedger: number;
 }
 
 /**

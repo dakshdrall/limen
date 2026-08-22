@@ -2128,11 +2128,51 @@ than in a check the caller performs, for the reason `session.ts` gives about
 expiry: a row returned and then discarded by the caller is one `if` away from
 not being discarded.
 
-**What is not covered by any test, stated rather than implied.** The three
+**What is not covered by any test, stated rather than implied.** The
 `/api/agents*` routes are exercised by unit tests only above the store
 interface. Their end-to-end behaviour — cookie to row — has been run by hand and
 is not in CI, for the reason §7.5.2 already gives: CI has no Neon, and
 `neon-http` cannot be exercised by a local container.
+
+**Run record — `CONFIGURED` against live Neon and live testnet RPC, 2026-08-22.**
+The configure path derives against a real ledger, so it was run against one:
+
+```
+latest testnet ledger        4,269,900   (read through SOROBAN_RPC_URL)
+derived rule                 limen-0, CallContract, valid_until 4,788,300
+                             spending_limit 500000000, window 17,280
+stored policies row          source=described  status=proposed
+                             observed_tx_hash=NULL   ← nothing was observed
+                             observed_ledger=4269900  valid_until=4788300
+                             headroom_bps=10000       window_ledgers=17280
+                             enforced_offchain_json={recipients:[G…], perTransactionCap:"100000000"}
+reconfigure twice            still exactly one policies row  ← replaces, not accumulates
+configure as another user    rejected, AgentNotFound, nothing written
+delete agent                 policies row cascaded away
+```
+
+`headroom_bps=10000` is the described mode's whole arithmetic claim on one line:
+the cap stored is the cap typed, with nothing added.
+
+**Finding — `jsonb` does not preserve key order, and one plausible future bug
+depends on knowing that.** The first run of this probe asserted the stored
+proposal matched the derived one under `JSON.stringify` and **failed**. The
+values are identical and the key order is not: Postgres `jsonb` stores a
+decomposed representation and returns keys in its own order. Deep equality
+passes; string equality does not, and the probe now asserts *both* — equal by
+value, unequal by string — so the finding is measured rather than remembered.
+
+Nothing today is affected, because `lower` and `installFunctions` read fields by
+name. What would be affected is **anybody who hashes `proposal_json` read back
+from Postgres and compares it to a hash of the in-memory proposal** — an
+obvious-looking way to prove "what was reviewed is what was installed", and one
+that would fail for a reason nothing about the data would explain. The
+comparison has to be structural. This is recorded in the configure route's
+header as well as here, because that is where someone would go to write it.
+
+It also corrects a sentence this work had already written: the claim is *every
+field, every value*, and **not** "byte for byte". The stronger phrasing was in
+the route header for about twenty minutes and was false the whole time.
 
 ### M4 — Runtime and tools
 
