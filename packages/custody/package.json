@@ -2,23 +2,30 @@
   "name": "@limen/custody",
   "version": "0.1.0",
   "private": true,
-  "description": "The key Limen holds, and what wraps it. At M1: the KeyProvider interface and its env-var implementation. Server-only.",
+  "description": "The key Limen holds, and what wraps it: the KeyProvider interface, its env-var implementation, and the agent keypair Limen generates, seals and opens for one turn. Server-only.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "prebuild": "npm --prefix ../chain run build",
+    "prebuild": "npm --prefix ../shared run build && npm --prefix ../chain run build",
     "build": "tsc -p tsconfig.json",
-    "pretest": "npm --prefix ../chain run build",
+    "pretest": "npm --prefix ../shared run build && npm --prefix ../chain run build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@limen/chain": "*"
+    "@limen/chain": "*",
+    "@limen/shared": "*",
+    "@stellar/stellar-sdk": "^16.2.0"
   },
   "devDependencies": {
     "@types/node": "^20",

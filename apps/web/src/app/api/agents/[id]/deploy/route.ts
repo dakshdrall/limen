@@ -14,6 +14,23 @@
  * review screen, and a browser that had been tampered with between review and
  * deploy would be installing the reviewed boundary anyway.
  *
+ * ## The agent key is generated here, on the server, and the browser never sees it
+ *
+ * PLAN-V8 §3, and the half of this flow that changed at M2. The **owner** key
+ * is still the browser's and never reaches a Limen server — that is what
+ * `NO OWNER CUSTODY` says and it stays true. The **agent** key cannot be the
+ * browser's, because the whole point of an agent is that it acts while no
+ * browser is open: a key in `localStorage` cannot answer a Telegram message.
+ *
+ * So it is generated here, sealed into `agent_keys`, and only the `G…` address
+ * goes back to the client — which then installs the boundary naming that
+ * address as the agent signer. The browser is told what the agent's key *is*
+ * and never holds it, which is the exact inverse of the owner key.
+ *
+ * The ordering matters and is not incidental: the key must exist before the
+ * install, because the context rule being installed names it. A key generated
+ * after the boundary would be a key the boundary does not bound.
+ *
  * ## `DEPLOYING` is set before anything is signed, not after
  *
  * If the browser closes mid-flight, the agent is left saying `DEPLOYING`, which
@@ -77,6 +94,30 @@ export async function POST(
       );
     }
 
+    // Before `DEPLOYING`, and before the browser is handed anything to sign.
+    // A failure here leaves the agent in the status it already had, which is a
+    // state the deploy button is offered from — rather than leaving it
+    // `DEPLOYING` with no key, which is a state nothing can move it out of.
+    let agentKey;
+    try {
+      agentKey = await store.provisionAgentKey({ agentId: id, userId: gate.user.id });
+    } catch (error) {
+      // The master key being absent or wrong is an operational failure of this
+      // deployment, not a fault in the request, and it must not read as one.
+      // `resolveKeyProvider` and the provider's own fence both throw with a
+      // message written for whoever runs this — so it is logged in full and
+      // summarised to the caller without echoing configuration detail back.
+      console.error('limen agents: could not provision an agent key', error);
+      return Response.json(
+        {
+          error: 'custody_unavailable',
+          message:
+            'This deployment cannot hold an agent key right now, so nothing was deployed. The agent is unchanged and the deploy can be retried.',
+        },
+        { status: 503 },
+      );
+    }
+
     const marked = await store.markStatus({
       agentId: id,
       userId: gate.user.id,
@@ -84,7 +125,18 @@ export async function POST(
     });
 
     return Response.json(
-      { agent: marked, policyId: policy.id, plan: policy.installPlan },
+      {
+        agent: marked,
+        policyId: policy.id,
+        plan: policy.installPlan,
+        // The address the browser must install the boundary against. Not a
+        // suggestion: `/deployed` re-checks that what was installed names this
+        // key, so a client that substituted its own would be refused there.
+        agentPublicKey: agentKey.agentPublicKey,
+        // True only on the first deploy of this agent. A retry reuses the key
+        // the already-installed boundary may name; see `provisionAgentKey`.
+        agentKeyGenerated: agentKey.generated,
+      },
       { headers: { 'cache-control': 'no-store' } },
     );
   } catch (error) {

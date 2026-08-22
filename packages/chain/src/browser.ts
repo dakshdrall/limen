@@ -27,7 +27,7 @@
 
 export { TESTNET_PASSPHRASE, DEFAULT_TESTNET_RPC_URL, FRIENDBOT_URL, type SupportedPassphrase } from './network.js';
 
-export { concatBytes, fromHex, scvBytes, sha256, toHex } from './bytes.js';
+export { concatBytes, fromHex, rawEd25519FromAddress, scvBytes, sha256, toHex } from './bytes.js';
 
 export {
   MAX_POLICIES_PER_RULE,

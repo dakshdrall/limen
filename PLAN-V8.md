@@ -2134,6 +2134,95 @@ XDR" entrypoint, per demo-signer fence 3.
 **Done when:** an agent key can sign, and every fence that would catch it leaking
 is live and proven non-vacuous.
 
+#### M2, part one — keygen, the signer, and the seed in `agent_keys`. RUN.
+
+Dated 2026-08-22. What landed, what it cost, and what of M2 is still open.
+
+**Built.** `packages/custody/src/agent-key.ts` — `generateAgentKey` and
+`withAgentKey`. Envelope encryption in the two layers §7.5.3's interface was
+shaped for: a per-agent data key seals the seed, `EnvMasterKeyProvider` wraps the
+data key, and `kms_key_id` records which provider did on every row.
+`packages/custody/src/aes-gcm.ts` holds the one AES-256-GCM implementation both
+layers use — `env-master-key.ts` was refactored onto it and its wire format,
+`nonce ‖ ciphertext ‖ tag`, is unchanged and is a compatibility surface now.
+
+`withAgentKey` is a callback rather than a getter, so a decrypted seed exists for
+one turn and cannot be held past it. The open key satisfies `@limen/chain`'s
+`Ed25519Signer` structurally, with no adapter — the same property `sign.ts`
+claimed for the browser's local key, working a second time for a key that lives
+somewhere entirely different.
+
+**The seed is bound to its agent id as associated data.** This is new and is the
+one genuinely load-bearing addition: without it a sealed seed is portable between
+`agent_keys` rows, and anyone able to write that table could move an agent's key
+onto an agent whose boundary is wider. It does not widen what a key may do — the
+account still enforces that — it prevents a key being used under a rule never
+installed for it.
+
+**Wired.** `/api/agents/[id]/deploy` generates the key server-side and returns
+only the `G…`; the browser funds that account, installs the boundary naming it,
+and never holds it. The owner key is untouched and still never reaches a server,
+so `NO OWNER CUSTODY` stays true as written. `/api/agents/[id]/deployed` gained a
+fourth verification — the installed rule must bound *the key Limen holds* —
+because a client naming any other key would install a valid boundary around a key
+Limen cannot sign with, and the deployment would verify, record, and read as
+`ACTIVE` while being permanently unable to act. That is the most expensive thing
+this route can let through, because it looks like success.
+
+**Schema.** Migration `0003` adds `agent_keys.agent_public_key`. It is the one
+column in that table that is not ciphertext, and the closed set in
+`schema.test.ts` was changed by hand to admit it. The alternative was deriving
+the address by opening the sealed seed, which would decrypt key material to
+answer a question about a public value.
+
+**B4's tripwire fired, and resolving it took a scan change rather than a label.**
+The generation scan in `local-key-label.test.ts` required `LOCAL_KEY_LABEL` on
+any file matching `Keypair.random()`. `agent-key.ts` matches it and is not a
+browser key, so the fence as written could only be satisfied by stating that a
+server-held key is in the reader's browser — the failure `status-labels.ts`
+calls the fence producing the lie. The scan is now location-aware:
+`packages/custody/src` owes `AGENT_KEY_LABEL`, everywhere else owes
+`LOCAL_KEY_LABEL`, and neither satisfies the other. The M1 assertion that
+*nothing* carries the agent label was inverted into a positive one naming
+`agent-key.ts`, which is exactly the hand edit its own comment asked for.
+
+**A hole was found by mutation, not by reasoning, and is now closed.** With the
+location-aware scan in place, `agent-key.ts` was deliberately mutated to
+`import { LOCAL_KEY_LABEL as AGENT_KEY_LABEL }`. **The whole file passed.** The
+detector matches the identifier, so an alias satisfies it while every use renders
+the wrong label — the precise failure the partition exists to prevent, reached
+through the one construct a regex over source cannot see. Aliasing onto any of
+the three label names is now refused outright, and the mutation was re-run
+afterwards to confirm the fence fires. It does.
+
+**The M2 bundle grep landed, and the plan's stated precondition is why it could.**
+`apps/web` now imports `@limen/custody`, so the positive half has something to
+find. It greps `AGENT_KEY_ALGORITHM`'s value rather than an invented sentinel:
+that string is compared against every row `withAgentKey` opens, so a bundler
+cannot drop it while the check exists, where a grep-only sentinel could be
+tree-shaken and the fence would then pass by not looking.
+
+Writing it surfaced a real obstacle. `deployments/testnet.json` recorded a run
+note that spelled `LIMEN_MASTER_KEY`, and that file ships to the browser inside
+`evidence.json` — so the variable's name was in the client bundle, and the fence
+the plan specifies would have failed on a documentation string. The note now
+describes the variable instead of spelling it, and says why. No key or value was
+involved; the fence is a plain grep with no exception list, which is the only
+kind worth having.
+
+**Counts.** 949 → 969. `@limen/custody` 20 → 36, `apps/web` 675 → 679. Run with
+`TEST_DATABASE_URL` against a local Postgres 16 and `REDIS_URL` against the
+managed instance, so `append-only.test.ts` ran rather than skipped: `@limen/db`
+34 passed, 0 skipped. `evidence:check` reports up to date.
+
+**Still open in M2, and not claimed:** single-use decision tokens and the signer
+service that rebuilds a transaction from a token's arguments; the
+`SERVER_SIGNERS` registry and its B3 CI fence; the shared redactor applied to
+every server egress; and the server-side twin of the `S…` bundle grep proving no
+plaintext seed reaches a log sink, against a canary. Keygen and the signer are
+done; the surface that decides *what* the signer may be asked to sign is not, and
+until it is, the runtime calls `withAgentKey` directly.
+
 ### M3 — Agent lifecycle, and the revocation guarantee
 
 Create → configure → deploy → active → pause → revoke. Both security modes

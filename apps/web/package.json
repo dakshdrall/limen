@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build",
+    "prebuild": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build && npm --prefix ../../packages/custody run build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "pretest": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build",
+    "pretest": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build && npm --prefix ../../packages/custody run build",
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:ci": "playwright test --config playwright.ci.config.ts"
@@ -17,6 +17,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@limen/chain": "*",
     "@limen/core": "*",
+    "@limen/custody": "*",
     "@limen/db": "*",
     "@limen/kv": "*",
     "@limen/shared": "*",

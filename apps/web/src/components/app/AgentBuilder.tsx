@@ -349,6 +349,20 @@ export function AgentBuilder() {
    * reaches `add_context_rule` is the rule the review step wrote down, and
    * makes that true by construction rather than by the two happening to agree.
    *
+   * ## The agent key is the server's, and this screen only knows its address
+   *
+   * `keys.agent` is **not** the agent here, and that is the difference between
+   * this flow and `/app/try`. The local keys still do two jobs — the owner
+   * signs the boundary into place and pays for the four writes below — but the
+   * key the boundary is installed *around* is generated on a Limen server and
+   * arrives as `started.agentPublicKey`, a `G…` and nothing more.
+   *
+   * So the friendbot call funds that address rather than `k.agent`, because the
+   * account that will pay the agent's fees is the one that will submit its
+   * transactions. Funding the local agent key here would fund an account
+   * nothing in this flow ever uses again, and the agent would be unable to pay
+   * for its first turn.
+   *
    * ## What is not here
    *
    * `assertDistinctSigners` and `assertTestnet` are not called. They fire
@@ -420,7 +434,8 @@ export function AgentBuilder() {
       await failed('The owner\u2019s account could not be funded, so nothing was created.');
       return;
     }
-    if (!(await friendbot('fund:AGENT', 'agent', k.agent.publicKey))) {
+    // The server-held agent, not `k.agent`. See this function's header.
+    if (!(await friendbot('fund:AGENT', 'agent', started.agentPublicKey))) {
       await failed('The agent\u2019s account could not be funded, so nothing was created.');
       return;
     }
@@ -429,7 +444,12 @@ export function AgentBuilder() {
     const deployed = await log.run(
       'deploy',
       'Creating the smart account \u2014 createCustomContract, with the owner key as its only signer',
-      () => deployAccount({ keys: k, onDeployed: (created) => (contractId = created) }),
+      () =>
+        deployAccount({
+          keys: k,
+          agentPublicKey: started.agentPublicKey,
+          onDeployed: (created) => (contractId = created),
+        }),
     );
     if (deployed?.status !== 'onLedger' || !deployed.ok || contractId === null) {
       await failed('The smart account was not created.');
@@ -457,6 +477,7 @@ export function AgentBuilder() {
           keys: k,
           accountId: account,
           plan: started.plan,
+          agentPublicKey: started.agentPublicKey,
           onInstalled: (id) => (ruleId = id),
         }),
     );
@@ -472,7 +493,7 @@ export function AgentBuilder() {
         installTxHash: installed.hash,
         contextRuleId: ruleId,
         ownerPublicKey: k.owner.publicKey,
-        agentPublicKey: k.agent.publicKey,
+        agentPublicKey: started.agentPublicKey,
       });
       setVerified(recorded.verified);
       setStage('deployed');

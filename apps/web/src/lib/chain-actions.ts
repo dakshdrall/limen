@@ -139,6 +139,34 @@ function ownerAuth(keys: Keys): {
 }
 
 /**
+ * The agent the boundary is installed around, as raw bytes.
+ *
+ * Two callers, and they differ in where the agent key lives. `/app/try` runs
+ * entirely in the browser and its agent is `keys.agent`, a local key. The real
+ * deploy flow's agent key is generated on a Limen server — the browser is told
+ * only its `G…` — so there is no `rawPublicKey` to read and the address has to
+ * be decoded.
+ *
+ * Both paths end at the same 32 bytes, which is the point of doing it here
+ * rather than at each call site: the bytes that go into `add_context_rule` are
+ * what the account will check every signature against, and two call sites
+ * deriving them two ways is one call site away from installing a boundary
+ * around the wrong key.
+ */
+function agentKeyBytes(
+  chain: ChainBrowser,
+  keys: Keys,
+  agentPublicKey: string | undefined,
+): Uint8Array {
+  if (agentPublicKey === undefined) return keys.agent.rawPublicKey;
+  // Through the lazily-loaded chain module rather than a static `StrKey`
+  // import. A top-level import of the SDK here would put it in the initial
+  // bundle of every screen that imports this file, which is the thing
+  // `chain-write.ts` exists to prevent.
+  return chain.rawEd25519FromAddress(agentPublicKey);
+}
+
+/**
  * The artifacts of the permitted call, which the over-cap attempt and the
  * post-revoke repeat both borrow.
  *
@@ -179,9 +207,20 @@ export interface PermittedCall {
  */
 export async function deployAccount({
   keys,
+  agentPublicKey,
   onDeployed,
 }: {
   keys: Keys;
+  /**
+   * The agent's `G…` when Limen holds its key, which is the deploy flow.
+   *
+   * Absent on `/app/try`, where the agent is a local key. Only
+   * `assertDistinctSigners` reads it here — the account is created with the
+   * owner as its single signer and the agent arrives with the boundary — but
+   * that assertion is exactly the one that must see the *real* agent, because
+   * an account whose owner and agent are the same key is not bounded at all.
+   */
+  agentPublicKey?: string;
   /**
    * The contract address, read out of the transaction's return value and never
    * derived from the deployer and salt. Deriving it would be this repository
@@ -191,7 +230,7 @@ export async function deployAccount({
 }): Promise<SubmitResultLike> {
   const chain = await loadChain();
 
-  chain.assertDistinctSigners(keys.owner.rawPublicKey, keys.agent.rawPublicKey);
+  chain.assertDistinctSigners(keys.owner.rawPublicKey, agentKeyBytes(chain, keys, agentPublicKey));
 
   const result = await chain.submitAuthorized({
     rpcUrl: RPC_URL,
@@ -324,11 +363,21 @@ export async function installBoundary({
   keys,
   accountId,
   plan,
+  agentPublicKey,
   onInstalled,
 }: {
   keys: Keys;
   accountId: string;
   plan: InstallPlan;
+  /**
+   * The agent's `G…` when Limen holds its key. Absent on `/app/try`.
+   *
+   * This is the value that ends up as the rule's signer, so it is the one field
+   * here a client must not be free to choose: `/api/agents/[id]/deployed`
+   * re-reads the installed rule and refuses to record a deployment whose agent
+   * is not the key Limen holds.
+   */
+  agentPublicKey?: string;
   /** The rule id, read out of what `add_context_rule` returned, not assumed. */
   onInstalled: (ruleId: number) => void;
 }): Promise<SubmitResultLike> {
@@ -354,7 +403,7 @@ export async function installBoundary({
     smartAccount: accountId,
     verifier: ED25519_VERIFIER,
     spendingLimitPolicy: SPENDING_LIMIT_POLICY,
-    agentPublicKey: keys.agent.rawPublicKey,
+    agentPublicKey: agentKeyBytes(chain, keys, agentPublicKey),
     // The account's owner *signer*, which is the passkey when there is one.
     // Only `assertDistinctSigners` reads it, and the key that must not be the
     // agent's is the one the boundary is installed by.

@@ -160,6 +160,14 @@ describe('no plaintext secret column exists, under any name', () => {
       .sort();
     expect(agentKeys).toEqual([
       'agent_id',
+      // The public half, added by `0003`. It is the one column here that is not
+      // ciphertext, and admitting it was a deliberate hand edit to this list
+      // rather than something a migration did quietly — which is exactly what
+      // closing the set is for. A `G…` address is not key material: the rule
+      // this assertion enforces is that no column can hold the *private* half,
+      // and that is unchanged. See `schema.ts` on why it is not derived from
+      // the sealed seed instead.
+      'agent_public_key',
       'algorithm',
       'ciphertext',
       'created_at',

@@ -202,6 +202,21 @@ export interface DeploymentStart {
    * that reaches `add_context_rule` is the rule that was on the review screen.
    */
   plan: InstallPlan;
+  /**
+   * The agent's `G…`, generated on a Limen server and held there.
+   *
+   * The browser is told the address and never the key. It funds this account so
+   * the agent can pay its own fees, and installs the boundary naming it as the
+   * rule's signer — both things it can do with a public address alone.
+   *
+   * Not a value this client may substitute: `/api/agents/[id]/deployed` re-reads
+   * the installed rule and refuses to record a deployment whose agent is not the
+   * key Limen holds. See that route's header for what substituting it would
+   * cost.
+   */
+  agentPublicKey: string;
+  /** True on a first deploy, false when a retry reused an existing key. */
+  agentKeyGenerated: boolean;
 }
 
 export async function beginDeployment(agentId: string): Promise<DeploymentStart> {

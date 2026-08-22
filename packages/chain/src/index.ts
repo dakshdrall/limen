@@ -29,7 +29,7 @@ export {
   type SupportedPassphrase,
 } from './network.js';
 
-export { concatBytes, fromHex, scvBytes, sha256, toHex } from './bytes.js';
+export { concatBytes, fromHex, rawEd25519FromAddress, scvBytes, sha256, toHex } from './bytes.js';
 
 export {
   deployAccountFunction,

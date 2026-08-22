@@ -81,6 +81,37 @@ export interface AgentStore {
   markStatus(input: { agentId: string; userId: string; status: AgentStatus }): Promise<AgentRecord>;
   /** The deployment happened and was verified against the ledger. */
   recordDeployment(input: RecordDeploymentInput): Promise<AgentRecord>;
+  /**
+   * The agent's server-held signing key, generated once and never regenerated.
+   *
+   * Returns the `G…` address only. The private half goes into `agent_keys`
+   * sealed and does not come back out here — the runtime opens it, and this
+   * application never needs it.
+   *
+   * **Idempotent by contract, not by luck.** A deploy that fails after the key
+   * is written comes back through the same route, and generating a second key
+   * would be the worst kind of quiet failure: the boundary already installed
+   * names the *first* key, so an agent signing with the second would be refused
+   * by its own account for reasons nothing on screen could explain. The unique
+   * index on `agent_keys.agent_id` backs the contract, and the implementation
+   * checks before writing rather than relying on catching a constraint error.
+   */
+  provisionAgentKey(input: { agentId: string; userId: string }): Promise<{
+    agentPublicKey: string;
+    /** False when a key was already there, which a retried deploy is. */
+    generated: boolean;
+  }>;
+  /**
+   * The `G…` this agent's key was generated as, or nothing.
+   *
+   * Read back at verification time so `/deployed` can check that the boundary
+   * a browser installed names the key Limen actually holds. Without it the
+   * agent address in that report is a claim the client makes about itself, and
+   * a client naming a key it holds the secret for would install a boundary
+   * around a key Limen cannot sign with — an agent that is bounded, recorded,
+   * and permanently unable to act.
+   */
+  agentKeyPublic(agentId: string, userId: string): Promise<string | undefined>;
 }
 
 /** What was stored at `CONFIGURED`, read back so deploy installs exactly it. */

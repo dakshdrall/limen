@@ -12,7 +12,7 @@
     "build:chain": "npm run build -w @limen/core && npm run build -w @limen/chain",
     "build:shared": "npm run build -w @limen/shared",
     "build:db": "npm run build -w @limen/db",
-    "build:custody": "npm run build -w @limen/custody",
+    "build:custody": "npm run build -w @limen/shared && npm run build -w @limen/core && npm run build -w @limen/chain && npm run build -w @limen/custody",
     "build:kv": "npm run build -w @limen/kv",
     "build:runtime": "npm run build -w @limen/db && npm run build -w @limen/kv && npm run build -w @limen/runtime",
     "start:runtime": "npm run build:runtime && npm run start -w @limen/runtime",
@@ -32,6 +32,8 @@
     "sharp": ">=0.35.0",
     "nanoid": ">=3.3.18",
     "esbuild": ">=0.25.0",
-    "@esbuild-kit/core-utils": { "esbuild": ">=0.25.0" }
+    "@esbuild-kit/core-utils": {
+      "esbuild": ">=0.25.0"
+    }
   }
 }

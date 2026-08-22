@@ -32,14 +32,20 @@
  * anything an attacker chose. Length is the property that has a right answer.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { TESTNET_PASSPHRASE } from '@limen/chain/network';
+import { GCM_KEY_BYTES, gcmOpen, gcmSeal } from './aes-gcm.js';
 import { WrongKeyProviderError, type KeyProvider, type WrappedKey } from './key-provider.js';
 
-/** AES-256-GCM: 32-byte key, 12-byte nonce, 16-byte tag. */
-const KEY_BYTES = 32;
-const NONCE_BYTES = 12;
-const TAG_BYTES = 16;
+/**
+ * The 32 bytes of the master key.
+ *
+ * The nonce and tag sizes moved to `aes-gcm.ts` along with the two operations
+ * that use them. The wire format did not change: `nonce ‖ ciphertext ‖ tag`,
+ * with the provider id as associated data, exactly as rows already in
+ * `agent_keys` were written.
+ */
+const KEY_BYTES = GCM_KEY_BYTES;
 
 export interface EnvMasterKeyOptions {
   /** The master key, base64. 32 bytes decoded. */
@@ -98,15 +104,11 @@ export class EnvMasterKeyProvider implements KeyProvider {
   // async — would have taken an uncaught exception instead of a handled
   // rejection. The test suite found it; the type system could not.
   async wrapDataKey(plaintext: Uint8Array): Promise<WrappedKey> {
-    const nonce = randomBytes(NONCE_BYTES);
-    const cipher = createCipheriv('aes-256-gcm', this.#masterKey, nonce);
     // The provider id is authenticated but not encrypted: it is not a secret,
     // and binding it here means a wrapped key whose `keyId` was edited in the
     // database fails to unwrap rather than being unwrapped by the wrong key.
-    cipher.setAAD(Buffer.from(this.id, 'utf8'));
-    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-    const bytes = Buffer.concat([nonce, ciphertext, cipher.getAuthTag()]);
-    return { bytes: new Uint8Array(bytes), keyId: this.id };
+    const bytes = gcmSeal({ key: this.#masterKey, aad: this.id, plaintext });
+    return { bytes, keyId: this.id };
   }
 
   async unwrapDataKey(wrapped: WrappedKey): Promise<Uint8Array> {
@@ -120,21 +122,13 @@ export class EnvMasterKeyProvider implements KeyProvider {
       throw new WrongKeyProviderError(this.id, wrapped.keyId);
     }
 
-    const bytes = Buffer.from(wrapped.bytes);
-    if (bytes.length < NONCE_BYTES + TAG_BYTES) {
-      throw new Error('EnvMasterKeyProvider: wrapped key is too short to contain a nonce and a tag.');
-    }
-
-    const nonce = bytes.subarray(0, NONCE_BYTES);
-    const tag = bytes.subarray(bytes.length - TAG_BYTES);
-    const ciphertext = bytes.subarray(NONCE_BYTES, bytes.length - TAG_BYTES);
-
-    const decipher = createDecipheriv('aes-256-gcm', this.#masterKey, nonce);
-    decipher.setAAD(Buffer.from(this.id, 'utf8'));
-    decipher.setAuthTag(tag);
     // Throws on a bad tag. Deliberately not caught and re-thrown with detail:
     // an attacker probing this should learn that it failed and nothing else.
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return new Uint8Array(plaintext);
+    return gcmOpen({
+      key: this.#masterKey,
+      aad: this.id,
+      sealed: wrapped.bytes,
+      who: 'EnvMasterKeyProvider: wrapped key',
+    });
   }
 }

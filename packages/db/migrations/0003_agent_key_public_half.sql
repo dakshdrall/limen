@@ -1,0 +1,18 @@
+-- The agent key's public half, recorded beside its sealed private half.
+--
+-- `agent_accounts.agent_public_key` holds the same `G…` address, and that row
+-- is only written once a deployment has been verified against the ledger. The
+-- key is generated before the deploy — the context rule being installed names
+-- it as the agent signer — so between generation and verification this is the
+-- only place the address exists.
+--
+-- NOT NULL with no default, which is safe here for a reason worth stating
+-- rather than assuming: nothing has ever written to `agent_keys`. Server-side
+-- keygen lands in the same change as this column, so the table is empty in
+-- every environment this migration will run against. A later column on a
+-- populated table would need a default and a backfill.
+--
+-- This is the one column in `agent_keys` that is not ciphertext. The closed set
+-- in `test/schema.test.ts` was changed by hand to admit it; the rule that set
+-- enforces — no column can hold the private half — is unchanged.
+ALTER TABLE "agent_keys" ADD COLUMN "agent_public_key" text NOT NULL;

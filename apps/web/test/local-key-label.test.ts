@@ -190,6 +190,32 @@ const CARRIES_THE_PASSKEY_LABEL = /TESTNET ONLY · PASSKEY|PASSKEY_LABEL/;
 const CARRIES_THE_AGENT_KEY_LABEL = /TESTNET ONLY · AGENT KEY \(LIMEN-HELD\)|AGENT_KEY_LABEL/;
 
 /**
+ * A label constant reached under a name that is not its own.
+ *
+ * Every detector in this file is a regex over source, so none of them can
+ * resolve an import. That is usually fine — a string literal and a constant name
+ * are equally good evidence that a file names its label — and it has exactly one
+ * hole, which was found by mutating `agent-key.ts` rather than by reasoning:
+ *
+ *     import { LOCAL_KEY_LABEL as AGENT_KEY_LABEL } from '@limen/shared/status-labels';
+ *
+ * That line satisfies `CARRIES_THE_AGENT_KEY_LABEL`, because the identifier
+ * `AGENT_KEY_LABEL` is right there, while every use of it renders
+ * `TESTNET ONLY · LOCAL KEY`. It is the precise failure the partition exists to
+ * prevent — a server-held key announcing itself as a browser key — reintroduced
+ * through the one construct the partition could not see. The whole file passed
+ * with that mutation in place.
+ *
+ * So aliasing *onto* any of the three label names is refused outright. Not
+ * "aliasing onto the wrong one", which would need the import resolved to judge:
+ * a label constant has one correct name and there is no legitimate reason to
+ * reach it under another. Refusing the construct rather than the specific misuse
+ * is what makes this checkable by a scan at all.
+ */
+const RENAMES_ONTO_A_LABEL =
+  /\b\w+\s+as\s+(?:LOCAL_KEY_LABEL|PASSKEY_LABEL|AGENT_KEY_LABEL)\b/;
+
+/**
  * An import of any module on the passkey path, by alias or relative path.
  *
  * Four names, not two. `identity.ts` and `use-identity.ts` landed with the
@@ -408,6 +434,27 @@ describe('the detectors can fire', () => {
     expect(IMPORTS_THE_PASSKEY_MODULE.test("import { x } from '@/lib/identity-provider';")).toBe(false);
   });
 
+  it('recognises a label constant being reached under a name that is not its own', () => {
+    // The mutation that got through. Each of these renders one label while
+    // satisfying another label's detector by identifier alone.
+    for (const sample of [
+      "import { LOCAL_KEY_LABEL as AGENT_KEY_LABEL } from '@limen/shared/status-labels';",
+      "import { AGENT_KEY_LABEL as LOCAL_KEY_LABEL } from '@limen/shared/status-labels';",
+      'import { PASSKEY_LABEL as LOCAL_KEY_LABEL } from "@limen/shared/status-labels";',
+    ]) {
+      expect(RENAMES_ONTO_A_LABEL.test(sample), sample).toBe(true);
+    }
+    // And does not fire on the honest import, or on aliasing something that is
+    // not a label.
+    for (const sample of [
+      "import { AGENT_KEY_LABEL } from '@limen/shared/status-labels';",
+      "import { LOCAL_KEY_LABEL, PASSKEY_LABEL } from '@limen/shared/status-labels';",
+      "import { Keypair as StellarKeypair } from '@stellar/stellar-sdk';",
+    ]) {
+      expect(RENAMES_ONTO_A_LABEL.test(sample), sample).toBe(false);
+    }
+  });
+
   it('recognises the label being rendered rather than only mentioned', () => {
     expect(RENDERS_THE_LABEL.test('<StatusLabel name={LOCAL_KEY_LABEL} weight="loud" />')).toBe(true);
     // A constant assigned and never rendered is the failure this distinguishes.
@@ -481,32 +528,64 @@ describe('the label exists once, in the closed set', () => {
     expect(description).toContain('rather than by Limen');
   });
 
-  it('has nothing carrying the agent key label yet, and says so deliberately', () => {
-    // Asserted rather than left to be noticed. The label is in the set at M1
-    // and the key it names does not exist until M2, so every scan for it
-    // currently matches nothing — which is exactly the vacuous state this file
-    // refuses to leave unmarked anywhere else.
+  it('is carried by the module that generates the server-held key, and only there', () => {
+    // This assertion was inverted by hand at M2, which is what its M1 form
+    // asked for in as many words: *"The day `packages/custody` lands, this
+    // assertion is what has to be changed by hand — which is the point. It
+    // cannot be satisfied by nobody looking."*
     //
-    // The difference between this and a broken detector is that this one is
-    // *known* to be empty and is proved able to fire, in `keeps the three key
-    // labels from satisfying one another` above, against synthetic samples. The
-    // day `packages/custody` lands, this assertion is what has to be changed by
-    // hand — which is the point. It cannot be satisfied by nobody looking.
-    // The closed set itself is excluded, and it is the only exclusion. It
-    // *defines* the label, so it necessarily contains both the key and the
-    // constant — that is what "in the closed set and rendered nowhere" means,
-    // and counting the definition as a carrier would make the state
-    // unrepresentable. Every other file in every workspace is in scope.
+    // At M1 it read `expect(carriers).toEqual([])` — the label was in the
+    // closed set and nothing carried it, and that emptiness was asserted rather
+    // than tolerated so the vacuous state was visible. The key now exists, so
+    // the same question has a different correct answer and the test states it
+    // positively: `agent-key.ts` carries the label, because that is the file
+    // that calls `Keypair.random()` on a server.
+    //
+    // Kept as an exact list rather than a `toContain`. A second carrier is a
+    // second place a server-held key is made or handled, and it should have to
+    // be added here deliberately — the same reason the closed set is closed.
+    // The definition is excluded because it *defines* the label and necessarily
+    // contains it, and the assertion below proves the exclusion is not covering
+    // an empty scan.
     const definition = 'packages/shared/src/status-labels.ts';
     const carriers = sources()
       .filter(({ text }) => CARRIES_THE_AGENT_KEY_LABEL.test(text))
       .map(({ path }) => path)
       .filter((path) => path !== definition);
-    expect(carriers).toEqual([]);
+    expect(carriers).toEqual(['packages/custody/src/agent-key.ts']);
 
     // And the exclusion is not silently covering an empty scan: the definition
     // really is there to be excluded.
     expect(sources().map(({ path }) => path)).toContain(definition);
+  });
+
+  it('is not satisfied by aliasing another label onto its name, anywhere', () => {
+    // The scan-wide form of the hole above. A file that renames any binding onto
+    // a label's name is credited for a label it does not render, and that is
+    // true in both directions and for all three labels — so the construct is
+    // refused everywhere rather than only in `packages/custody`.
+    const aliased = sources()
+      .filter(({ text }) => RENAMES_ONTO_A_LABEL.test(text))
+      .map(({ path }) => path);
+
+    // If this fails: import the label under its own name. There is no case
+    // where reaching one of these three constants under a different name is
+    // correct, and the one that motivated this test made a server-held key
+    // announce itself as a browser key while every other assertion passed.
+    expect(aliased).toEqual([]);
+  });
+
+  it('is carried in code rather than in the prose explaining it', () => {
+    // The excusing half, checked against the real file rather than a sample.
+    // `agent-key.ts` has a long header that names the label repeatedly, and a
+    // scan that credited a file for its comments would be satisfied by that
+    // header alone — which would let the actual `Keypair.random()` call sit in
+    // an unlabelled file.
+    const raw = readFileSync(
+      join(REPO_ROOT, 'packages/custody/src/agent-key.ts'),
+      'utf8',
+    );
+    expect(CARRIES_THE_AGENT_KEY_LABEL.test(code(raw))).toBe(true);
   });
 
   it('says what a passkey does not do, not only what it does', () => {
@@ -565,16 +644,81 @@ describe('the passkey announces itself too', () => {
   });
 });
 
-describe('nothing generates or stores a key without saying what it is', () => {
-  it('labels every file under src/ that generates a keypair', () => {
-    const unlabelled = sources()
-      .filter(({ text }) => GENERATES_A_KEY.test(text) && !CARRIES_THE_LABEL.test(text))
-      .map(({ path }) => path);
+/**
+ * Where a key is generated decides which label it must carry.
+ *
+ * Through M1 this scan asked one question — does a file that makes a keypair
+ * carry `LOCAL_KEY_LABEL` — and that was right while every key in the
+ * repository was made in a browser. M2 makes one that is not: `packages/custody`
+ * generates an ed25519 key on a Limen server and keeps it there.
+ *
+ * The old rule could not be satisfied by that file without stating something
+ * false. `CARRIES_THE_LABEL` matches only the local key's label, and the
+ * partition asserted above is explicit that the agent key's label must not
+ * satisfy it — so `agent-key.ts` had exactly two options: carry
+ * `TESTNET ONLY · LOCAL KEY` for a key that is not in anybody's browser, or
+ * fail. The first is the failure this whole file exists to prevent, described
+ * in `status-labels.ts` as the fence producing the lie.
+ *
+ * So the scan asks the location first and the label second. `packages/custody`
+ * is where a server-held key is generated and it owes `AGENT_KEY_LABEL`;
+ * everywhere else is a browser tree and owes `LOCAL_KEY_LABEL`. Neither
+ * satisfies the other, which is asserted above against synthetic samples and is
+ * what makes this a partition rather than a widening.
+ *
+ * A third location will need a third entry, and it will fail loudly here rather
+ * than defaulting: an unlisted tree falls through to the browser rule, which a
+ * server-side key cannot satisfy.
+ */
+const SERVER_KEY_TREE = 'packages/custody/src/';
 
-    // If this fails: the key generation landed without its label. Import
-    // `LOCAL_KEY_LABEL` from `components/StatusLabel` and render it where the
-    // key is created. Deleting this test is not the fix.
+/** The obligation a file incurs by generating a key, given where it lives. */
+function labelOwedBy(path: string): {
+  carries: RegExp;
+  owed: string;
+  because: string;
+} {
+  return path.startsWith(SERVER_KEY_TREE)
+    ? {
+        carries: CARRIES_THE_AGENT_KEY_LABEL,
+        owed: 'AGENT_KEY_LABEL',
+        because: 'it generates a key on a Limen server',
+      }
+    : {
+        carries: CARRIES_THE_LABEL,
+        owed: 'LOCAL_KEY_LABEL',
+        because: 'it generates a key in a browser',
+      };
+}
+
+describe('nothing generates or stores a key without saying what it is', () => {
+  it('labels every file under src/ that generates a keypair, with the label its location owes', () => {
+    const unlabelled = sources()
+      .filter(({ text }) => GENERATES_A_KEY.test(text))
+      .filter(({ path, text }) => !labelOwedBy(path).carries.test(text))
+      .map(({ path }) => {
+        const { owed, because } = labelOwedBy(path);
+        return `${path} (owes ${owed}, because ${because})`;
+      });
+
+    // If this fails: the key generation landed without its label, or with the
+    // wrong one. Import the label named in the failure from
+    // `@limen/shared/status-labels` and name it where the key is created.
+    // Carrying the other one is not a near miss — it is a false statement about
+    // where the key lives. Deleting this test is not the fix.
     expect(unlabelled).toEqual([]);
+  });
+
+  it('is not vacuous in either location: both kinds of keygen exist and are scanned', () => {
+    // The `browserRun`-style guard, and it has to name both halves now. A scan
+    // that had quietly stopped matching the server tree would pass forever and
+    // would do it on the day somebody moved `agent-key.ts`.
+    const generators = sources().filter(({ text }) => GENERATES_A_KEY.test(text));
+    const inBrowser = generators.filter(({ path }) => !path.startsWith(SERVER_KEY_TREE));
+    const onServer = generators.filter(({ path }) => path.startsWith(SERVER_KEY_TREE));
+
+    expect(inBrowser.length).toBeGreaterThan(0);
+    expect(onServer.length).toBeGreaterThan(0);
   });
 
   it('labels every file under src/ that puts key material in browser storage', () => {

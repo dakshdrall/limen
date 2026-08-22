@@ -220,6 +220,51 @@ jobs:
           fi
           echo "demo signer absent from the client bundle"
 
+      # The agent key Limen holds, and the variable that unwraps it. PLAN-V8 M2
+      # deferred this step from M1 for a stated reason: the client-bundle fences
+      # here are two-sided by rule, and at M1 nothing in `apps/web` imported
+      # `@limen/custody`, so the positive half would have found nothing and the
+      # negative half would have passed by not looking.
+      #
+      # That precondition is now met — `lib/stores.ts` reaches the provider to
+      # seal an agent key at deploy — so the step lands in the milestone the
+      # plan said it would.
+      #
+      # The positive half greps for `AGENT_KEY_ALGORITHM`'s value rather than an
+      # invented sentinel. It is a string with a job: `withAgentKey` compares it
+      # against every row it opens, so it cannot be tree-shaken out of the
+      # server bundle while that check exists. A sentinel that exists only to be
+      # grepped for can be dropped by a bundler and the check would then pass by
+      # not looking, which is the failure this two-sidedness exists to catch.
+      - name: Prove the agent key and its master key are absent from the client bundle
+        env:
+          CUSTODY_SENTINEL: 'ed25519-seed:aes-256-gcm/aes-256-gcm-envelope-v1'
+        run: |
+          set -euo pipefail
+
+          if ! grep -rIqF -- "$CUSTODY_SENTINEL" apps/web/.next/server; then
+            echo "::error::custody sentinel not found in the server bundle — this check is vacuous and proves nothing"
+            exit 1
+          fi
+          echo "custody present in the server bundle; the negative checks below are meaningful"
+
+          if grep -rIlF -- "$CUSTODY_SENTINEL" apps/web/.next/static; then
+            echo "::error::agent key custody code reached the client bundle"
+            exit 1
+          fi
+
+          # The variable's *name*, not its value — a client bundle has no
+          # legitimate reason to contain either. Kept a plain grep on purpose,
+          # which is why `deployments/testnet.json` describes the variable
+          # rather than spelling it: that file ships to the browser inside
+          # evidence.json, and a fence with an exception list is a fence
+          # somebody adds to.
+          if grep -rIl -e 'LIMEN_MASTER_KEY' apps/web/.next/static; then
+            echo "::error::the master key variable's name reached the client bundle"
+            exit 1
+          fi
+          echo "agent key custody and the master key variable absent from the client bundle"
+
       # Level 3 of the mainnet gate. Levels 1 and 2 — the one-member passphrase
       # union in `lib/network.ts` and the hard throw in `@limen/chain`'s
       # `signAs` — are assertions the type checker and a unit test can make

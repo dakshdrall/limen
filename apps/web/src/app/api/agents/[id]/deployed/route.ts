@@ -23,6 +23,21 @@
  *
  * `valid_until` is checked too, since it is on the rule and free to compare.
  *
+ * ## …and a fourth, added at M2: the rule bounds the key Limen actually holds
+ *
+ * `agentPublicKey` used to be a fact about the browser — it generated the agent
+ * key, so its report was the only source there was. Since §3 moved that key
+ * server-side, the reported address is a claim the client makes about a key
+ * *Limen* generated, and it is checkable against the `agent_keys` row.
+ *
+ * Checking it is not pedantry. A client naming some other key — its own, or one
+ * it invented — would install a perfectly valid boundary around a key Limen
+ * cannot sign with. The deployment would verify on all three of the checks
+ * above, the row would be written, and the agent would be recorded as `ACTIVE`
+ * and be permanently unable to act: every turn refused by its own account, for
+ * a reason nothing on any screen could explain. That is the most expensive
+ * failure this route can let through, because it looks like success.
+ *
  * ## What this does not do, and must not be read as doing
  *
  * It does not make `agents.status = 'ACTIVE'` a claim about the chain *now*.
@@ -110,6 +125,26 @@ export async function POST(
     }
     if (!StrKey.isValidEd25519PublicKey(agentPublicKey)) {
       return bad('agentPublicKey is not a Stellar account address.');
+    }
+    const heldAgentKey = await store.agentKeyPublic(id, gate.user.id);
+    if (heldAgentKey === undefined) {
+      return Response.json(
+        {
+          error: 'no_agent_key',
+          message:
+            'This agent has no server-held key, so a deployment naming one cannot be recorded. Begin the deploy again.',
+        },
+        { status: 409 },
+      );
+    }
+    if (agentPublicKey !== heldAgentKey) {
+      // 422 like the other verification failures: the request is well-formed
+      // and disagrees with what Limen holds. Both keys are public, so naming
+      // them costs nothing and is what makes this diagnosable.
+      return unverified(
+        `The boundary was installed against ${agentPublicKey}, and the key Limen holds for this agent is ${heldAgentKey}. ` +
+          'An agent bounded around a key Limen cannot sign with would be recorded as active and never able to act. Nothing was recorded.',
+      );
     }
     if (ownerPublicKey === agentPublicKey) {
       // The same check `assertDistinctSigners` makes on the way in, made again

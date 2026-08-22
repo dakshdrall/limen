@@ -332,6 +332,26 @@ export const agentKeys = pgTable(
     agentId: uuid('agent_id')
       .notNull()
       .references(() => agents.id, { onDelete: 'cascade' }),
+    /**
+     * `G…`, the public half. Not a secret, and here for a specific reason.
+     *
+     * `agent_accounts.agent_public_key` holds the same value, and that row does
+     * not exist until a deployment has been verified against the ledger. The
+     * key is generated *before* the deploy — the boundary being installed names
+     * it — so between those two moments this is the only place the address is
+     * recorded.
+     *
+     * The alternative was deriving it by opening the sealed seed, which would
+     * mean decrypting key material to answer a question about a public value.
+     * That is the wrong trade in both directions: it widens how often the seed
+     * is in memory, and it makes a cheap read expensive.
+     *
+     * It is the one column here that is not ciphertext, which is why the closed
+     * set in `schema.test.ts` had to be changed by hand to admit it. A public
+     * key is not plaintext key material; the rule that set enforces is that no
+     * column can hold the *private* half, and that is unchanged.
+     */
+    agentPublicKey: text('agent_public_key').notNull(),
     /** The seed, encrypted under the data key. Never anything else. */
     ciphertext: bytea('ciphertext').notNull(),
     /** The data key, encrypted under the master key. */

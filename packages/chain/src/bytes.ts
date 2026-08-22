@@ -15,7 +15,7 @@
  * the runtime behaviour pinned by that same test rather than assumed.
  */
 
-import { hash, xdr } from '@stellar/stellar-sdk';
+import { StrKey, hash, xdr } from '@stellar/stellar-sdk';
 
 /**
  * `xdr.ScVal.scvBytes` for a `Uint8Array`.
@@ -66,4 +66,27 @@ export function fromHex(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
+}
+
+/**
+ * The 32 raw bytes behind a `G…` address.
+ *
+ * Here rather than at a call site because two things in this repository need
+ * the same conversion and would otherwise each reach for the SDK: the browser,
+ * which is told an agent's address and must install a boundary naming its key,
+ * and anything server-side comparing a stored address against what a context
+ * rule reports back.
+ *
+ * A decode of a public identifier, and deliberately not a `Keypair`. Going
+ * through `Keypair.fromPublicKey` would produce the same bytes and would put a
+ * keypair-shaped object on the path of a value that has no private half — which
+ * is the kind of thing that ends up being passed to something expecting to be
+ * able to sign.
+ *
+ * Throws on anything that is not a valid ed25519 address, which is what
+ * `StrKey` already does. Not caught and softened: a caller that has been handed
+ * a malformed address is a caller about to install a boundary around nothing.
+ */
+export function rawEd25519FromAddress(address: string): Uint8Array {
+  return new Uint8Array(StrKey.decodeEd25519PublicKey(address));
 }

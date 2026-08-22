@@ -39,7 +39,9 @@
 
 import 'server-only';
 import { and, eq, gt } from 'drizzle-orm';
-import { agentAccounts, agents, policies, sessions, users } from '@limen/db';
+import { generateAgentKey } from '@limen/custody';
+import { agentAccounts, agentKeys, agents, policies, sessions, users } from '@limen/db';
+import { keyProvider } from './key-provider';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
 import type { SessionRecord, SessionStore } from './session';
@@ -363,6 +365,74 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
       const row = updated[0];
       if (row === undefined) throw new Error('stores: the deployed agent came back empty.');
       return toAgent(row);
+    },
+
+    /**
+     * Generate the agent's key, or hand back the one it already has.
+     *
+     * The read-then-write is the one place in this file that branches on a row
+     * it just read, which the header says belongs in `apps/runtime`. It stays
+     * here for a reason narrower than convenience: the alternative shapes are
+     * worse, and the failure it guards against is not a race.
+     *
+     * An `onConflictDoNothing` insert would generate a keypair on every call
+     * and discard all but the first, which means the ordinary retry path
+     * generates key material and throws it away — cheap, but it makes "how many
+     * keys has this agent had" unanswerable from the code. Catching the unique
+     * violation has the same problem plus an error path that looks like a bug.
+     *
+     * Two concurrent deploys of one agent would still be serialised by the
+     * unique index rather than by this check, so the check is not load-bearing
+     * for correctness under concurrency — it is load-bearing for *not
+     * generating keys speculatively*, and the index is what makes the outcome
+     * safe either way.
+     */
+    async provisionAgentKey({ agentId, userId }) {
+      const owned = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.userId, userId)))
+        .limit(1);
+      if (owned[0] === undefined) throw new AgentNotFound(agentId);
+
+      // The public half lives on `agent_accounts`, which does not exist until
+      // the deployment is recorded — so an in-flight deploy's key is found by
+      // its `agent_keys` row, and the address is derived from the sealed key
+      // only by opening it. That would mean decrypting a seed to answer a
+      // question about a public value, so the address is kept here too.
+      const existing = await db
+        .select({ agentPublicKey: agentKeys.agentPublicKey })
+        .from(agentKeys)
+        .where(eq(agentKeys.agentId, agentId))
+        .limit(1);
+
+      const found = existing[0];
+      if (found !== undefined) {
+        return { agentPublicKey: found.agentPublicKey, generated: false };
+      }
+
+      const generated = await generateAgentKey({ provider: keyProvider(), agentId });
+
+      await db.insert(agentKeys).values({
+        agentId,
+        agentPublicKey: generated.publicKey,
+        ciphertext: generated.sealed.ciphertext,
+        wrappedDataKey: generated.sealed.wrappedDataKey,
+        kmsKeyId: generated.sealed.kmsKeyId,
+        algorithm: generated.sealed.algorithm,
+      });
+
+      return { agentPublicKey: generated.publicKey, generated: true };
+    },
+
+    async agentKeyPublic(agentId, userId) {
+      const [row] = await db
+        .select({ agentPublicKey: agentKeys.agentPublicKey })
+        .from(agentKeys)
+        .innerJoin(agents, eq(agentKeys.agentId, agents.id))
+        .where(and(eq(agentKeys.agentId, agentId), eq(agents.userId, userId)))
+        .limit(1);
+      return row?.agentPublicKey;
     },
   };
 }
