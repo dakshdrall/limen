@@ -56,6 +56,10 @@ const SECTIONS: Section[] = [
   // — there was nothing to build — and a nav whose first entry is `Docs` tells
   // a reader the product is a document.
   { href: '/app/agents/new', label: 'Build', built: true },
+  // Where `Build` returns to. It follows `Build` rather than preceding it
+  // because a first visitor has no agents, and a nav whose first app entry
+  // leads to an empty list reads as a product with nothing in it.
+  { href: '/app/agents', label: 'Agents', built: true },
   { href: '/docs', label: 'Docs', built: true },
   { href: '/app/accounts', label: 'App', built: true },
   // The guided path, PLAN-V7 §3. Distinct from `App`, which is the reference
@@ -63,6 +67,29 @@ const SECTIONS: Section[] = [
   // and this is the one that puts them in an order.
   { href: '/app/try', label: 'Try', built: true },
 ];
+
+/**
+ * Which one entry is current, when one section's path is a prefix of another's.
+ *
+ * `/app/agents` and `/app/agents/new` are both real sections, and the obvious
+ * test — `pathname.startsWith(href + '/')` — lights up *both* on the builder,
+ * because `/app/agents/new` starts with `/app/agents/`. Two entries marked
+ * `aria-current="page"` is not a cosmetic problem: it tells a screen reader
+ * there are two current pages.
+ *
+ * So a prefix match only wins when no other section is a longer match. Exact
+ * match always wins outright, which is the common case and stays cheap.
+ */
+function isActive(pathname: string, href: string): boolean {
+  if (pathname === href) return true;
+  if (!pathname.startsWith(`${href}/`)) return false;
+  return !SECTIONS.some(
+    (section) =>
+      section.href !== href &&
+      section.href.length > href.length &&
+      (pathname === section.href || pathname.startsWith(`${section.href}/`)),
+  );
+}
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -82,7 +109,7 @@ export function SiteHeader() {
 
         <nav aria-label="Sections" className="flex items-center gap-1">
           {SECTIONS.map(({ href, label, built }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+            const active = isActive(pathname, href);
             if (!built) {
               return (
                 <span

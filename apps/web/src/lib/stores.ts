@@ -38,7 +38,7 @@
  */
 
 import 'server-only';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, desc, eq, gt } from 'drizzle-orm';
 import { generateAgentKey } from '@limen/custody';
 import { agentAccounts, agentKeys, agents, policies, sessions, users } from '@limen/db';
 import { keyProvider } from './key-provider';
@@ -198,6 +198,45 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         .where(and(eq(agents.id, id), eq(agents.userId, userId)))
         .limit(1);
       return row === undefined ? undefined : toAgent(row);
+    },
+
+    /**
+     * A left join, not an inner one, and the difference is the whole list.
+     *
+     * An `agents` row with no `agent_accounts` row is a draft — described but
+     * never deployed — and an inner join would make every draft invisible while
+     * looking like a working query. The screen's job includes showing a person
+     * the agent they abandoned halfway; a list that silently omitted them would
+     * be the shape of failure `agents.ts` warns about, where an abandoned
+     * attempt is lost rather than visible.
+     *
+     * No cap column is selected, and none exists to select. See `AgentSummary`.
+     */
+    async listForUser(userId) {
+      const rows = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          description: agents.description,
+          status: agents.status,
+          createdAt: agents.createdAt,
+          smartAccount: agentAccounts.smartAccountContractId,
+          contextRuleId: agentAccounts.contextRuleId,
+        })
+        .from(agents)
+        .leftJoin(agentAccounts, eq(agentAccounts.agentId, agents.id))
+        .where(eq(agents.userId, userId))
+        .orderBy(desc(agents.createdAt));
+
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        status: row.status as AgentStatus,
+        smartAccount: row.smartAccount,
+        contextRuleId: row.contextRuleId,
+        createdAt: row.createdAt.toISOString(),
+      }));
     },
 
     /**

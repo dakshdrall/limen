@@ -2747,6 +2747,32 @@ the ceiling unset for exactly this reason and says so in the file.
 revoke half has a recorded precedent in `deployments/testnet.json` under
 `v4ChainRun` but has not been driven from the chat.
 
+**Run record — the agents list, 2026-08-23.** `/app/agents`, scoped by
+`user_id` through `listForUser`, with every cap read from the ledger on load.
+
+The design decision worth recording is the one that costs something: there is no
+cap column and the list does not add one. `schema.ts` rule 2 forbids a cached
+chain claim, and a list view is where that rule is most expensive and most
+load-bearing — N agents cost 2N RPC reads, and the alternative is a screen that
+renders an agent revoked on another device as still bounded. `LIST_READ_LIMIT`
+bounds the fan-out rather than the list; agents past it are returned as **not
+read**, which the screen is careful to distinguish from **no boundary**.
+
+Checked against the live services rather than asserted:
+
+```
+GET /app/agents                        200, renders the `unknown` identity state
+GET /api/agents  (no cookie)           401 {"error":"unauthenticated"}
+GET /api/agents  (live session)        200, one agent — this user's, not the other two
+  cap    500000000 per 17280 ledgers, valid until 4419429
+  spent  200000000 in this window
+  read at ledger 4298918
+```
+
+The `spentInWindow` is the 20 XLM payment from the run above, read back off the
+policy contract by a different code path than the one that made it. Nothing in
+that block came from a table.
+
 ### M5 — End-to-end on testnet
 
 The brief §51 demo, driven from the web chat: permitted, refused, revoked, and

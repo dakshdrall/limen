@@ -49,6 +49,35 @@ export interface AgentRecord {
 }
 
 /**
+ * One row of the list at `/app/agents`, and every field is a database fact.
+ *
+ * The two chain-shaped values here are **pointers, not claims**. A smart
+ * account address and a context rule id say *where to look*; they do not say
+ * what the rule currently permits, whether it is live, or how much of the cap
+ * is left. This module's header forbids the second kind and gives the reason,
+ * and a list view is exactly where the temptation is strongest — N ledger reads
+ * for N rows is the cost that makes a `current_cap` column look reasonable.
+ *
+ * It is not reasonable, and `schema.ts` rule 2 says why in the sentence this
+ * screen is most at risk of disproving: *every boundary looks perfectly obeyed
+ * if you are reading yesterday's copy of it*. A list of agents whose caps came
+ * from a table would render a revoked agent as bounded, which is the worst
+ * available failure for a permissions tool. So the cap is read from the chain
+ * by whoever renders it, at a ledger it has to state — see `/api/agents`.
+ */
+export interface AgentSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  status: AgentStatus;
+  /** `C…`, once the account exists. Null for a draft, which has no account. */
+  smartAccount: string | null;
+  /** The rule to read the cap from. Null until a boundary was installed. */
+  contextRuleId: number | null;
+  createdAt: string;
+}
+
+/**
  * What a described agent needs, and nothing else.
  *
  * `createDraft` is deliberately not `create(everything)`. At the moment an
@@ -70,6 +99,13 @@ export interface AgentStore {
     description: string;
   }): Promise<AgentRecord | undefined>;
   findForUser(id: string, userId: string): Promise<AgentRecord | undefined>;
+  /**
+   * This user's agents, newest first. Scoped by `user_id` in the query, for the
+   * reason this module's header gives about there being no unscoped lookup: a
+   * list is the one place where forgetting the scope returns *everyone's* rows
+   * rather than one stranger's, and it would look like a working screen.
+   */
+  listForUser(userId: string): Promise<AgentSummary[]>;
   /**
    * The reviewed configuration becomes a `policies` row and the agent becomes
    * `CONFIGURED`. Atomic, and see {@link ConfigureInput} for why that matters.

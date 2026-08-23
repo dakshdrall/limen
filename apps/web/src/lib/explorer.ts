@@ -44,3 +44,20 @@ export function explorerTxUrl(observed: Pick<ObservedTransaction, 'network' | 'h
 export function chainTxUrl(hash: string): string {
   return `${BASE}/${SEGMENT[NETWORK]}/tx/${hash}`;
 }
+
+/**
+ * A contract's page on the explorer, for a `C…` this build produced or recorded.
+ *
+ * The same argument as `chainTxUrl` and the same `SEGMENT` lookup, so adding a
+ * network breaks this at compile time rather than leaving it pointing
+ * confidently at testnet. Separate from `chainTxUrl` because the path segment
+ * differs and a single function taking a discriminator would be a conditional
+ * where two names will do.
+ *
+ * `/app/accounts/[id]` is the *internal* view of the same address and is not a
+ * replacement for this: one shows what Limen read, the other shows what a third
+ * party sees, and a reviewer checking a claim needs the second.
+ */
+export function chainContractUrl(contractId: string): string {
+  return `${BASE}/${SEGMENT[NETWORK]}/contract/${contractId}`;
+}

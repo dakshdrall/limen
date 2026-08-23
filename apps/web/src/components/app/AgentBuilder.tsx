@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState } from 'react';
 import { EmptyState, Pending } from '@/components/app/ScreenState';
 import { AgentConfigForm } from '@/components/app/AgentConfigForm';
@@ -753,6 +755,22 @@ export function AgentBuilder() {
                   The cap is in the asset&rsquo;s smallest unit, as the contract stores it. Nothing
                   about this rule is cached — reading this account again asks the network.
                 </p>
+
+                {/* Where deploying returns to. Two links rather than a
+                    redirect, and the reason is the panel above them: it holds
+                    the deploy and install hashes, read back off the ledger, and
+                    they are shown exactly once. Navigating away automatically
+                    would discard the evidence a person just paid five fees to
+                    produce, at the moment they are most likely to want to copy
+                    it. So the flow ends here and offers the two next steps. */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
+                  <Link href={`/app/agents/${agentId}/chat`} className="link">
+                    Talk to this agent
+                  </Link>
+                  <Link href="/app/agents" className="link">
+                    All your agents
+                  </Link>
+                </div>
               </div>
             )}
           </div>
