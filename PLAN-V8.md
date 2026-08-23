@@ -2497,6 +2497,51 @@ one run above.
 **Done when:** a tool call reaches a ledger, and a gate refusal is recorded with
 its provenance rather than as a generic failure.
 
+**Run record — migrations 0003 and 0004 applied to live Neon, 2026-08-23.** The
+turn store's table did not exist on the deployed instance. Applied via
+`npm run migrate -w @limen/db` against `DATABASE_URL_UNPOOLED` (the direct
+endpoint; the script refuses a `-pooler` host, §7.5.2).
+
+**Two pending, not one.** `0003_agent_key_public_half` was also unapplied — the
+Neon journal stood at three rows while the repository's `_journal.json` carried
+five entries. The migrator applies every pending file, so the run landed 0003
+and 0004 together and the journal went to **five**, not four:
+
+```
+before → drizzle.__drizzle_migrations = 3 rows (0000, 0001, 0002)
+         agent_keys.agent_public_key   absent
+         to_regclass('public.turns')   null
+after  → drizzle.__drizzle_migrations = 5 rows
+         agent_keys.agent_public_key   present, NOT NULL
+         turns / turn_status           present
+         GRANT on turns   → SELECT, INSERT, UPDATE, DELETE to limen_app
+         GRANT on audit_events → SELECT, INSERT only, unchanged
+```
+
+`0003` adds a `NOT NULL` column with no default, which is only safe on an empty
+table. It was checked before the run rather than after: `agent_keys` held 0 rows
+on the instance, matching the claim the migration's own comment makes. The
+`audit_events` grant was re-read afterwards because 0004 is the first migration
+to add a table-level grant since 0001, and the property worth confirming is that
+adding one did not disturb the table that must not have UPDATE or DELETE.
+
+**On the apparent gap in the migration sequence.** There is no missing `0003`.
+The gap is in `meta/`, which holds snapshots for 0000, 0002, 0003 and 0004 and
+none for 0001 — because `0001_audit_events_append_only` is hand-written, and a
+hand-written migration writes no snapshot. `0001` says so itself, and notes why
+it is harmless here: the file creates no schema object, so there is nothing for
+a later `drizzle-kit generate` diff to miss. `0000` and `0001` were committed
+together in `34abb90`, one millisecond apart in the journal's `when` values.
+
+**A fresh rebuild from migrations alone does work**, and CI is where that is
+proved rather than asserted: the *Apply migrations to a fresh database* step
+runs `npm run migrate -w @limen/db` against an empty `postgres:17-alpine`
+service on every push, before the suite that reads the schema. Nothing in the
+sequence depends on state a snapshot carries — the migrator reads `_journal.json`
+and the `.sql` files, and never reads `meta/`. The one external prerequisite is
+the `limen_app` role, and `0001` creates it under `IF NOT EXISTS` rather than
+assuming a deployment made it.
+
 ### M5 — End-to-end on testnet
 
 The brief §51 demo, driven from the web chat: permitted, refused, revoked, and
