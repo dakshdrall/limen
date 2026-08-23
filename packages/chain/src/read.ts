@@ -62,8 +62,13 @@ export interface ReadOptions {
  * only when `valid_until < current_ledger`. Getting this off by one would
  * render a rule as expired for the last ledger of its life, or as live for one
  * ledger past it.
+ *
+ * Takes the one field it reads rather than a whole rule, so a caller holding a
+ * decoded boundary can ask without casting a partial object into an
+ * `InstalledContextRule` it is not. A cast there would be a lie the compiler
+ * accepts, and this function is the one every expiry check goes through.
  */
-export function isLive(rule: InstalledContextRule, atLedger: number): boolean {
+export function isLive(rule: Pick<InstalledContextRule, 'validUntilLedger'>, atLedger: number): boolean {
   return rule.validUntilLedger === null || rule.validUntilLedger >= atLedger;
 }
 
@@ -117,8 +122,15 @@ function decodeContextType(value: unknown): Pick<InstalledContextRule, 'contextT
  * Simulation runs the function without submitting anything, so this costs no
  * fee and needs no signature — which is why account state can be shown to
  * someone who cannot sign for it.
+ *
+ * Exported for `balance.ts` and for nothing else. It is deliberately **not** in
+ * `index.ts`: the package's surface is the named reads above, and a general
+ * "call any contract function" export is the shape `lower.ts` refuses for a
+ * reason — an unconstrained invoke is exactly what no audited policy can bound.
+ * Here it is read-only and fee-free, so the objection is about API surface
+ * rather than authority, and the fix is to keep it inside the package.
  */
-async function simulateRead(
+export async function simulateRead(
   { rpcUrl, simulationSource }: ReadOptions,
   contract: string,
   fn: string,

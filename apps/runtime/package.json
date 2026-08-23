@@ -2,7 +2,7 @@
   "name": "@limen/runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "The agent runtime: queue, worker loop and scheduler. One long-lived Node process, separate from apps/web by decision §7.5.4.",
+  "description": "The agent runtime: queue, worker loop and scheduler. One long-lived Node process, separate from apps/web by decision \u00a77.5.4.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,12 +11,20 @@
     "start": "node dist/main.js",
     "dev": "node --watch dist/main.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prebuild": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build && npm --prefix ../../packages/custody run build",
+    "pretest": "npm --prefix ../../packages/core run build && npm --prefix ../../packages/chain run build && npm --prefix ../../packages/shared run build && npm --prefix ../../packages/kv run build && npm --prefix ../../packages/db run build && npm --prefix ../../packages/custody run build"
   },
   "dependencies": {
+    "@limen/chain": "*",
+    "@limen/core": "*",
+    "@limen/custody": "*",
     "@limen/db": "*",
     "@limen/kv": "*",
-    "ioredis": "^6.0.0"
+    "@limen/shared": "*",
+    "@stellar/stellar-sdk": "^16.2.0",
+    "ioredis": "^6.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",

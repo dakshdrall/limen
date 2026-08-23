@@ -89,10 +89,15 @@ describe('the fences are not reading an empty file', () => {
   });
 
   it('found every table', () => {
-    // 14 tables, matching Part V exactly. A snapshot that parsed to nothing
-    // would make every assertion below a claim about an empty array.
+    // 15: Part V's 14, plus `turns`. The count is edited by hand on purpose —
+    // a table arriving in this schema is a decision, and Part V's list is the
+    // record of which ones were decided. `turns` is the one addition Part V
+    // does not name: §7.5.4's accept-fast shape leaves the caller waiting on
+    // something, and that something has to be a row rather than a fact held in
+    // one process's memory. A snapshot that parsed to nothing would make every
+    // assertion below a claim about an empty array.
     const tables = new Set(ALL.map((column) => column.table));
-    expect(tables.size).toBe(14);
+    expect(tables.size).toBe(15);
     for (const table of ['users', 'sessions', 'agents', 'agent_keys', 'audit_events', 'transactions']) {
       expect(tables, `${table} is missing from the snapshot`).toContain(table);
     }

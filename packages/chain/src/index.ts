@@ -82,6 +82,8 @@ export {
   type SubmitResult,
 } from './submit.js';
 
+export { decodeBalance, latestLedger, readBalance, type BalanceRead } from './balance.js';
+
 export {
   ContractReadError,
   isLive,

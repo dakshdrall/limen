@@ -16,8 +16,31 @@
  * the shared export §7.5.2's two-path split exists to prevent.
  */
 
+import { DEFAULT_TESTNET_RPC_URL } from '@limen/chain/network';
+
 export const REDIS_URL_ENV = 'REDIS_URL';
 export const DATABASE_URL_ENV = 'DATABASE_URL';
+
+/**
+ * The RPC endpoint, and deliberately **not** `NEXT_PUBLIC_STELLAR_RPC_URL`.
+ *
+ * `chain-config.ts` keeps those two names apart and gives the reason: the
+ * server-side endpoint may be a keyed one, and the README promises it never
+ * reaches a browser. The runtime is a server, so it reads the server name — and
+ * sharing a name with the public one is how a keyed URL ends up in a bundle.
+ */
+export const RPC_URL_ENV = 'SOROBAN_RPC_URL';
+
+/**
+ * The port the agent API listens on.
+ *
+ * Defaulted rather than required: every container host sets `PORT`, and a
+ * process that refuses to start without it is a process that cannot be run
+ * locally without ceremony. The two variables above have no such default
+ * because there is no correct guess for either.
+ */
+export const PORT_ENV = 'PORT';
+export const DEFAULT_PORT = 8787;
 
 export interface RuntimeConfig {
   redisUrl: string;
@@ -31,6 +54,15 @@ export interface RuntimeConfig {
    * config module.
    */
   databaseUrl: string;
+  /**
+   * Where reads are simulated and writes are submitted.
+   *
+   * Defaulted to the public testnet endpoint, which is the only network this
+   * repository builds for — `assertTestnet` is level 2 of the mainnet gate and
+   * fires inside `submitAuthorized` regardless of what is set here.
+   */
+  rpcUrl: string;
+  port: number;
 }
 
 export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -54,5 +86,21 @@ export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runt
     );
   }
 
-  return { redisUrl, databaseUrl };
+  const port = Number(env[PORT_ENV] ?? DEFAULT_PORT);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    // Named, not silently defaulted. A `PORT` of `"8787 "` or `"http"` means
+    // the deployment believes it configured something, and falling back would
+    // start the process on a port nothing is routing to — which presents as the
+    // service being down for reasons nothing in its logs explains.
+    throw new Error(
+      `apps/runtime cannot start: ${PORT_ENV}=${JSON.stringify(env[PORT_ENV])} is not a port number.`,
+    );
+  }
+
+  return {
+    redisUrl,
+    databaseUrl,
+    rpcUrl: env[RPC_URL_ENV]?.trim() || DEFAULT_TESTNET_RPC_URL,
+    port,
+  };
 }

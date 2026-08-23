@@ -76,6 +76,15 @@ export type SubmitResult =
       stage: 'ledger';
       hash: string;
       status: string;
+      /**
+       * The ledger it closed in, when the network reported one.
+       *
+       * `NOT_FOUND` after the poll budget and a failed lookup both leave this
+       * null, which is why it is nullable rather than defaulted to zero — a
+       * transaction recorded as having closed in ledger 0 is worse than one
+       * recorded as having closed in a ledger nobody wrote down.
+       */
+      ledger: number | null;
       /** Contract error codes from the diagnostic events. Empty on success. */
       codes: number[];
       returnValue: xdr.ScVal | undefined;
@@ -179,6 +188,12 @@ export async function waitForTransaction(
   return result;
 }
 
+/** The ledger a closed transaction reports, or null when it did not report one. */
+function closedInLedger(result: rpc.Api.GetTransactionResponse): number | null {
+  const ledger = (result as { ledger?: unknown }).ledger;
+  return typeof ledger === 'number' ? ledger : null;
+}
+
 function build(
   account: Awaited<ReturnType<rpc.Server['getAccount']>>,
   passphrase: SupportedPassphrase,
@@ -245,6 +260,7 @@ export async function submitAuthorized({
     stage: 'ledger',
     hash: sent.hash,
     status: result.status,
+    ledger: closedInLedger(result),
     codes: contractErrorCodes(diagnosticEvents(result)),
     returnValue: result.status === 'SUCCESS' ? result.returnValue : undefined,
     opResult: opResultName(result),
@@ -312,6 +328,7 @@ export async function submitWithBorrowedFootprint({
     stage: 'ledger',
     hash: sent.hash,
     status: result.status,
+    ledger: closedInLedger(result),
     codes: contractErrorCodes(diagnosticEvents(result)),
     returnValue: result.status === 'SUCCESS' ? result.returnValue : undefined,
     opResult: opResultName(result),

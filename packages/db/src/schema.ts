@@ -563,3 +563,73 @@ export const idempotencyKeys = pgTable(
   },
   (table) => [index('idempotency_keys_agent_id_idx').on(table.agentId)],
 );
+
+/**
+ * One accepted request, and the only thing a caller has to poll.
+ *
+ * PLAN-V8 §7.5.4 decides the shape this table serves: a request is verified,
+ * enqueued and acknowledged in under a second, and the work happens in the
+ * worker. That decision leaves a hole Part V did not name — **the thing the
+ * caller is now waiting on** — and this is it. Without a row, "your turn is
+ * running" is a fact held in one process's memory, which is the same mistake
+ * `env.ts` refuses when it declines an in-memory queue.
+ *
+ * One table for every surface, deliberately. The web chat and the Telegram bot
+ * ask the same question — *is it done, and what happened* — and answering it
+ * from two places would mean two ways for a result to be lost and two paths to
+ * debug when one is. `channel` records which surface asked; nothing about the
+ * answer depends on it.
+ *
+ * ## Status and outcome are two columns because they are two facts
+ *
+ * `status` is transport: queued, running, done. `outcome` is §4.4's vocabulary,
+ * and a turn that ended in a refusal is `done` — not `failed`. Collapsing them
+ * would give a refusal and a crashed process the same rendering, which is the
+ * distinction this whole error vocabulary exists to keep.
+ *
+ * ## What `result_json` may hold, and why that is not rule 2's cache
+ *
+ * It holds what the caller is shown: an outcome, a hash, a refusal reason, a
+ * balance. A balance is chain state, so the prohibition is worth answering
+ * directly. This is a **transcript**, not a cache: it records what was said at a
+ * moment, is never read back to decide anything, and every chain value written
+ * into it carries the ledger it was read at — the same obligation
+ * `*_last_seen` carries, met by the value's own shape rather than by a column
+ * name. The gate re-reads the chain on every turn and consults nothing here.
+ */
+export const turnStatus = pgEnum('turn_status', ['queued', 'running', 'done']);
+
+export const turns = pgTable(
+  'turns',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** Null until there is a conversation to belong to — the web chat, M4's second half. */
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    channel: channel('channel').notNull(),
+    status: turnStatus('status').notNull().default('queued'),
+    /** What was asked, verbatim: a tool invocation now, a message when the loop lands. */
+    requestJson: jsonb('request_json').notNull(),
+    /** What to render. See the header on why a balance may live here. */
+    resultJson: jsonb('result_json'),
+    /** §4.4's five, never collapsed. Null while the turn is still queued or running. */
+    outcome: toolOutcome('outcome'),
+    createdAt: instant('created_at').notNull().defaultNow(),
+    /**
+     * Set by the claim, and the claim is what makes a duplicate harmless.
+     *
+     * At-least-once delivery means redelivery is a certainty, not a risk. A
+     * worker claims a turn with a conditional update on `status = 'queued'`, so
+     * a second delivery of the same turn matches no row and does no work. A
+     * turn found already `running` is a worker that died mid-turn: it is
+     * **not** retried, because "died before submitting" and "died after
+     * submitting" are indistinguishable from here, and the wrong guess pays a
+     * contractor twice.
+     */
+    startedAt: instant('started_at'),
+    finishedAt: instant('finished_at'),
+  },
+  (table) => [index('turns_agent_id_idx').on(table.agentId, table.createdAt)],
+);
