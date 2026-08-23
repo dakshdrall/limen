@@ -109,6 +109,62 @@ describe('what only Limen can see, Limen refuses', () => {
     expect(decide(input({ enforcedOffchain: { recipients: [DESTINATION, OTHER] } })).decision).toBe('permit');
   });
 
+  it('refuses one payment over the per-payment ceiling, and says the ledger would permit it', () => {
+    // The ceiling is Limen's and the cap is the network's. 50 is inside the
+    // remaining cap of 90, so the ledger would have allowed this — and saying
+    // so is the whole difference between the two instruments.
+    const decision = decide(input({ enforcedOffchain: { perTransactionCap: '20' } }));
+    if (decision.decision !== 'refuse') throw new Error('expected a refusal');
+    expect(decision.constraint).toBe('per_transaction_cap');
+    expect(decision.ledgerWould).toBe('permit');
+    expect(decision.reason).toMatch(/computed\s+locally/i);
+    expect(decision.reason).toMatch(/no transaction hash|never reached a ledger/i);
+    // The sentence has to distinguish the ceiling from the cap, because a user
+    // told only "over the limit" would go and raise the wrong one.
+    expect(decision.reason).toMatch(/not the boundary on the account/i);
+  });
+
+  it('permits a payment exactly at the ceiling', () => {
+    // A ceiling is a maximum, not a value to stay under. Off by one here would
+    // refuse the payment a user set the number for.
+    expect(decide(input({ enforcedOffchain: { perTransactionCap: '50' } })).decision).toBe('permit');
+  });
+
+  it('permits when no ceiling is set, in each of the three ways it can be absent', () => {
+    for (const ceiling of [undefined, null, ''] as const) {
+      expect(
+        decide(input({ enforcedOffchain: { perTransactionCap: ceiling } })).decision,
+        `a ${JSON.stringify(ceiling)} ceiling was read as a limit`,
+      ).toBe('permit');
+    }
+  });
+
+  it('names the recipient before the ceiling when both would refuse', () => {
+    // A payment to the wrong payee is wrong whatever its size. Naming the size
+    // first sends someone to correct an amount on a payment that would still
+    // be refused.
+    const decision = decide(
+      input({ enforcedOffchain: { recipients: [OTHER], perTransactionCap: '20' } }),
+    );
+    if (decision.decision !== 'refuse') throw new Error('expected a refusal');
+    expect(decision.constraint).toBe('recipient_not_allowed');
+  });
+
+  it('still leaves an over-CAP payment to the network when a ceiling exists but permits it', () => {
+    // The load-bearing interaction between the two ceilings. 10,000 is over the
+    // remaining cap of 90 and under a ceiling of 20,000, so the gate must not
+    // refuse it: the network does, on a ledger, with a hash. A ceiling that
+    // accidentally intercepted this would silently downgrade the product's
+    // central demonstration from evidence to opinion.
+    const decision = decide(
+      input({
+        request: { token: TOKEN, destination: DESTINATION, amount: 10_000n },
+        enforcedOffchain: { perTransactionCap: '20000' },
+      }),
+    );
+    expect(decision.decision).toBe('permit');
+  });
+
   it('treats an empty allowlist as no allowlist rather than as "nobody"', () => {
     // An empty array is what an agent with no recipient restriction stores.
     // Reading it as "no recipient is allowed" would silently disable every

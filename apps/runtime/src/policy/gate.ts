@@ -29,7 +29,38 @@
  * The cap is still *read* — it is in `Boundary`, it is recorded, and it is what
  * lets a refusal state whether the ledger would have refused too. It is simply
  * not a veto. What Limen vetoes is what no audited on-chain primitive can see:
- * an agent that is paused, and a recipient outside the allowlist (B8).
+ * an agent that is paused, a recipient outside the allowlist (B8), and a single
+ * payment over the per-payment ceiling.
+ *
+ * ## Two ceilings, and they are not the same instrument
+ *
+ * This is the distinction the paragraph above is easiest to misread as
+ * contradicting, so it is spelled out. An agent has **two** limits on what one
+ * payment may be, and a payment can be refused by either, for different reasons
+ * and with different evidence:
+ *
+ * | | the **cap** | the **per-payment ceiling** |
+ * |---|---|---|
+ * | what it bounds | everything spent in a rolling window | one payment |
+ * | who holds it | the `spending_limit` policy contract, on the account | Limen, in `policies.enforced_offchain_json` |
+ * | who enforces it | the network, inside `__check_auth` | this function |
+ * | a refusal by it | `refused_by_network`, **with a hash** | `refused_by_limen`, **with none** |
+ * | if Limen is bypassed | still refused | not refused |
+ *
+ * So the rule at the top is intact: the gate still does not pre-empt the cap,
+ * because the network enforces the cap. It *does* enforce the ceiling, because
+ * nothing else does — a per-payment limit is not expressible in the audited
+ * primitive the account installs, which is exactly the test for what belongs
+ * here. `agent-config.ts` already validates that the ceiling is not greater
+ * than the cap, so the two never contradict; where both would refuse, the cap
+ * is the one that reaches a ledger, and the ordering below keeps it that way by
+ * never intercepting a payment the ceiling permits.
+ *
+ * The reason this had to be added rather than being here from the start is
+ * worth recording: the builder collects the ceiling, validates it, writes it to
+ * `enforced_offchain_json` and renders it on screen under **"Enforced by
+ * Limen"** — and nothing read it. That is a promise the product made and did
+ * not keep, which is worse than not offering the field.
  *
  * ## The boundary is read from the chain, every turn, without exception
  *
@@ -108,7 +139,7 @@ export interface GateInput {
   agentStatus: string;
   agentPublicKey: string;
   request: PaymentRequest;
-  enforcedOffchain: { recipients?: string[] } | null;
+  enforcedOffchain: { recipients?: string[]; perTransactionCap?: string | null } | null;
   /** `undefined` when the rule this agent was deployed with is not on the account. */
   boundary: Boundary | undefined;
 }
@@ -132,7 +163,8 @@ export type Constraint =
   | 'asset_not_authorized'
   | 'agent_key_not_a_signer'
   | 'agent_not_active'
-  | 'recipient_not_allowed';
+  | 'recipient_not_allowed'
+  | 'per_transaction_cap';
 
 /**
  * Read the installed boundary, now, from the account.
@@ -296,6 +328,24 @@ export function decide({
       reason:
         `${request.destination} is not on this agent's approved-recipient list. This limit is computed ` +
         'locally by Limen — the account cannot enforce a recipient allowlist, so this refusal has no ' +
+        'transaction hash and never reached a ledger.',
+      ledgerWould,
+      boundary,
+    };
+  }
+
+  // Checked after the recipient, because a payment to the wrong payee is wrong
+  // whatever its size: naming the size first would send someone to correct the
+  // amount on a payment that would still be refused.
+  const ceiling = enforcedOffchain?.perTransactionCap;
+  if (ceiling !== undefined && ceiling !== null && ceiling.length > 0 && request.amount > BigInt(ceiling)) {
+    return {
+      decision: 'refuse',
+      constraint: 'per_transaction_cap',
+      reason:
+        `This payment of ${request.amount} is over this agent's per-payment ceiling of ${ceiling}. That ` +
+        'ceiling is computed locally by Limen and is not the boundary on the account — the spending ' +
+        'limit installed there governs a whole window, not one payment — so this refusal has no ' +
         'transaction hash and never reached a ledger.',
       ledgerWould,
       boundary,

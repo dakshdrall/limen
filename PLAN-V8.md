@@ -2713,6 +2713,35 @@ the agent. It is the model call, one layer above the boundary, and every layer
 below it is recorded above with hashes. The spec is written, typechecked and
 committed; it needs one valid key and no code changes.
 
+**Two ceilings, and why they are not the same instrument.** Closing the run
+above exposed a promise the product was not keeping. The builder collects a
+per-payment ceiling, validates it, writes it to `policies.enforced_offchain_json`
+and renders it on screen under **"Enforced by Limen"** — and `gate.ts` never
+read it. Nothing enforced it. It is now a `per_transaction_cap` constraint, and
+the distinction it forces is worth stating once, plainly, because the two limits
+look alike on a form and behave nothing alike:
+
+| | the **cap** | the **per-payment ceiling** |
+|---|---|---|
+| what it bounds | everything spent in a rolling window | one payment |
+| who holds it | the `spending_limit` policy contract, on the account | Limen, in `enforced_offchain_json` |
+| who enforces it | the network, inside `__check_auth` | `gate.ts` |
+| a refusal by it | `refused_by_network`, **with a hash** | `refused_by_limen`, **with none** |
+| if Limen is bypassed | still refused | not refused |
+
+A payment can be refused by either, for different reasons. The rule the gate
+follows is unchanged and this does not bend it: **Limen refuses only what the
+network cannot**. The cap is still left to the network, because the network
+enforces the cap. The ceiling is enforced here because a per-payment limit is
+not expressible in the audited primitive the account installs — which is exactly
+the test for what belongs in the gate at all.
+
+The ordering matters and is tested: a payment over the *cap* but inside the
+*ceiling* is still permitted by the gate, so it reaches a ledger and comes back
+refused with a hash. A ceiling that intercepted it would quietly downgrade the
+central demonstration from evidence to opinion. `e2e/agent-chat.spec.ts` leaves
+the ceiling unset for exactly this reason and says so in the file.
+
 **Also still NOT RUN: revoke, and the same call failing differently afterwards.**
 §51's third and fourth steps. Rows 1–4 are permitted and the two refusals; the
 revoke half has a recorded precedent in `deployments/testnet.json` under

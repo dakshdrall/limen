@@ -110,7 +110,7 @@ export interface AgentForTurn {
    * audited on-chain primitive can. Anything read from here and acted on must
    * be reported as a Limen refusal — never as the network's.
    */
-  enforcedOffchain: { recipients?: string[] } | null;
+  enforcedOffchain: { recipients?: string[]; perTransactionCap?: string | null } | null;
 }
 
 export interface RuntimeStore {
