@@ -2525,6 +2525,32 @@ on the instance, matching the claim the migration's own comment makes. The
 to add a table-level grant since 0001, and the property worth confirming is that
 adding one did not disturb the table that must not have UPDATE or DELETE.
 
+**Run record — the full suite, green, 2026-08-23.** With `0004` applied, M4's
+code was run as a whole for the first time. `0877948` was committed as WIP, but
+the WIP was the unapplied migration and not the code: nothing in
+`apps/runtime/src` carries a TODO or a stub, and the suite needed no repair.
+
+```
+@limen/core        3 files    53 tests
+@limen/chain       9 files   108 tests
+@limen/db          3 files    34 tests
+@limen/custody     3 files    36 tests
+@limen/kv          2 files    37 tests
+apps/runtime       9 files    89 tests
+apps/web          24 files   679 tests
+                            ----------
+                            1036 tests, 0 skipped, exit 0
+```
+
+**Zero skipped is the part worth recording.** `append-only.test.ts`,
+`portability.test.ts`, the `packages/kv` contract suite and the runtime's queue
+suite all skip with a printed notice when their service is absent, and only
+*fail* when `CI` is set. A local run that skipped them would report the same
+green and prove considerably less. Both services were up — Postgres on 5432 with
+all five migrations applied, Redis on 6379 — and `TEST_DATABASE_URL` and
+`REDIS_URL` were exported explicitly rather than sourced from `.env.m1`, which
+would have pointed the KV suite at Upstash and measured a different thing.
+
 **On the apparent gap in the migration sequence.** There is no missing `0003`.
 The gap is in `meta/`, which holds snapshots for 0000, 0002, 0003 and 0004 and
 none for 0001 — because `0001_audit_events_append_only` is hand-written, and a
