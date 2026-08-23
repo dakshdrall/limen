@@ -2589,6 +2589,41 @@ GET /health → {"ok":true,"queue":{"waiting":0,"processing":0},
 POST /agents/:id/turns with no credential → 401
 ```
 
+**Run record — the local pair, 2026-08-23.** The web app reaches the runtime
+through one variable and one credential, and neither of them is a shared
+secret.
+
+`apps/runtime/src/auth.ts` names no environment variable at all. It reads
+`Authorization: Bearer <token>`, hashes it SHA-256, and requires a live
+`sessions` row — it authenticates a **person**, not a service.
+`apps/web/src/lib/runtime-client.ts` sends exactly that token, the one the
+browser's `limen_session` cookie carries. The cookie is `SameSite=lax`, so the
+browser will not post it cross-site itself; the web app, which already
+authenticated the person, forwards it on their behalf. Nothing new is trusted
+in the hop. The only variable the pair needs is `LIMEN_RUNTIME_URL`, read by
+the web side, with no default and no localhost fallback.
+
+A service secret was considered and not added. It would be a second credential
+guarding a route that is already per-user, and its only effect would be to let
+a caller who holds it reach the route without a session — which is the property
+`auth.ts` exists to deny.
+
+Against the real Neon and the real Redis, with the runtime on `:8787`:
+
+```
+POST /agents/:id/turns  no Authorization header    → 401 {"error":"unauthenticated"}
+POST /agents/:id/turns  Bearer not-a-real-token    → 401 {"error":"unauthenticated"}
+POST /agents/:id/turns  Bearer <live session>      → 404 {"error":"not_found"}
+```
+
+The third is the credential being **accepted**. `postTurn` reaches the
+ownership query only after `authenticate` has returned a `Caller`, so a 404
+there is authentication having succeeded and the agent lookup having failed.
+It failed for the reason the NOT RUN section below states: `agentForTurn` inner
+joins `agent_keys`, `agent_keys` holds no row for the one existing agent, and
+that agent predates `0003`. A 202 needs an agent with a server-held key, which
+is what M5 produces.
+
 **One model call, not an agent loop, and the reason is §4.4 rather than cost.**
 The model chooses a tool and stops. It is never told what the tool returned, so
 it cannot apologise for a refusal, explain one away, or report a payment that
