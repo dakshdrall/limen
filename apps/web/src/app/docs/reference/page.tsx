@@ -125,6 +125,12 @@ const ENVIRONMENT = [
     note: 'Postgres, holding users and sessions as of V8 M1. Reached over neon-http from the web app, which sends each query as an HTTP request and therefore has no connection to exhaust across many function instances — and, as the cost of that, cannot run interactive transactions. There is no fallback: a route that needs the database refuses and names this variable, because a session that does not survive the next request is not a session. Migrations use the direct, unpooled endpoint rather than this one.',
   },
   {
+    name: 'LIMEN_RUNTIME_URL',
+    scope: 'server',
+    required: true,
+    note: 'Where apps/runtime is reachable. The web chat accepts a message, asks the model which tool it wants, and hands that tool to the runtime — which owns execution because a turn takes 15–45 seconds and can move money, and a payment in flight inside a request handler is a payment that disappears when the handler does. There is deliberately no localhost fallback: a default would make a misconfigured deployment fail by quietly trying to reach a runtime that is not there, surfacing as a timeout on the money path rather than as the configuration error it is. Unset is reported as unset, and the chat says so instead of reporting a failed turn.',
+  },
+  {
     name: 'LIMEN_WEBAUTHN_RP_ID',
     scope: 'server',
     required: true,
