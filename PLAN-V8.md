@@ -2638,15 +2638,85 @@ anything in either case, and `Verdict` keeps the four states
 `design-system.test.ts` pins — a fifth for *nothing happened* would be a
 category error wearing a colour.
 
-**NOT RUN: the demo itself.** Everything above is the chat working as software.
-What has not happened is one person talking to one deployed agent and watching
-§51's four steps — permitted, refused, revoked, and the same call failing
-differently afterwards — against a live ledger. It is blocked on an agent, not
-on the chat: `agent_keys` holds 0 rows, so no agent in any environment has a
-server-held signer, and the one existing `agents` row predates `0003`. Getting
-one requires the browser passkey ceremony and a deploy, and until that has been
-done this section is a claim about code rather than about a product. The M5
-entry below is where it belongs.
+**Run record — the four outcomes, on live testnet, 2026-08-23.** *This section
+replaced the "NOT RUN: the demo itself" entry that stood here. What it said: the
+demo was blocked on an agent rather than on the chat, because `agent_keys` held
+0 rows, no agent anywhere had a server-held signer, and the one existing
+`agents` row predates `0003`.*
+
+**That blocker is closed.** `e2e/agent-chat.spec.ts` deployed two fresh agents
+through the browser — passkey, virtual authenticator, real `next start`, real
+Neon, live testnet — and both reached `ACTIVE` with an `agent_keys` row sealed
+under `env-master-v1`:
+
+```
+agent 9430baa3-0ab9-4c22-bb76-d807e417fbd2   ACTIVE
+  smart account   CDZT2SUQJZLMYLNRSR3CPVL6LZDAQF44O4JTLRJUHZJFB6GUOYHN2YDY
+  deploy          a903159eabc33f4d3c3f1a194ba6d175a72db698836974475ca258bde965786d
+  install         1fb01588023aa727d0dd1fd4f2cfa1a0093a566ebe77e0016419bc5108de35ca
+  context rule 1, cap 500000000 stroops / 17280 ledgers
+  agent key       ed25519-seed:aes-256-gcm/aes-256-gcm-envelope-v1, kms env-master-v1
+```
+
+**Then the agent was asked to do four things, and answered four different ways.**
+Driven over HTTP at `apps/runtime` with a live session token — the same two
+routes the web chat polls, the same worker, the same gate:
+
+```
+1  get_balance                        succeeded          1000000000 stroops @ ledger 4298597
+2  send_payment 20 XLM  → approved    succeeded          5097d0c0722b58942dc4b306ae7b4ec2b89d6634339bcf5ae210703a312b9e35
+                                                         SUCCESS, invokeHostFunctionSuccess, ledger 4298601
+3  send_payment 200 XLM → approved    refused_by_network 8d856874605a579f5face766b771b06f16051111c428ee96a464b6c0b86f9a8e
+                                                         FAILED, invokeHostFunctionTrapped
+                                                         SpendingLimitExceeded#3221, boundaryRefusal true
+4  send_payment 1 XLM   → unapproved  refused_by_limen   recipient_not_allowed, ledgerWould permit,
+                                                         reachedLedger false, NO evidence field
+5  get_balance                        succeeded          800000000 stroops @ ledger 4298608
+```
+
+**Rows 3 and 4 are the whole argument, and they are two different refusals.**
+
+Row 3 is the **network's**. `gate.ts` refuses only what the network cannot see,
+and it argues the case in its own header: a gate that pre-empted the cap would
+turn this demonstration into Limen's opinion, and *a refusal that never reached
+a ledger is evidence of nothing* would then describe Limen's own behaviour. So
+the over-cap call was **submitted**, `__check_auth` consulted the spending-limit
+policy, and the refusal came back **on a ledger with a hash anyone can look
+up**. `payment.ts`'s borrowed-footprint path is what got it there — the
+enforcing simulation produces no transaction, and this is the code that spends a
+fee to be told no.
+
+Row 4 is **Limen's**. No audited on-chain primitive expresses a recipient
+allowlist, so the refusal was computed locally, nothing was sent, and there is
+no hash — with `ledgerWould: "permit"` saying out loud that the ledger would
+have allowed it. The `refused_by_limen` arm carries **no `evidence` field at
+all**, which is §4.4's *row two never borrows row three's badge* as a shape
+rather than a convention.
+
+**The balance is what proves the payment, not the hash.** 1000000000 → 800000000
+stroops, a fall of exactly 200000000 — the 20 XLM of row 2, and nothing from
+rows 3 or 4. Both refusals moved nothing, measured rather than assumed.
+
+**Still NOT RUN: the sentence.** Everything above enters at the tool call. What
+has *not* been executed is the one step above it — `chat.ts` asking Opus which
+tool a sentence wants, so that *"pay 20 XLM to G…"* becomes `send_payment` with
+a stroop count the model converted. `e2e/agent-chat.spec.ts` drives exactly that
+path and stops there: `ANTHROPIC_API_KEY` in `.env.m1` is a 26-character
+placeholder, and `api.anthropic.com` returns `401 authentication_error` for it
+directly as well as through the route. The spec fails at message one with
+`{"kind":"agent_error","detail":"401 … API key is invalid."}`, which is the chat
+route behaving correctly — `decideChatTurn` degraded, no tool was chosen, and
+`turns` stayed empty.
+
+That failure is worth being precise about, because it is *not* evidence about
+the agent. It is the model call, one layer above the boundary, and every layer
+below it is recorded above with hashes. The spec is written, typechecked and
+committed; it needs one valid key and no code changes.
+
+**Also still NOT RUN: revoke, and the same call failing differently afterwards.**
+§51's third and fourth steps. Rows 1–4 are permitted and the two refusals; the
+revoke half has a recorded precedent in `deployments/testnet.json` under
+`v4ChainRun` but has not been driven from the chat.
 
 ### M5 — End-to-end on testnet
 
