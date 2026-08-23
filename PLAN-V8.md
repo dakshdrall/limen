@@ -2568,6 +2568,51 @@ and the `.sql` files, and never reads `meta/`. The one external prerequisite is
 the `limen_app` role, and `0001` creates it under `IF NOT EXISTS` rather than
 assuming a deployment made it.
 
+**Run record — the web chat, built and green, 2026-08-23.** M4's chat landed in
+four commits: `chat.ts` (a sentence to a tool call), `runtime-client.ts` (the
+call to the runtime), the two routes a browser talks to, and the screen.
+
+```
+npm run lint            clean
+npx tsc --noEmit        clean for every new file
+npm test                1076 tests, 27 web files, 0 skipped, exit 0
+npm run build           compiled; /api/agents/[id]/chat, /api/turns/[id],
+                        /app/agents/[id]/chat all present as ƒ routes
+```
+
+**The runtime was started against the real services rather than assumed.** Neon
+on the direct endpoint, Redis on 6379:
+
+```
+GET /health → {"ok":true,"queue":{"waiting":0,"processing":0},
+               "tools":["get_balance","send_payment"]}
+POST /agents/:id/turns with no credential → 401
+```
+
+**One model call, not an agent loop, and the reason is §4.4 rather than cost.**
+The model chooses a tool and stops. It is never told what the tool returned, so
+it cannot apologise for a refusal, explain one away, or report a payment that
+did not settle. The `ToolResult` union is rendered by `TurnResult.tsx` from its
+own arms — which is where *row two never borrows row three's badge* stops being
+a convention and becomes a shape: the parsed `refused_by_limen` arm has no
+field a hash could occupy, and the test feeds it a refusal carrying a stray
+`evidence` object to watch the hash be dropped rather than drawn.
+
+`infra_error` and `agent_error` get no verdict badge at all. Nothing decided
+anything in either case, and `Verdict` keeps the four states
+`design-system.test.ts` pins — a fifth for *nothing happened* would be a
+category error wearing a colour.
+
+**NOT RUN: the demo itself.** Everything above is the chat working as software.
+What has not happened is one person talking to one deployed agent and watching
+§51's four steps — permitted, refused, revoked, and the same call failing
+differently afterwards — against a live ledger. It is blocked on an agent, not
+on the chat: `agent_keys` holds 0 rows, so no agent in any environment has a
+server-held signer, and the one existing `agents` row predates `0003`. Getting
+one requires the browser passkey ceremony and a deploy, and until that has been
+done this section is a claim about code rather than about a product. The M5
+entry below is where it belongs.
+
 ### M5 — End-to-end on testnet
 
 The brief §51 demo, driven from the web chat: permitted, refused, revoked, and
