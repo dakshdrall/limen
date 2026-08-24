@@ -40,7 +40,7 @@
 import 'server-only';
 import { and, desc, eq, gt } from 'drizzle-orm';
 import { generateAgentKey } from '@limen/custody';
-import { agentAccounts, agentKeys, agents, policies, sessions, users } from '@limen/db';
+import { agentAccounts, agentKeys, agents, policies, sessions, transactions, users } from '@limen/db';
 import { keyProvider } from './key-provider';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
@@ -548,6 +548,46 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
       });
 
       return { agentPublicKey: generated.publicKey, generated: true };
+    },
+
+    /**
+     * The most recent transaction this agent produced, or nothing.
+     *
+     * Scoped through `agents` so the owner check is in the query, like every
+     * other read here. It returns what was *recorded* — a hash, whether it
+     * reached a ledger, and its contract error codes — and deliberately not
+     * what the rule currently permits: this module's header forbids caching a
+     * claim about chain state, and a transaction that happened is a fact about
+     * the past rather than a claim about the present.
+     */
+    async lastTransaction(agentId, userId) {
+      const [row] = await db
+        .select({
+          hash: transactions.hash,
+          reachedLedger: transactions.reachedLedger,
+          ledger: transactions.ledger,
+          amount: transactions.amount,
+          asset: transactions.asset,
+          destination: transactions.destination,
+          isBoundaryRefusal: transactions.isBoundaryRefusal,
+          createdAt: transactions.createdAt,
+        })
+        .from(transactions)
+        .innerJoin(agents, eq(transactions.agentId, agents.id))
+        .where(and(eq(transactions.agentId, agentId), eq(agents.userId, userId)))
+        .orderBy(desc(transactions.createdAt))
+        .limit(1);
+      if (row === undefined) return undefined;
+      return {
+        hash: row.hash,
+        reachedLedger: row.reachedLedger,
+        ledger: row.ledger,
+        amount: row.amount === null ? null : String(row.amount),
+        asset: row.asset,
+        destination: row.destination,
+        isBoundaryRefusal: row.isBoundaryRefusal,
+        at: row.createdAt.toISOString(),
+      };
     },
 
     async agentKeyPublic(agentId, userId) {

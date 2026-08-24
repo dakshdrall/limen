@@ -28,6 +28,7 @@
  */
 
 import { z } from 'zod';
+import { executeTradingDecision } from './trading.js';
 import type { KeyProvider } from '@limen/custody';
 import { invokeTool, TOOLS } from './tools/index.js';
 import type { ToolResult } from './tools/types.js';
@@ -52,6 +53,27 @@ const payloadSchema = z.strictObject({
 });
 
 export type TurnJobPayload = z.infer<typeof payloadSchema>;
+
+/**
+ * A cycle's configuration, validated rather than trusted.
+ *
+ * The trigger is optional and a missing one is legitimate: the cycle reads the
+ * price, reports that there is nothing to evaluate, and trades nothing. That is
+ * a different fact from deciding not to trade, and `trading.ts` keeps them apart.
+ */
+const cycleConfigSchema = z.strictObject({
+  inputAsset: z.string().regex(/^C[A-Z2-7]{55}$/),
+  outputAsset: z.string().regex(/^C[A-Z2-7]{55}$/),
+  trigger: z
+    .strictObject({
+      kind: z.literal('price_drop'),
+      referencePrice: z.string().regex(/^[0-9]{1,39}$/),
+      dropBps: z.number().int().min(0).max(10_000),
+      amount: z.string().regex(/^[1-9][0-9]{0,38}$/),
+    })
+    .nullable()
+    .default(null),
+});
 
 export interface TurnDeps {
   store: RuntimeStore;
@@ -145,6 +167,52 @@ async function runClaimedTurn(
       read: { rpcUrl: deps.rpcUrl, simulationSource: agent.feeAccount },
       turnId: turn.id,
     });
+  } else if (request.kind === 'cycle') {
+    // One cycle. The tool context is built exactly as it is for a tool call —
+    // the cycle runs `swap_tokens` through it, so anything different here would
+    // be a second way to reach the same write path.
+    const parsedConfig = cycleConfigSchema.safeParse(request.config);
+    if (!parsedConfig.success) {
+      result = {
+        outcome: 'agent_error',
+        summary: 'This cycle was not configured in a way Limen can evaluate.',
+        detail: parsedConfig.error.issues.map((issue) => issue.message).join('; '),
+      };
+    } else {
+      const executionId = await deps.store.recordToolExecution({
+        agentId: agent.id,
+        toolName: 'trading_cycle',
+        args: parsedConfig.data,
+      });
+      const cycle = await executeTradingDecision(
+        {
+          agent,
+          store: deps.store,
+          provider: deps.provider,
+          rpcUrl: deps.rpcUrl,
+          read: { rpcUrl: deps.rpcUrl, simulationSource: agent.feeAccount },
+          turnId: turn.id,
+          executionId,
+        },
+        parsedConfig.data,
+      );
+      // The cycle's own result when it did not trade, and the swap's when it
+      // did. A cycle that decided not to act is a success — it ran and
+      // reported — and calling it anything else would make an activity log of
+      // ordinary quiet look like a log of failures.
+      result = cycle.swap ?? {
+        outcome: 'succeeded',
+        summary: cycle.summary,
+        data: {
+          price: cycle.price?.outFor.toString() ?? null,
+          probeAmount: cycle.price?.probeAmount.toString() ?? null,
+          ledger: cycle.price?.ledger ?? null,
+          traded: false,
+        },
+        evidence: null,
+      };
+      await deps.store.completeToolExecution({ id: executionId, outcome: result.outcome });
+    }
   } else {
     // Unreachable through the HTTP surface, which validates the request shape
     // before it enqueues. Handled rather than asserted, because a row written

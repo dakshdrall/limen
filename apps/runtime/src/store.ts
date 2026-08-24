@@ -48,7 +48,17 @@ import type { RuntimeDb } from '@limen/db/runtime';
 import type { SealedAgentKey } from '@limen/custody';
 
 /** What was asked. A tool invocation today; a chat message when the loop lands. */
-export type TurnRequest = { kind: 'tool'; tool: string; arguments: unknown };
+export type TurnRequest =
+  | { kind: 'tool'; tool: string; arguments: unknown }
+  /**
+   * One trading cycle: read the price, evaluate, maybe swap.
+   *
+   * Its own kind rather than a tool, because it is not one call — it is a read,
+   * a decision and possibly a write, and the decision is the part worth
+   * recording separately. A cycle that arrived as `swap_tokens` would lose the
+   * reason it traded, which is the only thing making the trade reproducible.
+   */
+  | { kind: 'cycle'; config: unknown };
 
 export type TurnChannel = 'web' | 'telegram' | 'api';
 

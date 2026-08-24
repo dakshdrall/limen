@@ -1,35 +1,42 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { readBalance, SOROSWAP_TESTNET_ROUTER } from '@limen/chain';
 import { Address } from '@/components/Address';
+import { ExplorerLink } from '@/components/ExplorerLink';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
+import { RunAgent } from '@/components/app/RunAgent';
+import { chainTxUrl } from '@/lib/explorer';
+import { truncateAddress } from '@/lib/format';
+import { RPC_URL } from '@/lib/chain-config';
 import { requireUser } from '@/lib/route-session';
 import { drizzleAgentStore } from '@/lib/stores';
 
 export const metadata = {
   title: 'Limen — agent',
-  description: 'One agent: its strategy, the limits installed on it, and where those limits live.',
+  description:
+    'One agent: its strategy, the limits installed on it, what it holds, and the last thing it did.',
 };
 
 /**
- * One agent, as the database records it.
+ * One agent, and the single button that makes it act.
  *
- * Where the build flow ends, and the page a deployed agent is reached from
- * afterwards. It answers three questions and refuses a fourth.
+ * Everything on this page is either a database fact, a value read from the
+ * network on this request, or a pointer to one. Nothing is a cached claim about
+ * what the boundary currently permits — `agents.ts`'s header forbids that, and a
+ * detail page is where the temptation is strongest, because every number would
+ * be cheaper to store than to read.
  *
- * ## Every value here is a database fact or a pointer
+ * ## The holdings are read now, and the ledger travels with them
  *
- * The smart account address and the context rule id are **pointers**: they say
- * where to look, not what the rule currently permits. `agents.ts`'s header
- * forbids the second kind and gives the reason — a cached copy of a cap is a
- * claim about the past rendered as the present, and a policy revoked on another
- * device would still read as live. So this screen links to the explorer rather
- * than restating a limit it has not just read.
+ * `readBalance` is a simulation against the account, on this request. A balance
+ * is stale the moment it is read, so the ledger it was read at is rendered
+ * beside it rather than left implicit.
  *
- * Reading the live rule off the network belongs here eventually and is
- * deliberately absent rather than approximated. `TODO(roadmap)`: the holdings,
- * the last trade and the run control that Milestone 3 asks for, once there is a
- * trade to have made — none of which exists yet, and a screen that laid out
- * empty places for them would be claiming a feature by its furniture.
+ * ## The last trade is the past, and is labelled as the past
+ *
+ * A recorded transaction says what happened once. It does not say the rule is
+ * still installed, still live, or still has room — those are read from the
+ * chain when something needs them, which is what `gate.ts` does every turn.
  */
 export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -41,10 +48,33 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const agent = await store.findForUser(id, gate.user.id);
   if (agent === undefined) notFound();
 
-  // The list carries the two chain pointers; the single-agent read does not, so
-  // this finds its own row in it rather than growing a second store method for
-  // one screen.
   const summary = (await store.listForUser(gate.user.id)).find((row) => row.id === id);
+  const policy = await store.proposedPolicy(id, gate.user.id);
+  const lastTrade = await store.lastTransaction(id, gate.user.id);
+
+  const offChain = policy?.enforcedOffChain ?? null;
+  const pair = offChain?.allowedPairs?.[0] ?? null;
+  const [inputAsset, outputAsset] = pair === null ? [null, null] : pair.split('/');
+
+  // Read on this request, never stored. Null when the account is not deployed
+  // or the network could not be asked — both render as "not read" rather than
+  // as a zero, because a zero balance and an unread one are different facts.
+  let holdings: { stroops: string; ledger: number } | null = null;
+  if (summary?.smartAccount != null && inputAsset != null) {
+    try {
+      const read = await readBalance(
+        { rpcUrl: RPC_URL, simulationSource: summary.smartAccount },
+        { token: inputAsset, holder: summary.smartAccount },
+      );
+      holdings = { stroops: read.amount.toString(), ledger: read.ledger };
+    } catch {
+      holdings = null;
+    }
+  }
+
+  const cap = policy?.installPlan.rules
+    .flatMap((rule) => rule.policies)
+    .find((entry) => entry.kind === 'spending_limit');
 
   return (
     <main className="screen">
@@ -54,7 +84,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
         labels={['TESTNET ONLY', 'NOT AUDITED', 'IN DEVELOPMENT']}
       />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-12">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-12">
         <div className="flex flex-col gap-6">
           <div className="panel">
             <span className="col-head text-muted-dim">the strategy</span>
@@ -63,46 +93,62 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
             </p>
           </div>
 
+          {inputAsset != null && outputAsset != null && summary?.smartAccount != null ? (
+            <RunAgent
+              agentId={agent.id}
+              inputAsset={inputAsset}
+              outputAsset={outputAsset}
+              livePrice={null}
+              suggestedAmount={offChain?.maxPositionSize ?? null}
+            />
+          ) : (
+            <div className="panel" data-tone="unproven">
+              <span className="col-head text-muted">this agent cannot run a cycle</span>
+              <p className="measure text-[13px] leading-relaxed text-muted">
+                {summary?.smartAccount == null
+                  ? 'It has no smart account yet, so there is nothing to trade from.'
+                  : 'No allowed pair is configured, so there is nothing it may trade. Limen refuses ' +
+                    'every swap until a pair is set.'}
+              </p>
+            </div>
+          )}
+
           <div className="panel">
-            <span className="col-head text-muted-dim">where its boundary lives</span>
-            {summary?.smartAccount == null ? (
-              <>
-                <p className="measure text-[13px] leading-relaxed text-muted">
-                  This agent has no smart account yet, so there is no boundary on a chain to point
-                  at. Nothing it could do is bounded by anything, because there is nothing to do it
-                  with.
-                </p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]">
-                  <Link href={`/app/agents/${agent.id}/review`} className="link">
-                    Review its limits
-                  </Link>
-                </div>
-              </>
+            <span className="col-head text-muted-dim">last transaction</span>
+            {lastTrade === undefined ? (
+              <p className="text-[13px] text-muted">
+                Nothing recorded. This agent has not submitted anything.
+              </p>
             ) : (
               <dl className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                  <dt className="col-head text-muted-dim">smart account</dt>
-                  <dd className="text-[13px]">
-                    <Address value={summary.smartAccount} />
+                  <dt className="col-head text-muted-dim">what happened</dt>
+                  <dd className="text-[13px] text-foreground/90">
+                    {lastTrade.reachedLedger === true
+                      ? lastTrade.isBoundaryRefusal === true
+                        ? 'The boundary refused it, on a ledger.'
+                        : 'It reached a ledger.'
+                      : 'It never reached a ledger.'}
                   </dd>
                 </div>
+                {lastTrade.hash !== null && (
+                  <div className="flex flex-col gap-1">
+                    <dt className="col-head text-muted-dim">transaction</dt>
+                    <dd className="scroll-x text-[13px] break-words">
+                      <ExplorerLink href={chainTxUrl(lastTrade.hash)} title={lastTrade.hash}>
+                        <span className="value">{lastTrade.hash}</span>
+                      </ExplorerLink>
+                    </dd>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1">
-                  <dt className="col-head text-muted-dim">context rule</dt>
+                  <dt className="col-head text-muted-dim">amount</dt>
                   <dd className="text-[13px]">
-                    <span className="value">{summary.contextRuleId ?? 'none recorded'}</span>
+                    <span className="value">{lastTrade.amount ?? 'not recorded'}</span>
                   </dd>
                 </div>
               </dl>
             )}
-          </div>
-
-          <div className="panel" data-tone="unproven">
-            <span className="col-head text-muted">what this agent cannot do yet</span>
-            <p className="measure text-[13px] leading-relaxed text-muted">
-              Limen installs the boundary and stops there. There is no trading tool behind this
-              agent — nothing here has placed a trade, and the limits above bound an agent that
-              cannot yet act on its own.
-            </p>
           </div>
         </div>
 
@@ -113,6 +159,56 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
               {agent.status}
             </p>
           </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="col-head text-muted-dim">holdings</span>
+            {holdings === null ? (
+              <p className="text-[12.5px] text-muted">
+                Not read. A balance nobody could read is not a balance of zero.
+              </p>
+            ) : (
+              <>
+                <p className="font-mono text-[13px] text-foreground">{holdings.stroops}</p>
+                <p className="text-[12px] text-faint">at ledger {holdings.ledger.toLocaleString('en-US')}</p>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="col-head text-muted-dim">risk limits</span>
+            <dl className="flex flex-col gap-2 text-[12.5px]">
+              <div>
+                <dt className="text-muted-dim">daily cap — the network&rsquo;s</dt>
+                <dd className="font-mono text-foreground">
+                  {cap?.kind === 'spending_limit' ? cap.limit : 'none installed'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-dim">max position — Limen&rsquo;s</dt>
+                <dd className="font-mono text-foreground">{offChain?.maxPositionSize ?? 'none'}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-dim">allowed pair — Limen&rsquo;s</dt>
+                <dd className="scroll-x font-mono text-[11.5px] break-words text-foreground">
+                  {pair ?? 'none — every swap refused'}
+                </dd>
+              </div>
+            </dl>
+            <p className="text-[12px] leading-relaxed text-faint">
+              Only the daily cap is enforced by the account. The other two are Limen&rsquo;s, and a
+              refusal citing them has no transaction hash.
+            </p>
+          </div>
+
+          {summary?.smartAccount != null && (
+            <div className="flex flex-col gap-2">
+              <span className="col-head text-muted-dim">smart account</span>
+              <div className="text-[13px]">
+                <Address value={summary.smartAccount} />
+              </div>
+              <p className="text-[12px] text-faint">venue {truncateAddress(SOROSWAP_TESTNET_ROUTER)}</p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <span className="col-head text-muted-dim">elsewhere</span>

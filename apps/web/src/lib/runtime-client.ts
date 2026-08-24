@@ -155,6 +155,24 @@ export function startTurn(
   });
 }
 
+/**
+ * Enqueue one trading cycle. Returns the id the caller polls, not the result.
+ *
+ * A separate route from `startTurn` rather than a tool name, mirroring the
+ * runtime: a cycle is a read, a decision and possibly a write, and the decision
+ * is what makes the trade reproducible from the log.
+ */
+export function startCycle(
+  agentId: string,
+  token: string | undefined,
+  request: { config: Record<string, unknown>; channel: 'web' | 'telegram' | 'api' },
+): Promise<RuntimeCall<StartedTurn>> {
+  return call<StartedTurn>(`/agents/${agentId}/cycles`, token, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
 /** What happened, or "not yet". The same route Telegram will poll. */
 export function readTurn(turnId: string, token: string | undefined): Promise<RuntimeCall<TurnView>> {
   return call<TurnView>(`/turns/${turnId}`, token, { method: 'GET' });

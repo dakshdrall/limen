@@ -169,6 +169,13 @@ export interface AgentStore {
    * `CONFIGURED`. Atomic, and see {@link ConfigureInput} for why that matters.
    */
   configure(input: ConfigureInput): Promise<AgentRecord>;
+  /**
+   * The last transaction this agent produced, refused or not.
+   *
+   * A fact about the past — what was recorded when an attempt reached a ledger
+   * — and never a claim about what the rule permits now. See `stores.ts`.
+   */
+  lastTransaction(agentId: string, userId: string): Promise<LastTransaction | undefined>;
   /** The boundary this agent was configured with, for the deploy step to install. */
   proposedPolicy(agentId: string, userId: string): Promise<ProposedPolicy | undefined>;
   /** `CONFIGURED` -> `DEPLOYING`, or `DEPLOYING` -> `ERROR`. */
@@ -209,6 +216,18 @@ export interface AgentStore {
 }
 
 /** What was stored at `CONFIGURED`, read back so deploy installs exactly it. */
+export interface LastTransaction {
+  hash: string | null;
+  reachedLedger: boolean | null;
+  ledger: number | null;
+  amount: string | null;
+  asset: string | null;
+  destination: string | null;
+  /** True when the boundary itself refused it, rather than the token. */
+  isBoundaryRefusal: boolean | null;
+  at: string;
+}
+
 export interface ProposedPolicy {
   id: string;
   proposal: PolicyProposal;

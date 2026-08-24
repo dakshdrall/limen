@@ -40,6 +40,11 @@ import type { RuntimeStore, TurnChannel } from './store.js';
 /** Bodies are small — a tool name and two fields. Anything larger is refused. */
 const MAX_BODY_BYTES = 16 * 1024;
 
+const cycleRequestSchema = z.strictObject({
+  config: z.unknown(),
+  channel: z.enum(['web', 'telegram', 'api']).default('web'),
+});
+
 const turnRequestSchema = z.strictObject({
   tool: z.string().min(1),
   arguments: z.unknown().optional(),
@@ -111,6 +116,12 @@ async function handle(
     return;
   }
 
+  const startCycle = /^\/agents\/([0-9a-fA-F-]{36})\/cycles$/.exec(path);
+  if (request.method === 'POST' && startCycle !== null) {
+    await postCycle(deps, request, response, startCycle[1]!);
+    return;
+  }
+
   const readTurn = /^\/turns\/([0-9a-fA-F-]{36})$/.exec(path);
   if (request.method === 'GET' && readTurn !== null) {
     await getTurn(deps, request, response, readTurn[1]!);
@@ -118,6 +129,68 @@ async function handle(
   }
 
   send(response, 404, { error: 'not_found' });
+}
+
+/**
+ * One trading cycle, queued like any turn.
+ *
+ * Deliberately the same shape as `postTurn` — authenticate, rate limit, check
+ * ownership, write a row, enqueue — because a cycle can move money and every
+ * path that can must be bounded the same way. It is a separate route rather
+ * than a tool name because a cycle is a read, a decision and possibly a write,
+ * and the decision is the part worth recording as its own thing.
+ */
+async function postCycle(
+  deps: HttpDeps,
+  request: IncomingMessage,
+  response: ServerResponse,
+  agentId: string,
+): Promise<void> {
+  const caller = await authenticate(deps, request, response);
+  if (caller === undefined) return;
+
+  if (await deps.limit.check(caller.userId)) {
+    send(response, 429, { error: 'rate_limited' });
+    return;
+  }
+
+  const body = await readJson(request);
+  if (!body.ok) {
+    send(response, 400, { error: 'bad_request', message: body.error });
+    return;
+  }
+
+  const parsed = cycleRequestSchema.safeParse(body.value);
+  if (!parsed.success) {
+    send(response, 400, {
+      error: 'bad_request',
+      message: parsed.error.issues.map((issue) => issue.message).join('; '),
+    });
+    return;
+  }
+
+  // Ownership before a row is written, exactly as `postTurn` does it, and for
+  // the same reason: the worker does not re-check, so this is the check.
+  const agent = await deps.store.agentForTurn(agentId, caller.userId);
+  if (agent === undefined) {
+    send(response, 404, { error: 'not_found' });
+    return;
+  }
+
+  const turn = await deps.store.createTurn({
+    agentId,
+    channel: parsed.data.channel as TurnChannel,
+    request: { kind: 'cycle', config: parsed.data.config },
+  });
+
+  await deps.queue.enqueue({
+    kind: TURN_JOB_KIND,
+    // The turn id, for the reason `postTurn` gives: the key is per intent, and
+    // the row is the intent, so a redelivery finds the same claim taken.
+    idempotencyKey: turn.id,
+    payload: { turnId: turn.id, agentId, userId: caller.userId },
+  });
+  send(response, 202, { turnId: turn.id, status: 'queued' });
 }
 
 async function postTurn(
