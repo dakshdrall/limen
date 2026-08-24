@@ -813,9 +813,34 @@ describe('the mark has one definition, and every consumer reads it', () => {
 });
 
 describe('colour is restrained', () => {
-  it('defines one accent', () => {
-    const accents = [...css.matchAll(/^\s*--accent:/gm)];
-    expect(accents).toHaveLength(1);
+  it('defines one accent per palette, and aliases are not second accents', () => {
+    // The rule is "one accent hue", not "one line mentioning --accent", and the
+    // console made the difference matter. `.console` re-points `--accent` at
+    // `var(--app-accent)`: that is the same slot resolving to the palette in
+    // scope, not a new colour. Counting declarations would have called it a
+    // second accent, and the fix for a mis-stated rule is to state it properly.
+    //
+    // So the check is on *definitions* — a token given a literal value — and it
+    // is now two assertions where it was one, because the console has to obey
+    // the restraint too. A third accent hue in either palette still fails.
+    /** Every declaration of `name`, as its value with whitespace trimmed. */
+    const valuesOf = (name: string) =>
+      [...css.matchAll(new RegExp(`^[ \\t]*${name}:[ \\t]*([^;]+);`, 'gm'))].map(([, value]) =>
+        value.trim(),
+      );
+
+    /** A definition names a colour. An alias points at another token. */
+    const defines = (name: string) => valuesOf(name).filter((value) => !value.startsWith('var('));
+
+    expect(defines('--accent'), 'the site defines more than one accent').toHaveLength(1);
+    expect(defines('--app-accent'), 'the console defines more than one accent').toHaveLength(1);
+
+    // And every remaining `--accent` declaration is an alias, so a literal
+    // cannot be slipped in under a selector that is not `:root`.
+    const aliases = valuesOf('--accent').filter((value) => value.startsWith('var('));
+    expect(aliases.length + 1, 'an --accent declaration is neither a definition nor an alias').toBe(
+      valuesOf('--accent').length,
+    );
   });
 
   it('has no gradient fills, glass, glow, or shadow depth', () => {

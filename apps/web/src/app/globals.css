@@ -188,6 +188,70 @@
      1.0267:1; dark's major at 1.0526 and this one at 1.0504. */
   --grid-minor: rgb(26 34 48 / 0.014);
   --grid-major: rgb(26 34 48 / 0.027);
+
+  /* ── the console palette, for /app/* only ────────────────────────────────
+     Declared here beside the light tokens rather than in a separate file,
+     because `design-system.test.ts` pins this stylesheet against
+     `lib/theme.ts` and a palette kept somewhere else would be a palette
+     outside the pin — which is the exact failure the OG card taught.
+
+     These are DECLARATIONS, not applications. Nothing reads them until an
+     element opts in through `.console` below, so adding them changes the
+     appearance of no existing page. The site and the docs continue to read
+     the tokens above, unchanged.
+
+     Why a second palette at all: light is Limen's public register and stays
+     that way — it is deliberate differentiation on the surface people compare.
+     `/app/*` is not that surface. It is where somebody already inside reads
+     numbers and watches limits, which is a console. `lib/theme.ts` carries the
+     full reasoning and the measurements; every value here is solved for a
+     stated contrast rather than picked, and `contrast.test.ts` pins all of it
+     to the same exactness as the light ramp.
+
+     The one inversion worth knowing: on light the ground is the conservative
+     surface, because a white card only raises contrast. On dark it is the
+     opposite, so the AA floor is measured against `--app-surface-raised`, the
+     lightest thing text ever sits on. */
+  --app-background: #0b0f14;
+  --app-surface: #1b212a;
+  --app-surface-raised: #272e39;
+  --app-surface-hover: #202731;
+  --app-surface-sunken: #141a20;
+
+  --app-border-subtle: #1f2329;
+  --app-border: #2a2f34;
+  --app-border-bright: #3a3f44;
+
+  /* 16.90 / 9.60 / 6.40 / 2.85 against the console ground; muted and muted-dim
+     clear AA against the raised surface, which is the harder measurement. */
+  --app-foreground: #eaf1fa;
+  --app-muted: #b2b8c0;
+  --app-muted-dim: #90959d;
+  --app-faint: #575c62;
+
+  /* DENY is far the brighter, and that asymmetry is what survives greyscale:
+     46 steps apart where the rule asks for 30. Hue is never the only signal. */
+  --app-permit: #41a566;
+  --app-permit-dim: #12231f;
+  --app-permit-line: #24543a;
+
+  --app-deny: #ffab99;
+  --app-deny-dim: #2b2325;
+  --app-deny-line: #7b5751;
+
+  /* The third verdict stays in the neutral ramp — exactly the muted step. */
+  --app-unproven: #b2b8c0;
+  --app-unproven-dim: #21252a;
+  --app-unproven-line: #585d63;
+
+  --app-accent: #6cb8ff;
+  --app-accent-dim: #182533;
+
+  /* Solved for the light theme's contrasts, not copied from its alphas: light
+     ink on a dark ground reads differently at equal alpha. 1.0235 and 1.0557. */
+  --app-grid-minor: rgb(150 180 220 / 0.018);
+  --app-grid-major: rgb(150 180 220 / 0.0394);
+
   --grid-pitch: 32px;
   --grid-pitch-major: 160px;
   --grid-image:
@@ -568,6 +632,69 @@ body::before {
 
   .screen > * {
     grid-column: content;
+  }
+
+  /* ── the console ─────────────────────────────────────────────────────────
+     The app surface's identity, applied by re-pointing the palette rather
+     than by restyling anything.
+
+     Every component in this application already reads `var(--foreground)`,
+     `var(--surface)`, `var(--border)` and so on. So the console is not a
+     second set of component styles — it is the same components with the
+     tokens aliased to the console values underneath them. A panel, a table,
+     a verdict badge and a button all become dark here without one of them
+     knowing this class exists, and none of them can drift from the site
+     versions because there is only ever one of each.
+
+     Two consequences worth stating:
+
+     1. Nothing outside this class changes. The landing and the docs never
+        match `.console`, so their tokens resolve exactly as they did.
+     2. Every alias is a `var()`, never a literal. `design-system.test.ts`
+        collects colour declarations by matching hex and `rgb()` values, so a
+        literal here would be a new token escaping `lib/theme.ts`. Aliases are
+        invisible to that pin and should be — they introduce no colour, they
+        only choose which one is in scope.
+
+     `color-scheme` is set so form controls, scrollbars and the caret follow.
+     Without it a native `<select>` renders as a white slab on a dark panel. */
+  .console {
+    --background: var(--app-background);
+    --surface: var(--app-surface);
+    --surface-raised: var(--app-surface-raised);
+    --surface-hover: var(--app-surface-hover);
+    --surface-sunken: var(--app-surface-sunken);
+
+    --border-subtle: var(--app-border-subtle);
+    --border: var(--app-border);
+    --border-bright: var(--app-border-bright);
+
+    --foreground: var(--app-foreground);
+    --muted: var(--app-muted);
+    --muted-dim: var(--app-muted-dim);
+    --faint: var(--app-faint);
+
+    --permit: var(--app-permit);
+    --permit-dim: var(--app-permit-dim);
+    --permit-line: var(--app-permit-line);
+
+    --deny: var(--app-deny);
+    --deny-dim: var(--app-deny-dim);
+    --deny-line: var(--app-deny-line);
+
+    --unproven: var(--app-unproven);
+    --unproven-dim: var(--app-unproven-dim);
+    --unproven-line: var(--app-unproven-line);
+
+    --accent: var(--app-accent);
+    --accent-dim: var(--app-accent-dim);
+
+    --grid-minor: var(--app-grid-minor);
+    --grid-major: var(--app-grid-major);
+
+    color-scheme: dark;
+    background-color: var(--background);
+    color: var(--foreground);
   }
 
   /* The argument. Same columns, different air.

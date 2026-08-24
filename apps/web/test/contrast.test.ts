@@ -25,7 +25,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ACCENT, GROUND, GRID, RULES, TEXT, VERDICT } from '../src/lib/theme';
+import {
+  ACCENT,
+  APP_ACCENT,
+  APP_GRID,
+  APP_GROUND,
+  APP_RULES,
+  APP_TEXT,
+  APP_VERDICT,
+  GROUND,
+  GRID,
+  RULES,
+  TEXT,
+  VERDICT,
+} from '../src/lib/theme';
 
 /** sRGB channel to linear light. WCAG 2.x. */
 function channel(value: number): number {
@@ -246,5 +259,207 @@ describe('the grid stays below the threshold of distraction', () => {
     expect(contrast(composite(GRID.gridMinor, ground), ground)).toBeLessThan(
       contrast(composite(GRID.gridMajor, ground), ground),
     );
+  });
+});
+
+/* ───────────────────────────────────────────────────────── the console palette
+ *
+ * `/app/*` runs on a second, darker palette. The site and the docs do not, and
+ * every assertion above still measures the light tokens they use — so this
+ * section adds a ramp rather than relaxing one.
+ *
+ * The properties asserted are the same properties, because they are properties
+ * of a palette rather than of a colour scheme: a four-step ramp that stays
+ * ordered and separated, an AA floor on the two steps that carry body text,
+ * a surface ladder that goes somewhere, verdicts that survive greyscale, an
+ * accent that works in three jobs, and a grid below the threshold of
+ * distraction.
+ *
+ * ## The one thing that genuinely inverts
+ *
+ * Which surface is the conservative one. On light, text is measured against the
+ * ground because a white card only ever raises contrast — measuring there is
+ * the honest direction. On dark that reverses: light text on a *lighter*
+ * surface loses contrast, so the worst case is `surfaceRaised`, the lightest
+ * thing text ever sits on. The AA floor is therefore enforced there, which is a
+ * stricter measurement than the ground would have given, not a weaker one.
+ *
+ * If a value here ever fails, the ramp is what changes. These numbers are the
+ * requirement.
+ */
+
+const appGround = APP_GROUND.background;
+const appSurface = APP_GROUND.surface;
+/** The lightest surface text sits on — the conservative one on dark. */
+const appRaised = APP_GROUND.surfaceRaised;
+
+describe('the console text ramp', () => {
+  it('hits its four targets against the console ground', () => {
+    near(contrast(APP_TEXT.foreground, appGround), 16.9);
+    near(contrast(APP_TEXT.muted, appGround), 9.6);
+    near(contrast(APP_TEXT.mutedDim, appGround), 6.4);
+    near(contrast(APP_TEXT.faint, appGround), 2.85);
+  });
+
+  it('keeps the four steps ordered and distinct', () => {
+    const ratios = [APP_TEXT.foreground, APP_TEXT.muted, APP_TEXT.mutedDim, APP_TEXT.faint].map(
+      (c) => contrast(c, appGround),
+    );
+    for (let i = 1; i < ratios.length; i++) {
+      expect(ratios[i], `step ${i} is not below step ${i - 1}`).toBeLessThan(ratios[i - 1]);
+      expect(ratios[i - 1] / ratios[i], `steps ${i - 1} and ${i} are too close`).toBeGreaterThan(1.4);
+    }
+  });
+
+  it('clears AA on both body steps against the LIGHTEST surface, not the ground', () => {
+    // The dark mirror of the light theme's rule. Against the ground these two
+    // sit at 9.6 and 6.4 and would pass trivially; the measurement that means
+    // something is the one taken where the contrast is worst.
+    expect(contrast(APP_TEXT.muted, appRaised)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(APP_TEXT.mutedDim, appRaised)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('measures against the raised surface, which is the conservative one here', () => {
+    // Asserted as a direction so nobody "corrects" the AA check above back to
+    // the ground on the grounds that the light suite measures there.
+    for (const step of [APP_TEXT.foreground, APP_TEXT.muted, APP_TEXT.mutedDim, APP_TEXT.faint]) {
+      expect(contrast(step, appRaised)).toBeLessThanOrEqual(contrast(step, appGround));
+    }
+  });
+});
+
+describe('the console surface ladder', () => {
+  it('lifts every surface above the ground, which is what dark allows', () => {
+    // The light palette had to split this in two — surfaces up, tints down —
+    // because white is a ceiling. Dark has room in one direction, so `raised`
+    // and `sunken` mean what their names say and both are reached by lightening.
+    for (const surfaceTint of [
+      APP_GROUND.surface,
+      APP_GROUND.surfaceSunken,
+      APP_GROUND.surfaceRaised,
+      APP_GROUND.surfaceHover,
+    ]) {
+      expect(luminance(surfaceTint)).toBeGreaterThan(luminance(appGround));
+    }
+  });
+
+  it('orders sunken below the surface and raised above it', () => {
+    expect(luminance(APP_GROUND.surfaceSunken)).toBeLessThan(luminance(APP_GROUND.surface));
+    expect(luminance(APP_GROUND.surfaceRaised)).toBeGreaterThan(luminance(APP_GROUND.surface));
+    // The cursor's trail sits between the card and the band: visible, but never
+    // mistaken for a header.
+    expect(luminance(APP_GROUND.surfaceHover)).toBeGreaterThan(luminance(APP_GROUND.surface));
+    expect(luminance(APP_GROUND.surfaceHover)).toBeLessThan(luminance(APP_GROUND.surfaceRaised));
+  });
+
+  it('keeps every surface visible against the ground', () => {
+    for (const tint of [APP_GROUND.surfaceRaised, APP_GROUND.surfaceHover, APP_GROUND.surface]) {
+      expect(contrast(tint, appGround)).toBeGreaterThan(1.05);
+    }
+  });
+});
+
+describe('the console rules', () => {
+  it('keeps three ordered weights, at the light theme’s separations', () => {
+    near(contrast(APP_RULES.borderSubtle, appGround), 1.22, 0.05);
+    near(contrast(APP_RULES.border, appGround), 1.42, 0.05);
+    near(contrast(APP_RULES.borderBright, appGround), 1.8, 0.05);
+  });
+});
+
+describe('console verdicts survive greyscale', () => {
+  it('keeps PERMIT and DENY apart with the hue removed entirely', () => {
+    const separation = Math.abs(greyscale(APP_VERDICT.permit) - greyscale(APP_VERDICT.deny));
+    expect(separation).toBeGreaterThanOrEqual(30);
+  });
+
+  it('takes that separation as a deliberate asymmetry rather than by accident', () => {
+    // On dark, heavier means brighter. DENY is still the one a reader must not
+    // miss, and the direction is asserted so a later "balancing" edit goes red.
+    expect(contrast(APP_VERDICT.deny, appSurface)).toBeGreaterThan(
+      contrast(APP_VERDICT.permit, appSurface),
+    );
+  });
+
+  it('keeps all three verdict hues legible on the surface and on their own fill', () => {
+    for (const [name, text, fill] of [
+      ['permit', APP_VERDICT.permit, APP_VERDICT.permitDim],
+      ['deny', APP_VERDICT.deny, APP_VERDICT.denyDim],
+      ['unproven', APP_VERDICT.unproven, APP_VERDICT.unprovenDim],
+    ] as const) {
+      expect(contrast(text, appSurface), `${name} on the console surface`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(text, fill), `${name} on its own fill`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('draws every verdict rule visibly against its own fill', () => {
+    for (const [name, fill, line] of [
+      ['permit', APP_VERDICT.permitDim, APP_VERDICT.permitLine],
+      ['deny', APP_VERDICT.denyDim, APP_VERDICT.denyLine],
+      ['unproven', APP_VERDICT.unprovenDim, APP_VERDICT.unprovenLine],
+    ] as const) {
+      expect(contrast(line, fill), `${name}'s rule against its fill`).toBeGreaterThan(1.7);
+    }
+  });
+
+  it('keeps the third verdict in the neutral ramp rather than as a fourth hue', () => {
+    expect(APP_VERDICT.unproven).toBe(APP_TEXT.muted);
+  });
+});
+
+describe('the console accent, in all three of its jobs', () => {
+  it('reads as text on both the surface and the ground', () => {
+    expect(contrast(APP_ACCENT.accent, appSurface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(APP_ACCENT.accent, appGround)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('is distinguishable from the rule a focus ring replaces', () => {
+    expect(contrast(APP_ACCENT.accent, APP_RULES.borderBright)).toBeGreaterThan(2.5);
+  });
+
+  it('carries an active-nav fill that is visible but not a second surface', () => {
+    const fill = contrast(APP_ACCENT.accentDim, appGround);
+    expect(fill).toBeGreaterThan(1.03);
+    expect(fill).toBeLessThan(1.3);
+    expect(contrast(APP_ACCENT.accent, APP_ACCENT.accentDim)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('the console grid stays below the threshold of distraction', () => {
+  it('draws both pitches at the light theme’s contrasts, not its alphas', () => {
+    // Copying the light alphas across would roughly halve the grid's presence,
+    // because light ink on a dark ground reads differently from dark on light.
+    // These are solved for the resulting contrast instead.
+    near(contrast(composite(APP_GRID.gridMinor, appGround), appGround), 1.0235, 0.005);
+    near(contrast(composite(APP_GRID.gridMajor, appGround), appGround), 1.0557, 0.005);
+  });
+
+  it('keeps the minor rule quieter than the major one', () => {
+    expect(contrast(composite(APP_GRID.gridMinor, appGround), appGround)).toBeLessThan(
+      contrast(composite(APP_GRID.gridMajor, appGround), appGround),
+    );
+  });
+});
+
+describe('the two palettes stay separate', () => {
+  it('shares no ground with the site, so neither can drift into the other', () => {
+    // The site is light and the console is dark; if these ever met, one of the
+    // two surfaces has been repainted by an edit meant for the other.
+    expect(luminance(APP_GROUND.background)).toBeLessThan(luminance(GROUND.background));
+    expect(APP_GROUND.background).not.toBe(GROUND.background);
+  });
+
+  it('leaves every site token exactly as it was', () => {
+    // The console was added by declaring new tokens, never by editing one the
+    // narrative site reads. These are the values the site assertions above are
+    // written against, restated here as the thing the console must not touch.
+    expect(GROUND.background).toBe('#fbfaf7');
+    expect(GROUND.surface).toBe('#ffffff');
+    expect(TEXT.foreground).toBe('#191c21');
+    expect(VERDICT.permit).toBe('#0f7a43');
+    expect(VERDICT.deny).toBe('#8c1d18');
+    expect(ACCENT.accent).toBe('#155e96');
+    expect(RULES.border).toBe('#d8d4ca');
+    expect(GRID.gridMinor).toBe('rgb(26 34 48 / 0.014)');
   });
 });

@@ -248,6 +248,120 @@ export const GRID = {
   gridMajor: 'rgb(26 34 48 / 0.027)',
 } as const satisfies Record<string, string>;
 
+
+/* ─────────────────────────────────────────────────────── the console palette
+ *
+ * A second, darker palette for `/app/*` only. The narrative site and the docs
+ * keep every token above, byte for byte.
+ *
+ * ## This scopes the light decision rather than overturning it
+ *
+ * Limen is light on purpose, and the reason is differentiation: the nearest
+ * adjacent product is dark, and a permissions tool that looks like every other
+ * crypto dashboard argues for itself less well than one that looks like paper.
+ * That reasoning is about the **public surface** — the landing page and the
+ * docs are what somebody compares — and it is unchanged. Nothing below touches
+ * them.
+ *
+ * `/app/*` is a different audience in a different posture. Nobody arrives at
+ * `/app/agents/new` to be persuaded; they are already inside, doing work, and
+ * the work is watching limits and reading numbers. That is a console, and the
+ * register a console reads best in is dark. So the decision is **scoped, not
+ * reversed**, and this comment exists so the next person reads a reason here
+ * rather than assuming the palette drifted.
+ *
+ * ## Every value is measured, and measured against the harder surface
+ *
+ * `contrast.test.ts` pins these to the same exactness as the light ramp. One
+ * thing genuinely inverts and it is worth stating, because it is the mirror of
+ * the note on `GROUND` above: on light, the **ground** is the conservative
+ * surface, because a white card only ever raises contrast. On dark it is the
+ * opposite — light text on a *lighter* surface loses contrast — so the honest
+ * place to measure the AA floor is `surfaceRaised`, the lightest thing text
+ * ever sits on. That is where `muted` and `mutedDim` are held to 4.5, and it is
+ * a stricter test than measuring against the ground would have been.
+ *
+ * The four surfaces therefore all lift *above* the ground, which is what dark
+ * lets you do and what the light palette had to split in two. `raised` is again
+ * the band that stands out and `sunken` the panel that recedes, and here both
+ * are achieved by lightening — the names mean what they say.
+ */
+
+/** The console ground, and the surfaces that lift off it. */
+export const APP_GROUND = {
+  background: '#0b0f14',
+  surface: '#1b212a',
+  surfaceRaised: '#272e39',
+  surfaceHover: '#202731',
+  surfaceSunken: '#141a20',
+} as const satisfies Record<string, Hex>;
+
+/** Three ordered rule weights, at the same separations the light theme uses. */
+export const APP_RULES = {
+  borderSubtle: '#1f2329',
+  border: '#2a2f34',
+  borderBright: '#3a3f44',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * The four-step ramp. Targets are stated against the ground, so the ladder
+ * keeps its shape; the AA floor is enforced against `surfaceRaised`.
+ */
+export const APP_TEXT = {
+  foreground: '#eaf1fa',
+  muted: '#b2b8c0',
+  mutedDim: '#90959d',
+  faint: '#575c62',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * The three verdicts.
+ *
+ * The asymmetry is deliberate and is the greyscale carrier, exactly as on
+ * light: DENY is far the brighter of the two, because it is the verdict a
+ * reader must not miss and because hue alone must never be the signal. They sit
+ * 46 greyscale steps apart, where the rule asks for 30.
+ *
+ * On dark the direction of "heavier" flips — brighter, not darker — so the
+ * assertion is still `deny > permit` in contrast, and still means the same
+ * thing about which one shouts.
+ */
+export const APP_VERDICT = {
+  permit: '#41a566',
+  permitDim: '#12231f',
+  permitLine: '#24543a',
+
+  deny: '#ffab99',
+  denyDim: '#2b2325',
+  denyLine: '#7b5751',
+
+  // The third verdict stays in the neutral ramp rather than becoming a fourth
+  // hue, so it must be exactly the muted step. `contrast.test.ts` pins that.
+  unproven: '#b2b8c0',
+  unprovenDim: '#21252a',
+  unprovenLine: '#585d63',
+} as const satisfies Record<string, Hex>;
+
+/** The accent, in the same three jobs: text, focus ring, active-nav fill. */
+export const APP_ACCENT = {
+  accent: '#6cb8ff',
+  accentDim: '#182533',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * The ruled ground, at the light theme's own contrasts rather than its alphas.
+ *
+ * Carrying the light alphas across would be the same mistake in the other
+ * direction that `GRID` records: light ink on a dark ground reads differently
+ * from dark ink on light at equal alpha. So these are solved for the resulting
+ * contrast — 1.0235 and 1.0557 against the console ground — which is the same
+ * depth cue, not the same number.
+ */
+export const APP_GRID = {
+  gridMinor: 'rgb(150 180 220 / 0.018)',
+  gridMajor: 'rgb(150 180 220 / 0.0394)',
+} as const satisfies Record<string, string>;
+
 /**
  * Every colour token, keyed by its CSS custom property name.
  *
@@ -288,4 +402,40 @@ export const THEME = {
 
   '--grid-minor': GRID.gridMinor,
   '--grid-major': GRID.gridMajor,
+
+  // The console palette. Same pin, same rules — a token added to `globals.css`
+  // under `--app-` and not listed here fails `design-system.test.ts` exactly as
+  // a site token would.
+  '--app-background': APP_GROUND.background,
+  '--app-surface': APP_GROUND.surface,
+  '--app-surface-raised': APP_GROUND.surfaceRaised,
+  '--app-surface-hover': APP_GROUND.surfaceHover,
+  '--app-surface-sunken': APP_GROUND.surfaceSunken,
+
+  '--app-border-subtle': APP_RULES.borderSubtle,
+  '--app-border': APP_RULES.border,
+  '--app-border-bright': APP_RULES.borderBright,
+
+  '--app-foreground': APP_TEXT.foreground,
+  '--app-muted': APP_TEXT.muted,
+  '--app-muted-dim': APP_TEXT.mutedDim,
+  '--app-faint': APP_TEXT.faint,
+
+  '--app-permit': APP_VERDICT.permit,
+  '--app-permit-dim': APP_VERDICT.permitDim,
+  '--app-permit-line': APP_VERDICT.permitLine,
+
+  '--app-deny': APP_VERDICT.deny,
+  '--app-deny-dim': APP_VERDICT.denyDim,
+  '--app-deny-line': APP_VERDICT.denyLine,
+
+  '--app-unproven': APP_VERDICT.unproven,
+  '--app-unproven-dim': APP_VERDICT.unprovenDim,
+  '--app-unproven-line': APP_VERDICT.unprovenLine,
+
+  '--app-accent': APP_ACCENT.accent,
+  '--app-accent-dim': APP_ACCENT.accentDim,
+
+  '--app-grid-minor': APP_GRID.gridMinor,
+  '--app-grid-major': APP_GRID.gridMajor,
 } as const;
