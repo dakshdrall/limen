@@ -135,13 +135,82 @@ export interface PaymentRequest {
   amount: bigint;
 }
 
+/**
+ * A swap, as the gate needs to see one.
+ *
+ * `token` is the asset **leaving** the account, which is what makes a swap
+ * checkable by the same code as a payment: the spending limit sees the outbound
+ * `transfer`, so the input asset is the one the boundary is about. `outputAsset`
+ * is carried for the pair check and for nothing else.
+ *
+ * There is no `destination`. A swap's counterparty is a liquidity pool the
+ * router chooses, not an address the caller names, so a recipient allowlist has
+ * nothing to match against — see `decideSwap`.
+ */
+export interface SwapRequest {
+  token: string;
+  outputAsset: string;
+  amount: bigint;
+}
+
 export interface GateInput {
   agentStatus: string;
   agentPublicKey: string;
   request: PaymentRequest;
-  enforcedOffchain: { recipients?: string[]; perTransactionCap?: string | null } | null;
+  enforcedOffchain: EnforcedOffchain | null;
   /** `undefined` when the rule this agent was deployed with is not on the account. */
   boundary: Boundary | undefined;
+}
+
+/**
+ * The constraints Limen enforces because no audited primitive can.
+ *
+ * Every field here is a **Limen** limit. A refusal citing one has no transaction
+ * hash and never reached a ledger, and `gate.ts`'s callers are required to
+ * report it as `refused_by_limen` — never as the network's. B8 is the argument;
+ * this is its type.
+ *
+ * ## What is deliberately absent
+ *
+ * There is no daily or windowed amount here, and there must never be one. The
+ * spending limit on the account is the cap, it is enforced by an audited policy
+ * contract, and it refuses on a ledger with `SpendingLimitExceeded#3221` and a
+ * hash — measured, PLAN-V8 C0. A second amount check here would turn a network
+ * guarantee into Limen's opinion, which is the exact inversion `gate.ts` exists
+ * to prevent. `maxPositionSize` is not that: see its own note.
+ */
+export interface EnforcedOffchain {
+  recipients?: string[];
+  perTransactionCap?: string | null;
+  /**
+   * Which pairs this agent may trade, as `INPUT/OUTPUT` contract ids.
+   *
+   * The network cannot check this and it is not close. A spending limit sees an
+   * amount and a period; it has no idea which asset came back, because the
+   * inbound leg is a transfer *to* the account and raises no requirement the
+   * account has to authorize. So "only ever buy XLM with USDC" is unenforceable
+   * on chain by construction, and is enforced here or nowhere.
+   *
+   * Empty or absent means no pair is allowed, and that is the safe direction:
+   * an agent with no configured pair refuses every swap rather than trading
+   * anything it likes. Same rule as `recipients`.
+   */
+  allowedPairs?: string[];
+  /**
+   * The largest single position, in the input asset's smallest unit.
+   *
+   * **This is not the daily cap and does not duplicate it.** The spending limit
+   * bounds how much leaves in a *window*; this bounds how much leaves in *one
+   * trade*. The network cannot express the second — the policy contract holds a
+   * limit and a period and nothing per-call — so an agent under a 100 USDC
+   * daily cap can legitimately spend all of it in one swap unless something
+   * off-chain says otherwise.
+   *
+   * It is the same shape as `perTransactionCap` and kept separate on purpose:
+   * that one is about payments and reads on the payment screens, and folding
+   * them together would make one number mean two things on two surfaces.
+   */
+  maxPositionSize?: string | null;
 }
 
 export type GateDecision =
@@ -164,7 +233,10 @@ export type Constraint =
   | 'agent_key_not_a_signer'
   | 'agent_not_active'
   | 'recipient_not_allowed'
-  | 'per_transaction_cap';
+  | 'per_transaction_cap'
+  | 'pair_not_allowed'
+  | 'max_position_size'
+  | 'venue_rule_not_installed';
 
 /**
  * Read the installed boundary, now, from the account.
@@ -353,4 +425,129 @@ export function decide({
   }
 
   return { decision: 'permit', boundary };
+}
+
+/** How an allowed pair is written: input and output contract ids, in that order. */
+export function pairKey(inputAsset: string, outputAsset: string): string {
+  return `${inputAsset}/${outputAsset}`;
+}
+
+export interface SwapGateInput {
+  agentStatus: string;
+  agentPublicKey: string;
+  request: SwapRequest;
+  enforcedOffchain: EnforcedOffchain | null;
+  boundary: Boundary | undefined;
+  /**
+   * The venue rule's id, or null when this agent has none.
+   *
+   * A swap needs two context rules and this is the second. Null is a refusal
+   * rather than a lookup: an agent deployed without a venue rule cannot sign a
+   * router call, and guessing an id would be inventing authority.
+   */
+  venueRuleId: number | null;
+}
+
+/**
+ * The decision for a swap.
+ *
+ * Deliberately built on `decide` rather than beside it. Everything the chain
+ * enforces about the outbound leg is identical — the rule has to be installed,
+ * live, on the right asset, and name Limen's key — and a swap that re-derived
+ * those checks would be a second place for them to drift. So the shared half is
+ * delegated, and only what is genuinely different is written here.
+ *
+ * ## What is different, and why each one is off-chain
+ *
+ * **The pair.** The spending limit sees the outbound `transfer` and nothing
+ * else; the inbound leg is a transfer *to* the account, which raises no auth
+ * requirement the account has to satisfy. The network therefore cannot know
+ * what was bought, and "only buy XLM with USDC" is unenforceable on chain by
+ * construction rather than by omission.
+ *
+ * **The position size.** The policy contract holds a limit and a period. It has
+ * no per-call ceiling, so an agent under a daily cap may legitimately spend the
+ * whole of it in one trade. Bounding a single trade is off-chain or nowhere.
+ *
+ * **What is NOT here: the amount against the cap.** That is the network's job
+ * and it does it — `SpendingLimitExceeded#3221`, on a ledger, with a hash. This
+ * function does not pre-empt it, and `ledgerWould` is how a Limen refusal says
+ * the network would have refused too.
+ *
+ * ## The recipient allowlist does not apply, and that is stated rather than skipped
+ *
+ * A swap's counterparty is a pool the router picks. There is no address the
+ * caller names, so `recipients` has nothing to match and is not consulted. A
+ * check that quietly matched a pool address against a list of payees would
+ * refuse every swap for a reason nobody could act on.
+ */
+export function decideSwap({
+  agentStatus,
+  agentPublicKey,
+  request,
+  enforcedOffchain,
+  boundary,
+  venueRuleId,
+}: SwapGateInput): GateDecision {
+  // The outbound leg is a payment as far as the boundary is concerned, so the
+  // chain-facing checks are the same ones, run by the same function. The
+  // destination is the account itself: a placeholder that cannot match any
+  // allowlist, chosen so `decide` cannot reach its recipient branch — which is
+  // meaningless here — while every check before it still runs.
+  const shared = decide({
+    agentStatus,
+    agentPublicKey,
+    request: { token: request.token, destination: request.token, amount: request.amount },
+    enforcedOffchain: { perTransactionCap: enforcedOffchain?.perTransactionCap ?? null },
+    boundary,
+  });
+  if (shared.decision === 'refuse') return shared;
+
+  const live = shared.boundary;
+  const ledgerWould: LedgerWould = request.amount > live.remaining ? 'refuse' : 'permit';
+
+  if (venueRuleId === null) {
+    return {
+      decision: 'refuse',
+      constraint: 'venue_rule_not_installed',
+      reason:
+        'This agent has no venue rule, so it cannot authorize a call to a swap venue at all. A swap ' +
+        'needs two context rules — one on the token, which carries the cap, and one on the router — ' +
+        'and this agent was deployed with only the first. Nothing was signed.',
+      ledgerWould: 'refuse',
+      boundary: live,
+    };
+  }
+
+  const pairs = enforcedOffchain?.allowedPairs;
+  const wanted = pairKey(request.token, request.outputAsset);
+  if (pairs === undefined || pairs.length === 0 || !pairs.includes(wanted)) {
+    return {
+      decision: 'refuse',
+      constraint: 'pair_not_allowed',
+      reason:
+        `This agent is not configured to trade ${wanted}. Which pair an agent may trade is computed ` +
+        'locally by Limen — the account sees the amount leaving and cannot see what was bought, so it ' +
+        'cannot enforce a pair — and this refusal has no transaction hash and never reached a ledger.',
+      ledgerWould,
+      boundary: live,
+    };
+  }
+
+  const position = enforcedOffchain?.maxPositionSize;
+  if (position !== undefined && position !== null && position.length > 0 && request.amount > BigInt(position)) {
+    return {
+      decision: 'refuse',
+      constraint: 'max_position_size',
+      reason:
+        `This trade of ${request.amount} is over this agent's maximum position size of ${position}. That ` +
+        'is a per-trade ceiling computed locally by Limen and is not the boundary on the account — the ' +
+        'spending limit installed there governs a whole window, not one trade — so this refusal has no ' +
+        'transaction hash and never reached a ledger.',
+      ledgerWould,
+      boundary: live,
+    };
+  }
+
+  return { decision: 'permit', boundary: live };
 }

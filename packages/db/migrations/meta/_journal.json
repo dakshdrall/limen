@@ -50,6 +50,13 @@
       "when": 1787569200000,
       "tag": "0006_agent_draft",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787576400000,
+      "tag": "0007_venue_rule",
+      "breakpoints": true
     }
   ]
 }

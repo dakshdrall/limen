@@ -60,11 +60,25 @@ const context = () => {
 };
 
 describe('the registry is the set §6.1 decided on', () => {
-  it('has the two MVP tools and not `invoke_contract`', () => {
-    // `invoke_contract` cannot be constrained by any audited policy —
-    // `lower.ts` refuses exactly this — so shipping it would mean either an
-    // unconstrained context rule or generated Rust.
-    expect(toolNames(TOOLS)).toEqual(['get_balance', 'send_payment']);
+  it('has the three MVP tools and not `invoke_contract`', () => {
+    // `invoke_contract` cannot be constrained by any audited policy — an
+    // unconstrained rule on an arbitrary contract is what `lower.ts` refuses —
+    // so shipping it would mean either that rule or generated Rust.
+    //
+    // `swap_tokens` is the one contract call that is here, and the difference
+    // is measured rather than argued: a router call raises a `token.transfer`
+    // sub-invocation that only the token's own rule can validate, so the
+    // spending limit still sees the money leaving. PLAN-V8 C0 records the
+    // over-cap swap refused on a ledger with SpendingLimitExceeded#3221.
+    expect(toolNames(TOOLS)).toEqual(['get_balance', 'send_payment', 'swap_tokens']);
+  });
+
+  it('keeps `send_payment` alongside rather than replacing it', () => {
+    // Trading did not retire paying. An agent that pays and an agent that
+    // trades are the same machinery pointed at different contracts, and a
+    // deployed payment agent must not lose its tool because a later milestone
+    // added another.
+    expect(toolNames(TOOLS)).toContain('send_payment');
   });
 });
 

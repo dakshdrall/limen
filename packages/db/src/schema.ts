@@ -345,6 +345,26 @@ export const agentAccounts = pgTable(
     contextRuleId: integer('context_rule_id'),
     installTxHash: text('install_tx_hash'),
     /**
+     * The venue rule's id, for a trading agent. Null for a payment agent.
+     *
+     * A trading agent's authority is two context rules, not one: the token rule
+     * above carries the spending limit, and this one authorizes calls to the
+     * swap venue. Both ids go into a swap's `AuthPayload` — one per auth
+     * context — so both have to be recorded.
+     *
+     * Recorded rather than discovered. `gate.ts` looks a rule up **by the id
+     * saved at deployment**, never by scanning for one that looks right, so
+     * that a revoked rule reads as absent instead of being silently replaced by
+     * a different rule that happens to match. A venue rule found by scanning
+     * would break exactly that property.
+     *
+     * Null is meaningful and is not "not yet filled in": an agent with no venue
+     * rule cannot swap, and `swap_tokens` refuses on that basis rather than
+     * guessing an id.
+     */
+    venueContextRuleId: integer('venue_context_rule_id'),
+    venueInstallTxHash: text('venue_install_tx_hash'),
+    /**
      * The one denormalised chain value in this schema, and it is named so it
      * can be found.
      *

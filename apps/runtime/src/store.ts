@@ -104,6 +104,14 @@ export interface AgentForTurn {
   /** The classic account paying fees. Falls back to the agent's own address. */
   feeAccount: string;
   contextRuleId: number | null;
+  /**
+   * The venue rule's id, or null for an agent that cannot trade.
+   *
+   * A swap's `AuthPayload` names one context rule per auth context, and a
+   * router call raises two. This is the second — see the column's own comment
+   * in the schema for why it is recorded rather than found by scanning.
+   */
+  venueContextRuleId: number | null;
   sealedKey: SealedAgentKey;
   /**
    * B8's column, read as what it is: constraints **Limen** enforces, because no
@@ -200,6 +208,7 @@ export function drizzleRuntimeStore(db: RuntimeDb): RuntimeStore {
           ownerSignerKind: agentAccounts.ownerSignerKind,
           feeAccount: agentAccounts.agentFeeAccount,
           contextRuleId: agentAccounts.contextRuleId,
+          venueContextRuleId: agentAccounts.venueContextRuleId,
           ciphertext: agentKeys.ciphertext,
           wrappedDataKey: agentKeys.wrappedDataKey,
           kmsKeyId: agentKeys.kmsKeyId,
@@ -238,6 +247,7 @@ export function drizzleRuntimeStore(db: RuntimeDb): RuntimeStore {
         // a guess: `deploy` funds this account precisely so it can pay.
         feeAccount: row.feeAccount ?? row.agentPublicKey,
         contextRuleId: row.contextRuleId,
+        venueContextRuleId: row.venueContextRuleId,
         sealedKey: {
           ciphertext: row.ciphertext,
           wrappedDataKey: row.wrappedDataKey,

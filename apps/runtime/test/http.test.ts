@@ -240,7 +240,7 @@ describe('health says what this process can do', () => {
     expect(await response.json()).toEqual({
       ok: true,
       queue: { waiting: 0, processing: 0 },
-      tools: ['get_balance', 'send_payment'],
+      tools: ['get_balance', 'send_payment', 'swap_tokens'],
     });
   });
 

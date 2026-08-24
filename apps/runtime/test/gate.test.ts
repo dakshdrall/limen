@@ -19,7 +19,15 @@
 import { describe, expect, it } from 'vitest';
 import { Keypair } from '@stellar/stellar-sdk';
 import { rawEd25519FromAddress, toHex } from '@limen/chain';
-import { decide, signerFor, type Boundary, type GateInput } from '../src/policy/gate.js';
+import {
+  decide,
+  decideSwap,
+  pairKey,
+  signerFor,
+  type Boundary,
+  type GateInput,
+  type SwapGateInput,
+} from '../src/policy/gate.js';
 
 const AGENT = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 7)).publicKey();
 const OTHER = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 9)).publicKey();
@@ -235,3 +243,119 @@ describe('the verifier comes from the installed rule', () => {
 });
 
 const OTHER_TOKEN = 'CDWPYL45SZDHFPF7CZK4PLXFUQPNP4WTW4URIFVQZ4I65HQFYBTH4CSE';
+
+/**
+ * The swap gate, and the line it must not cross.
+ *
+ * `decideSwap` adds exactly two constraints, and the reason each is here rather
+ * than on the chain is the same reason `gate.ts` exists at all: the account
+ * cannot see them. It sees an amount and a period. It does not see which asset
+ * came back, because the inbound leg raises no requirement it has to authorize,
+ * and it has no per-call ceiling because the policy contract holds neither.
+ *
+ * The property asserted hardest is the absence: **the gate does not check the
+ * amount against the cap.** PLAN-V8 C0 measured the network doing that itself,
+ * on a ledger, with `SpendingLimitExceeded#3221` and a hash. A second check here
+ * would turn that guarantee into Limen's opinion.
+ */
+const USDC = 'CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F';
+
+const swapInput = (overrides: Partial<SwapGateInput> = {}): SwapGateInput => ({
+  agentStatus: 'ACTIVE',
+  agentPublicKey: AGENT,
+  request: { token: TOKEN, outputAsset: USDC, amount: 50n },
+  enforcedOffchain: { allowedPairs: [pairKey(TOKEN, USDC)] },
+  boundary: boundary(),
+  venueRuleId: 2,
+  ...overrides,
+});
+
+describe('the swap gate leaves the cap to the network', () => {
+  it('permits a swap inside the remaining cap', () => {
+    expect(decideSwap(swapInput()).decision).toBe('permit');
+  });
+
+  it('permits an OVER-cap swap, because refusing it is the network’s job', () => {
+    // The single most important assertion in this file. C0 proved the account
+    // refuses this itself with a code and a hash; a gate that got there first
+    // would replace a network guarantee with a local claim, and the demo would
+    // be Limen agreeing with itself.
+    const over = decideSwap(swapInput({ request: { token: TOKEN, outputAsset: USDC, amount: 10_000n } }));
+    expect(over.decision).toBe('permit');
+  });
+
+  it('still refuses everything about the outbound leg that a payment would', () => {
+    // Delegated to `decide` rather than restated, so the two cannot drift.
+    expect(decideSwap(swapInput({ boundary: undefined })).decision).toBe('refuse');
+    expect(decideSwap(swapInput({ agentStatus: 'PAUSED' })).decision).toBe('refuse');
+    expect(decideSwap(swapInput({ agentPublicKey: OTHER })).decision).toBe('refuse');
+    const wrongAsset = decideSwap(swapInput({ boundary: boundary({ contract: USDC }) }));
+    expect(wrongAsset.decision === 'refuse' && wrongAsset.constraint).toBe('asset_not_authorized');
+  });
+});
+
+describe('the two constraints the account cannot see', () => {
+  it('refuses a pair that is not configured', () => {
+    const result = decideSwap(swapInput({ enforcedOffchain: { allowedPairs: [pairKey(USDC, TOKEN)] } }));
+    expect(result.decision === 'refuse' && result.constraint).toBe('pair_not_allowed');
+    expect(result.decision === 'refuse' && result.reason).toContain('never reached a ledger');
+  });
+
+  it('refuses every pair when none is configured, rather than allowing any', () => {
+    // The safe direction, and the same one `recipients` takes. An agent whose
+    // pair list is empty is an agent nobody has told what to trade.
+    for (const enforcedOffchain of [null, {}, { allowedPairs: [] }]) {
+      const result = decideSwap(swapInput({ enforcedOffchain }));
+      expect(result.decision === 'refuse' && result.constraint).toBe('pair_not_allowed');
+    }
+  });
+
+  it('refuses a trade over the maximum position size', () => {
+    const result = decideSwap(
+      swapInput({
+        request: { token: TOKEN, outputAsset: USDC, amount: 80n },
+        enforcedOffchain: { allowedPairs: [pairKey(TOKEN, USDC)], maxPositionSize: '25' },
+      }),
+    );
+    expect(result.decision === 'refuse' && result.constraint).toBe('max_position_size');
+    expect(result.decision === 'refuse' && result.reason).toContain('not the boundary on the account');
+  });
+
+  it('keeps the position size distinct from the cap', () => {
+    // 80 is under the remaining cap of 90 and over the position size of 25, so
+    // only a genuinely per-trade ceiling refuses it. If these two ever became
+    // one number this case would pass for the wrong reason.
+    const withinCap = 80n;
+    expect(withinCap).toBeLessThan(boundary().remaining);
+    const result = decideSwap(
+      swapInput({
+        request: { token: TOKEN, outputAsset: USDC, amount: withinCap },
+        enforcedOffchain: { allowedPairs: [pairKey(TOKEN, USDC)], maxPositionSize: '25' },
+      }),
+    );
+    expect(result.decision === 'refuse' && result.constraint).toBe('max_position_size');
+    // And it reports that the ledger would have permitted it, which is the
+    // honest answer and the thing that keeps the two apart on screen.
+    expect(result.decision === 'refuse' && result.ledgerWould).toBe('permit');
+  });
+
+  it('refuses a swap when the agent has no venue rule', () => {
+    const result = decideSwap(swapInput({ venueRuleId: null }));
+    expect(result.decision === 'refuse' && result.constraint).toBe('venue_rule_not_installed');
+    expect(result.decision === 'refuse' && result.ledgerWould).toBe('refuse');
+  });
+
+  it('does not consult the recipient allowlist, which a swap has no address for', () => {
+    // A swap's counterparty is a pool the router picks. Matching it against a
+    // list of payees would refuse every swap for a reason nobody could act on.
+    const result = decideSwap(
+      swapInput({
+        enforcedOffchain: {
+          allowedPairs: [pairKey(TOKEN, USDC)],
+          recipients: ['GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'],
+        },
+      }),
+    );
+    expect(result.decision).toBe('permit');
+  });
+});
