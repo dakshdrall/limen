@@ -116,6 +116,7 @@ export async function POST(
     const ownerPublicKey = String(body.ownerPublicKey ?? '');
     const agentPublicKey = String(body.agentPublicKey ?? '');
     const contextRuleId = body.contextRuleId;
+    const venueContextRuleId = body.venueContextRuleId ?? null;
 
     if (!StrKey.isValidContract(smartAccountContractId)) {
       return bad('smartAccountContractId is not a contract address.');
@@ -158,6 +159,16 @@ export async function POST(
     }
     if (typeof contextRuleId !== 'number' || !Number.isInteger(contextRuleId) || contextRuleId < 0) {
       return bad('contextRuleId must be a non-negative integer.');
+    }
+    // Null is legitimate — a payment agent has no venue rule — so only a
+    // present value is checked, and it is checked the same way.
+    if (
+      venueContextRuleId !== null &&
+      (typeof venueContextRuleId !== 'number' ||
+        !Number.isInteger(venueContextRuleId) ||
+        venueContextRuleId < 0)
+    ) {
+      return bad('venueContextRuleId must be a non-negative integer, or absent.');
     }
 
     const policy = await store.proposedPolicy(id, gate.user.id);
@@ -219,6 +230,44 @@ export async function POST(
       );
     }
 
+    /*
+     * The venue rule, verified the same way the boundary was.
+     *
+     * A browser reports both ids and the server trusts neither. This one is
+     * checked against the plan as well as the ledger, because a venue rule is
+     * an unconstrained rule — it authorizes every function on its contract —
+     * and recording one the reviewed plan did not contain would be recording
+     * authority nobody approved.
+     *
+     * The plan's venue rules are the ones with no policies. That is what
+     * `lower.ts` builds and what makes them venues.
+     */
+    if (venueContextRuleId !== null) {
+      const venue = installed.find((candidate) => candidate.id === venueContextRuleId);
+      if (venue === undefined) {
+        return unverified(
+          `The account does not carry a context rule ${venueContextRuleId}. Nothing was recorded.`,
+        );
+      }
+      const plannedVenue = policy.installPlan.rules.find(
+        (candidate) => candidate.policies.length === 0 && candidate.contract === venue.contract,
+      );
+      if (plannedVenue === undefined) {
+        return unverified(
+          `Context rule ${venueContextRuleId} authorizes ${venue.contract ?? 'no contract'}, which the ` +
+            'reviewed boundary did not name as a venue. Nothing was recorded.',
+        );
+      }
+      if (venue.policies.length > 0) {
+        // A rule reported as a venue that carries a policy is not the rule the
+        // plan described, whatever its id says.
+        return unverified(
+          `Context rule ${venueContextRuleId} carries ${venue.policies.length} policies, and a venue rule ` +
+            'carries none. Nothing was recorded.',
+        );
+      }
+    }
+
     const plannedLimit = planned.policies[0];
     const policyContract = rule.policies[0];
     if (plannedLimit === undefined || policyContract === undefined) {
@@ -266,6 +315,10 @@ export async function POST(
       deployTxHash,
       installTxHash,
       contextRuleId,
+      // Verified above against both the ledger and the reviewed plan: a venue
+      // rule this browser claims but the account does not carry, or that the
+      // plan did not name, is refused rather than recorded.
+      venueContextRuleId,
       ownerPublicKey,
       agentPublicKey,
     });

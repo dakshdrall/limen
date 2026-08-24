@@ -246,6 +246,13 @@ export interface RecordDeploymentInput {
   deployTxHash: string;
   installTxHash: string;
   contextRuleId: number;
+  /**
+   * The venue rule, for a trading agent. Null for one that only pays.
+   *
+   * Recorded beside the boundary rather than inferred later: a swap needs both
+   * ids, and `gate.ts` looks a rule up by its saved id rather than scanning.
+   */
+  venueContextRuleId: number | null;
   ownerPublicKey: string;
   agentPublicKey: string;
 }

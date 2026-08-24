@@ -469,6 +469,8 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
           agentPublicKey: input.agentPublicKey,
           contextRuleId: input.contextRuleId,
           installTxHash: input.installTxHash,
+          venueContextRuleId: input.venueContextRuleId,
+          venueInstallTxHash: input.venueContextRuleId === null ? null : input.installTxHash,
         }),
         db
           .update(policies)

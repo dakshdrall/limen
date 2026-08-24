@@ -175,7 +175,16 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
       return;
     }
 
+    // Two ids for a trading agent, one for a payment agent. Told apart by the
+    // contract each rule was installed for rather than by the order they came
+    // back in — the plan sorts its rules by contract address, so position is
+    // not a fact about which is which.
     let ruleId: number | null = null;
+    let venueRuleId: number | null = null;
+    const tokenContract = started.plan.rules.find((rule) =>
+      rule.policies.some((policy) => policy.kind === 'spending_limit'),
+    )?.contract;
+
     const installed = await log.run(
       'install',
       `Installing the boundary — add_context_rule on ${account}`,
@@ -185,7 +194,14 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
           accountId: account,
           plan: started.plan,
           agentPublicKey: started.agentPublicKey,
-          onInstalled: (id) => (ruleId = id),
+          onInstalled: (id, contract) => {
+            // The rule carrying the spending limit is the boundary; anything
+            // else in the plan is a venue. Matching on the contract means a
+            // plan that grows a third rule fails loudly here rather than
+            // silently recording the wrong id as the boundary.
+            if (contract === tokenContract) ruleId = id;
+            else venueRuleId = id;
+          },
         }),
     );
     if (installed?.status !== 'onLedger' || !installed.ok || ruleId === null) {
@@ -199,6 +215,7 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
         deployTxHash: deployed.hash,
         installTxHash: installed.hash,
         contextRuleId: ruleId,
+        venueContextRuleId: venueRuleId,
         ownerPublicKey: k.owner.publicKey,
         agentPublicKey: started.agentPublicKey,
       });

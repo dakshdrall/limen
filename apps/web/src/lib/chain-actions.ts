@@ -378,8 +378,14 @@ export async function installBoundary({
    * is not the key Limen holds.
    */
   agentPublicKey?: string;
-  /** The rule id, read out of what `add_context_rule` returned, not assumed. */
-  onInstalled: (ruleId: number) => void;
+  /**
+   * The rule id, read out of what `add_context_rule` returned, not assumed.
+   *
+   * Called once per installed rule, with the contract it was installed for, so
+   * a caller holding a two-rule plan can tell the token rule from the venue
+   * rule without matching on order.
+   */
+  onInstalled: (ruleId: number, contract: string | null) => void;
 }): Promise<SubmitResultLike> {
   const chain = await loadChain();
   const { rpc } = await import('@stellar/stellar-sdk');
@@ -399,7 +405,7 @@ export async function installBoundary({
     );
   }
 
-  const [func, ...rest] = chain.installFunctions(plan, {
+  const funcs = chain.installFunctions(plan, {
     smartAccount: accountId,
     verifier: ED25519_VERIFIER,
     spendingLimitPolicy: SPENDING_LIMIT_POLICY,
@@ -409,35 +415,58 @@ export async function installBoundary({
     // agent's is the one the boundary is installed by.
     ownerPublicKey: ownerAuth(keys).keyData,
   });
-  if (func === undefined) throw new Error('the plan lowered to no rules');
-  if (rest.length > 0) {
-    throw new Error(
-      `this plan lowered to ${rest.length + 1} context rules, and this screen installs one. Nothing was submitted.`,
-    );
-  }
+  if (funcs.length === 0) throw new Error('the plan lowered to no rules');
 
   const latest = await server.getLatestLedger();
 
-  const result = await chain.submitAuthorized({
-    rpcUrl: RPC_URL,
-    passphrase: NETWORK_PASSPHRASE,
-    feeSource: keys.owner.publicKey,
-    signEnvelope: keys.owner.signEnvelope,
-    func,
-    signAuthEntry: chain.signAs({
-      signer: ownerAuth(keys).signer,
-      verifier: ownerAuth(keys).verifier,
-      contextRuleIds: [defaultRule.id],
-      expirationLedger: latest.sequence + AUTH_VALIDITY_LEDGERS,
+  /*
+   * One submission per rule, and the reason is attribution.
+   *
+   * This used to refuse any plan with more than one rule, which was right while
+   * a boundary was one rule. A trading agent's is two — the token rule that
+   * carries the cap, and the venue rule that lets the router be called — so the
+   * refusal became the thing standing between a reviewed plan and its
+   * installation.
+   *
+   * They are still not batched. `add_context_rule` returns the rule it created,
+   * and the id in that return value is the only trustworthy source for what was
+   * installed; one transaction holding both calls would return one value and
+   * leave the second id to be guessed. `installFunctions` says the same where
+   * it builds them.
+   *
+   * The first failure stops the loop and is returned. A partially installed
+   * boundary is a real outcome and it is reported as a failure rather than
+   * retried — the caller records what did land, and the account is left with
+   * fewer rules than the plan, which is the safe direction: a missing rule
+   * refuses, it does not permit.
+   */
+  let last: SubmitResultLike | undefined;
+  for (const [index, func] of funcs.entries()) {
+    const rule = plan.rules[index];
+    const result = await chain.submitAuthorized({
+      rpcUrl: RPC_URL,
       passphrase: NETWORK_PASSPHRASE,
-    }),
-    label: 'install',
-  });
+      feeSource: keys.owner.publicKey,
+      signEnvelope: keys.owner.signEnvelope,
+      func,
+      signAuthEntry: chain.signAs({
+        signer: ownerAuth(keys).signer,
+        verifier: ownerAuth(keys).verifier,
+        contextRuleIds: [defaultRule.id],
+        expirationLedger: latest.sequence + AUTH_VALIDITY_LEDGERS,
+        passphrase: NETWORK_PASSPHRASE,
+      }),
+      label: funcs.length === 1 ? 'install' : `install:${rule?.contract ?? index}`,
+    });
 
-  if (result.stage === 'ledger' && result.ok) {
-    onInstalled(chain.contextRuleIdFrom(result.returnValue));
+    if (result.stage !== 'ledger' || !result.ok) return result;
+    onInstalled(chain.contextRuleIdFrom(result.returnValue), rule?.contract ?? null);
+    last = result;
   }
-  return result;
+
+  // Unreachable: the loop returns on failure and `funcs` is non-empty.
+  if (last === undefined) throw new Error('installBoundary: no rule was submitted');
+  return last;
 }
 
 /* --- running the agent ---------------------------------------------------- */

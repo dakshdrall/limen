@@ -59,6 +59,8 @@ import {
   signAs,
   submitAuthorized,
   submitWithBorrowedFootprint,
+  SOROSWAP_SWAP_FN,
+  SOROSWAP_TESTNET_ROUTER,
   type SubmitResult,
 } from '@limen/chain';
 import { TESTNET_PASSPHRASE } from '@limen/chain/network';
@@ -74,14 +76,11 @@ const AUTH_ENTRY_LEDGERS = 60;
 /** The smallest swap that can stand in for a permitted one when borrowing a footprint. */
 const SMALL_SWAP = 1_000n;
 
-/**
- * Soroswap's testnet router.
- *
- * Read from `soroswap/core`'s `public/testnet.contracts.json` and confirmed
- * against their own live `GET /api/testnet/router`, then probed on testnet —
- * recorded in PLAN-V8 C0. Not recalled.
- */
-export const SOROSWAP_TESTNET_ROUTER = 'CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD';
+// Re-exported rather than restated. `@limen/chain`'s `venues.ts` is the one
+// place this address lives, because the contract a rule is installed for and
+// the contract a swap is sent to must be the same by construction — two copies
+// that drifted would leave a rule authorizing a router nothing trades through.
+export { SOROSWAP_TESTNET_ROUTER };
 
 /** How long a swap may sit unexecuted, in seconds. The router takes a deadline. */
 const DEADLINE_SECONDS = 300;
@@ -251,7 +250,7 @@ async function execute(
  * value invented here would be a protection nothing computed.
  */
 function swapFunction(request: SwapRequestFacts, to: string, amount: bigint): xdr.HostFunction {
-  return invokeContract(SOROSWAP_TESTNET_ROUTER, 'swap_exact_tokens_for_tokens', [
+  return invokeContract(SOROSWAP_TESTNET_ROUTER, SOROSWAP_SWAP_FN, [
     i128(amount),
     i128(0n),
     nativeToScVal([new Address(request.token), new Address(request.outputAsset)], { type: 'address' }),

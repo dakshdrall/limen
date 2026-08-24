@@ -266,6 +266,8 @@ export async function recordDeployment(
     deployTxHash: string;
     installTxHash: string;
     contextRuleId: number;
+    /** The venue rule's id for a trading agent, null for a payment agent. */
+    venueContextRuleId: number | null;
     ownerPublicKey: string;
     agentPublicKey: string;
   },

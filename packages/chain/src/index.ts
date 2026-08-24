@@ -118,3 +118,4 @@ export {
   type ActivityWindow,
   type EnforcedSpend,
 } from './events.js';
+export { SOROSWAP_TESTNET_ROUTER, SOROSWAP_SWAP_FN, SOROSWAP_QUOTE_FN } from './venues.js';

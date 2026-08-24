@@ -51,7 +51,7 @@
 
 import { rpc } from '@stellar/stellar-sdk';
 import { SynthesisError, synthesize } from '@limen/core';
-import { NotEnforceableError, lower } from '@limen/chain';
+import { NotEnforceableError, SOROSWAP_TESTNET_ROUTER, lower } from '@limen/chain';
 import { MAX_NAME_LENGTH } from '@/lib/agent-config';
 import {
   compileToObservation,
@@ -153,6 +153,36 @@ export async function POST(
   let plan;
   try {
     proposal = synthesize(compileToObservation(config, { atLedger }), synthesisOptionsFor(config));
+
+    /*
+     * A trading agent gets a venue rule beside its token rule.
+     *
+     * Added here rather than inside `synthesize`, and the placement is the
+     * argument. `synthesize` derives a boundary from a transaction that
+     * happened — it reads movements and infers the minimum rule that would
+     * have permitted them. A venue is not derived from anything: it is
+     * *declared* by the person configuring the agent, when they say which pair
+     * it may trade. Deriving it would mean inventing an authority nobody asked
+     * for; declaring it keeps the two kinds of policy honestly apart.
+     *
+     * `lower` decides whether it is installable, and refuses a venue with no
+     * spending limit behind it. The safety argument lives there, where the
+     * refusal is.
+     */
+    if (config.enforcedOffChain.allowedPairs.length > 0) {
+      proposal = {
+        ...proposal,
+        policies: [
+          ...proposal.policies,
+          { kind: 'venue' as const, contractId: SOROSWAP_TESTNET_ROUTER },
+        ],
+        rationale: [
+          ...proposal.rationale,
+          `venue:${SOROSWAP_TESTNET_ROUTER}:declared:pairs=${config.enforcedOffChain.allowedPairs.join(',')}`,
+        ],
+      };
+    }
+
     plan = lower(proposal);
   } catch (error) {
     if (error instanceof SynthesisError) {
