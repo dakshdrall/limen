@@ -2773,6 +2773,72 @@ The `spentInWindow` is the 20 XLM payment from the run above, read back off the
 policy contract by a different code path than the one that made it. Nothing in
 that block came from a table.
 
+**NOT RUN — Freighter's signature envelope, 2026-08-24.** Piece 4 (wallet
+sign-in) turns on one fact that cannot be read out of this repository: whether a
+server holding only a `G…` can verify what Freighter signed, and over which
+bytes. `@stellar/freighter-api` is a relay — no ed25519, no SHA-256, no
+`Keypair`, and its own unit test mocks the signature as the string `"foo"` — so
+the envelope belongs to the extension, and the extension is not here. The
+console approach does not work either: Freighter exposes no callable global, it
+talks over `postMessage`, and the npm client is the only door.
+
+So the question is measured rather than assumed. `/app/dev/freighter` calls
+`isConnected`, `requestAccess`, `getNetwork` and
+`signMessage('limen-test-123')` with the testnet passphrase, renders
+`signerAddress`, the **type** of `signedMessage` and its value, and posts both
+to `/api/dev/freighter-verify`. The verdict is computed there, not in the page,
+because a browser agreeing with itself about a signature it just produced is
+worth nothing — the claim under test is about a *server*.
+
+The route tries four envelopes and reports which one verified, rather than
+checking SEP-53 alone and answering a bare no:
+
+| candidate | what is signed |
+|---|---|
+| `sep53` | `SHA-256("Stellar Signed Message:\n" ‖ message)`, via `Keypair.verifyMessage` |
+| `sep53-manual` | the same bytes, assembled by hand and checked with raw `verify` |
+| `raw-utf8` | the message's UTF-8 bytes, directly |
+| `sha256-message` | `SHA-256(message)`, no prefix |
+
+A `false` across all four is a **finding**, not a failure: it means the envelope
+is none of these and the next move is to ask Freighter's authors, not to invent
+one. `sep53` and `sep53-manual` must agree, and their agreement is what makes a
+`true` evidence about the extension rather than about the SDK.
+
+Both halves fail closed. `probesEnabled` returns false for any environment it
+cannot prove is non-production — the page 404s rather than rendering a refusal
+that would confirm the route exists, and the route 404s because it does
+cryptography with an address and a signature from an untrusted caller. The
+probe is deliberately absent from `SiteHeader`'s `SECTIONS`: it is not a section
+of the product, it is an experiment with a URL, and it is deleted once the
+question has an answer.
+
+What is checked so far, and what is not:
+
+```
+vitest test/freighter-probe.test.ts     10 passed — every envelope named correctly,
+                                        including the "none of these" case,
+                                        the wrong-key case, hex, a 32-byte
+                                        signature, and the production 404
+eslint (four new files)                 clean
+tsc --noEmit                            no error in any probe file
+                                        (one pre-existing error in
+                                        test/rate-limit.test.ts, untouched)
+GET  /app/dev/freighter                 200 against the running dev server
+POST /api/dev/freighter-verify          200, verified: true, verifiedBy
+                                        [sep53, sep53-manual] — for a signature
+                                        made HERE by Keypair.signMessage
+```
+
+That last line is the measure of the instrument, not the answer. It proves the
+route names the right envelope for a signature whose envelope is already known.
+**The signature that matters has not been produced.** It requires Freighter in
+a real browser and a human clicking the button, and until that happens piece 4
+has no premise. Step B — connect → server challenge from the existing Upstash
+challenge store → wallet signs → server verifies → the same session cookie the
+passkey path issues — is written but not begun, and it stays unbegun rather
+than being built against a guess.
+
 ### M5 — End-to-end on testnet
 
 The brief §51 demo, driven from the web chat: permitted, refused, revoked, and
