@@ -2935,11 +2935,49 @@ the capped token back out through `transfer`. Whether that trade is acceptable i
 §B8's question in a new place, and it is the owner's to answer before any of C1
 is built.
 
-**NOT RUN.** Whether an over-cap swap traps `SpendingLimitExceeded#3221` once a
-router rule exists. It needs a real signature, which needs an account whose
-signer keys this run holds — the account measured here is owned by a browser
-passkey from an earlier run. Deploying a fresh account with local ed25519 signers
-and attempting a real over-cap swap is the experiment that would close it.
+**RUN — the cap traps an over-cap swap, on a ledger, 2026-08-24.** The question
+left open above, closed by deploying a fresh account whose ed25519 signer keys
+the run holds, installing **both** rules, and swapping for real.
+
+```
+smart account CB5RIOQKCQ2J7EUNPZCEAJEW34CP2T2XO74PYGJUA3XFFKOCQX3N2KWK
+rule 1        CallContract(CDLZFC3S…)  spending_limit 10000000 (1 XLM/day)
+rule 2        CallContract(CCJUD55A…)  no policies — the venue rule
+```
+
+| attempt | amount vs cap | outcome |
+|---|---|---|
+| under cap | 0.3 XLM of 1 XLM | **succeeded**, `3b6e6a1bfcdebeb89b79541837f4859b03aa468f0e2c0782940d8ffde78f846b` |
+| over cap | 5 XLM of 1 XLM | **`SpendingLimitExceeded#3221`**, `f50d843159121842d8084be0d0827b4021fef4a1455f3a15900c81d0a09fe995` |
+
+Both are real Soroswap swaps on testnet, signed by the agent's key alone with
+`context_rule_ids = [venue, token]`. The first moved XLM into the pair and
+returned USDC. The second was refused by the account before anything moved.
+
+**The refusal is on a ledger and carries a hash, which is the whole point.** A
+refusal at simulation costs no fee and produces nothing anybody can check — it is
+Limen reporting what the network would have said. So the over-cap attempt was
+forced onto a ledger using the under-cap swap's footprint, exactly as
+`testnet.mjs` does for the transfer axis, and the code was decoded from the
+transaction's own diagnostic events rather than from the simulation. `status:
+FAILED`, `SpendingLimitExceeded#3221`, on chain, from the audited policy contract.
+
+So the answer to C0(c), which the earlier run could not reach: **the cap binds a
+swap.** Not by a Limen-side amount check — none was written and none is proposed
+— but by the spending limit seeing the `token.transfer` sub-invocation the router
+raises, exactly as the venue argument predicted.
+
+**What the venue rule costs, restated now that it is real.** Rule 2 constrains
+nothing. The agent may call any function on the Soroswap router. What stops that
+mattering is that the money still leaves through a capped transfer, and rule 2
+cannot validate a `CallContract(token)` context — so the token leg has nowhere to
+go but rule 1. `lower.ts` carries the argument in full, including why the same
+unconstrained rule on a **token** contract stays refused: a transfer *is* the
+value movement, and there is no second context behind it to catch the amount.
+
+**NOT RUN.** Anything about routing. The path is hard-coded to the direct
+XLM/USDC pair; choosing a path is the Route API's job and `POST /quote` needs a
+registered API key. No Limen code calls the Route API yet.
 
 ### M5 — End-to-end on testnet
 

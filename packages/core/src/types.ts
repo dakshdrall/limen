@@ -72,7 +72,26 @@ export interface ContextRule {
 
 export type PolicyConfig =
   | { kind: 'spending_limit'; asset: Address; limit: Amount; windowLedgers: number }
-  | { kind: 'function_allowlist'; contractId: Address; functions: string[] };
+  | { kind: 'function_allowlist'; contractId: Address; functions: string[] }
+  /**
+   * A contract the agent may call which moves no value of its own — a swap
+   * venue, a router.
+   *
+   * Its own kind rather than a `function_allowlist`, because the two make
+   * different claims and only one of them is true here. An allowlist says
+   * *these functions and no others*, and `lower` can only honour that when the
+   * set is exactly `['transfer']`, where the spending limit already enforces it.
+   * A router call is not that: nothing constrains which of its functions the
+   * agent calls. Encoding it as an allowlist would put a claim in the plan that
+   * no installed primitive performs, which is the one thing this type exists to
+   * prevent.
+   *
+   * What bounds it is stated in `lower.ts`, where the rule is built, and it is
+   * a property of the account rather than of this contract: value leaves only
+   * through `token.transfer(from = account)`, which raises its own context that
+   * only a token rule can validate.
+   */
+  | { kind: 'venue'; contractId: Address };
 
 export interface PolicyProposal {
   contextRule: ContextRule;

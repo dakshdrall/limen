@@ -204,3 +204,104 @@ describe('lower — the boundary it hands to the chain is never wider than the p
     }
   });
 });
+
+/**
+ * The venue rule, and the boundary it does and does not have.
+ *
+ * PLAN-V8 C0 measured that a swap's two auth contexts — the router call and the
+ * `token.transfer` behind it — each need their own context rule, and that a
+ * router rule cannot validate the token context (`UnvalidatedContext#3002` on
+ * live testnet). That is what makes an unconstrained venue rule bounded: the
+ * money still has to leave through a capped transfer.
+ *
+ * These pin the four things that follow from it. The one that matters most is
+ * the third — the same unconstrained rule on a *token* must stay refused,
+ * because there is no second context behind a transfer to catch the amount.
+ */
+describe('lower — a declared venue', () => {
+  const withVenue = (): PolicyProposal => {
+    const base = synthesize(singleTransfer());
+    return { ...base, policies: [...base.policies, { kind: 'venue', contractId: ROUTER }] };
+  };
+
+  it('installs a rule with no policies, and says so in the notes', () => {
+    const plan = lower(withVenue());
+    const rule = plan.rules.find((r) => r.contract === ROUTER);
+    expect(rule, 'no rule was installed for the venue').toBeDefined();
+    expect(rule?.policies).toEqual([]);
+    expect(
+      plan.notes.some((n) => n.includes(`${ROUTER}`) && n.includes('venue=unconstrained')),
+      'the plan does not record that the venue rule constrains nothing',
+    ).toBe(true);
+    // And the note says what does bound it, so a reader of the plan alone can
+    // tell this apart from an accidental empty rule.
+    expect(plan.notes.some((n) => n.includes('bounded_by=spending_limit_on_token_transfer'))).toBe(true);
+  });
+
+  it('keeps the token rule and its spending limit alongside', () => {
+    // The whole argument rests on this rule still being there. If a venue ever
+    // replaced the token rule rather than joining it, the backstop would be
+    // gone and the venue rule would be exactly the thing it must never be.
+    const plan = lower(withVenue());
+    const token = plan.rules.find((r) => r.contract === USDC);
+    expect(token?.policies.map((p) => p.kind)).toEqual(['spending_limit']);
+  });
+
+  it('still refuses an unconstrained rule on a TOKEN, which has no backstop', () => {
+    // The asymmetry, asserted directly. A transfer IS the value movement, so an
+    // unconstrained rule there is an uncapped agent — no measurement changes
+    // that and no label should be able to.
+    const base = synthesize(singleTransfer());
+    const asVenue: PolicyProposal = {
+      ...base,
+      policies: [{ kind: 'venue', contractId: USDC }],
+    };
+    try {
+      lower(asVenue);
+      expect.unreachable('an unconstrained rule on a token must be refused');
+    } catch (error) {
+      const e = error as NotEnforceableError;
+      expect(e.code).toBe('unconstrained_contract');
+      expect(e.message).toContain('installs no spending limit on any token');
+    }
+  });
+
+  it('refuses a contract declared both a venue and a capped asset', () => {
+    const base = synthesize(singleTransfer());
+    const both: PolicyProposal = {
+      ...base,
+      policies: [...base.policies, { kind: 'venue', contractId: USDC }],
+    };
+    try {
+      lower(both);
+      expect.unreachable('a contract cannot be both');
+    } catch (error) {
+      expect((error as NotEnforceableError).code).toBe('not_representable');
+    }
+  });
+
+  it('refuses a venue that also carries a function allowlist', () => {
+    const base = synthesize(singleTransfer());
+    const contradictory: PolicyProposal = {
+      ...base,
+      policies: [
+        ...base.policies,
+        { kind: 'venue', contractId: ROUTER },
+        { kind: 'function_allowlist', contractId: ROUTER, functions: ['swap'] },
+      ],
+    };
+    try {
+      lower(contradictory);
+      expect.unreachable('a venue enforces no function set');
+    } catch (error) {
+      expect((error as NotEnforceableError).code).toBe('function_allowlist_not_expressible');
+    }
+  });
+
+  it('does not treat an undeclared router as a venue', () => {
+    // A venue is declared, never inferred. The router-shaped proposal that this
+    // file already refuses must keep being refused, or "is this a router" would
+    // have become a guess about somebody else's contract.
+    expect(() => lower(synthesize(routerSwap()))).toThrow(NotEnforceableError);
+  });
+});
