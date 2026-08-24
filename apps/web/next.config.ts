@@ -20,6 +20,27 @@ const nextConfig: NextConfig = {
   },
 
   /**
+   * Origins allowed to request dev-only assets, so a probe can be clicked.
+   *
+   * Next blocks cross-origin requests to dev resources — `/__nextjs_font/*`,
+   * HMR, the error overlay — from any host other than the one the server was
+   * started on. That default is right, and it is not a production control:
+   * `allowedDevOrigins` is read only by `next dev` and has no effect on a
+   * build, so nothing here widens what the deployed app accepts.
+   *
+   * It is listed because this repository is developed in a Codespace, where the
+   * browser reaches the server through a forwarded `*.app.github.dev` host
+   * while the server believes it is `localhost`. Every request is therefore
+   * cross-origin, and the visible symptom is a page that renders but whose
+   * fonts and overlay are blocked — which is a confusing thing to hand somebody
+   * who is about to run a measurement and needs to trust what they see.
+   *
+   * `127.0.0.1` is here alongside `localhost` because they are different
+   * origins to this check, and the VS Code port forwarder uses the numeric one.
+   */
+  allowedDevOrigins: ['localhost', '127.0.0.1', '*.app.github.dev'],
+
+  /**
    * `/demo` moved to `/app/simulator` when the demo stopped being the product
    * and became one instrument among several.
    *
