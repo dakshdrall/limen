@@ -2839,6 +2839,108 @@ challenge store → wallet signs → server verifies → the same session cookie
 passkey path issues — is written but not begun, and it stays unbegun rather
 than being built against a guess.
 
+**MEASURED — does a spending_limit bind a Soroswap swap? 2026-08-24.** C0, the
+fact Milestone 3 rests on. Run against live testnet against the account
+`CBFLENP2CYSUAM5G45B52DQC6HX7VEIQYTKEIROXL4ETD36KZEBXLMYM` from the agent-builder
+run, which carries a `spending_limit` of `1000000` (0.1 XLM at 7dp) on
+`CDLZFC3S…` — and Soroswap's testnet XLM is that same contract, so the input
+token of an XLM→USDC swap is exactly the token the rule covers.
+
+**(d) The addresses, read from source and confirmed live.** Soroswap's router on
+testnet is `CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD` and the
+factory is `CDP3HMUH6SMS3S7NPGNDJLULCOXXEPSHY4JKUKMBNQMATHDHWXRRJTBY`, agreeing
+between `soroswap/core`'s `public/testnet.contracts.json` and their own live
+`GET /api/testnet/router`. Testnet USDC is
+`CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F` and testnet XLM is
+`CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`, from
+`soroswap/core`'s `public/tokens.json`. All four exist on testnet — probed by
+`getLedgerEntries` on the contract instance, not assumed. The Route API is
+`https://api.soroswap.finance`, `POST /quote` and `POST /quote/build`, with
+`?network=testnet|mainnet`, read from their OpenAPI document at `/api-json`.
+**`POST /quote` answers `403 Forbidden` without a registered API key**, which is
+an account on a third-party service and therefore a decision rather than a step.
+
+**(a) Yes — the input token leaves by `token.transfer` from the smart account.**
+From their router source: `to.require_auth()` and then
+`TokenClient::new(&e, &path.get(0).unwrap()).transfer(&to, &pair, &amounts.get(0).unwrap())`,
+where `to` is the caller. Confirmed on chain rather than from the source alone —
+a recording simulation of `swap_exact_tokens_for_tokens` returns one auth entry
+whose credentials name the smart account, with this invocation tree:
+
+```
+CCJUD55A… :: swap_exact_tokens_for_tokens
+  └─ CDLZFC3S… :: transfer
+```
+
+**(b) Yes — `__check_auth` sees that sub-invocation.** Proved by the diagnostic
+event from an enforcing simulation, which prints the arguments `__check_auth`
+was actually called with:
+
+```
+fn_call CBFLENP2… __check_auth
+  { context_rule_ids: [0, 1], signers: {…} }
+  [ [Contract, { contract: CCJUD55A…, fn_name: swap_exact_tokens_for_tokens }]
+  , [Contract, { contract: CDLZFC3S…, fn_name: transfer,
+                 args: [CBFLENP2…, CDVAIOYH…(the pair), 500000] }] ]
+```
+
+Two contexts, the transfer among them, with the smart account as `from`. So the
+premise of the milestone is sound as far as it goes.
+
+**(c) An over-cap swap does not trap with `SpendingLimitExceeded`, and does not
+succeed unbounded. No swap executes at all.** The agent cannot authorize one at
+any amount. `AuthPayload` carries one `context_rule_id` per context, and the
+agent has exactly one rule — `CallContract(CDLZFC3S…)`, the token. Every
+assignment was tried, agent-signed, against live testnet:
+
+```
+ids [1,1]   its own rule for both contexts     UnvalidatedContext#3002
+ids [0,1]   borrow the Default rule for router UnvalidatedContext#3002
+ids [0,0]   Default for both                   UnvalidatedContext#3002
+ids [1]     one id for two contexts            ContextRuleIdsLengthMismatch#3014
+```
+
+The first is the finding: a `CallContract(token)` rule cannot validate a
+`CallContract(router)` context, so the router leg has no rule the agent may use.
+The second and third fail because the agent is not a signer on the `Default`
+rule — rule 0's signer is the owner's key, so borrowing it fails the threshold
+check. The fourth confirms the shape: `__check_auth` requires exactly one rule id
+per context, so a swap needs two.
+
+**The control, which is what makes the above readable.** A bare over-cap
+`transfer` — the exact call the spending limit exists to bound — was run with the
+same forged signature and reached the External verifier just as the swap did.
+That proves the policy is evaluated **after** signature verification, so
+"execution reached the verifier" says nothing about whether a cap would have
+trapped. Without it, the swap results would have read as "the policy passed",
+which is not a thing this run measured. Context validation *is* before
+signatures, which is why the `#3002` results above are real.
+
+**What this means for C1, stated as a decision rather than a plan.** The cap does
+not bind a swap today because no swap can happen. Making one possible needs a
+second context rule for the router contract — and `lower.ts` refuses to install
+one by name (`unconstrained_contract`): a context rule with no policy authorizes
+*every* function on its contract, and no audited primitive constrains a router
+call. That refusal is correct and should not be relaxed quietly.
+
+There is a narrower shape worth measuring next, and it is **not** measured here:
+install `CallContract(router)` for the agent *alongside* the existing
+`CallContract(token)` rule. A swap's two contexts would then be `[router, token]`
+and the token context can only match the token rule — a router rule cannot
+validate a `CallContract(token)` context, by the same argument that produced
+`#3002` above — so the spending limit would still be the thing that sees the
+transfer amount. The cost is that the router rule itself bounds nothing: the
+agent could call any router function, constrained only where that function moves
+the capped token back out through `transfer`. Whether that trade is acceptable is
+§B8's question in a new place, and it is the owner's to answer before any of C1
+is built.
+
+**NOT RUN.** Whether an over-cap swap traps `SpendingLimitExceeded#3221` once a
+router rule exists. It needs a real signature, which needs an account whose
+signer keys this run holds — the account measured here is owned by a browser
+passkey from an earlier run. Deploying a fresh account with local ed25519 signers
+and attempting a real over-cap swap is the experiment that would close it.
+
 ### M5 — End-to-end on testnet
 
 The brief §51 demo, driven from the web chat: permitted, refused, revoked, and
