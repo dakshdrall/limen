@@ -396,6 +396,7 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
           id: policies.id,
           proposalJson: policies.proposalJson,
           installPlanJson: policies.installPlanJson,
+          enforcedOffchainJson: policies.enforcedOffchainJson,
           validUntilLedger: policies.validUntilLedger,
         })
         .from(policies)
@@ -422,6 +423,7 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         id: row.id,
         proposal: row.proposalJson as ProposedPolicy['proposal'],
         installPlan: row.installPlanJson as ProposedPolicy['installPlan'],
+        enforcedOffChain: (row.enforcedOffchainJson ?? null) as ProposedPolicy['enforcedOffChain'],
         validUntilLedger: row.validUntilLedger,
       };
     },

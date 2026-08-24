@@ -151,9 +151,16 @@ export function PolicyTable({ proposal }: { proposal: PolicyProposal }) {
                           ({ledgersToDuration(policy.windowLedgers)})
                         </span>
                       </span>
-                    ) : (
+                    ) : policy.kind === 'function_allowlist' ? (
                       <span className="value text-foreground">
-                        {policy.functions.map((fn) => `${fn}()`).join(', ')}
+                        {policy.functions.map((fn: string) => `${fn}()`).join(', ')}
+                      </span>
+                    ) : (
+                      // A venue. It constrains no function, and saying so is
+                      // the honest render — an empty cell would read as a
+                      // missing value rather than as an absent limit.
+                      <span className="text-[12.5px] text-muted">
+                        any function — bounded by the token cap, not here
                       </span>
                     )}
                   </td>

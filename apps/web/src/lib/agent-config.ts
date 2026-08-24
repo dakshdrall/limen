@@ -215,6 +215,19 @@ export interface AgentConfigDraft {
   perTransactionCap: string;
   /** `G…` or `C…`. Enforced by nothing today. */
   recipients: string[];
+  /**
+   * The token this agent may buy, as a contract address. Empty for none.
+   *
+   * With `assetContractId` — the token it may spend — this is the pair. Kept as
+   * two fields rather than one `A/B` string because they are two different
+   * questions on the form and the second is optional: an agent that only pays
+   * has no output asset.
+   */
+  outputAssetContractId: string;
+  /** Display only, like `assetLabel`. Nothing on chain reads it. */
+  outputAssetLabel: string;
+  /** The largest single trade, as a decimal amount. Empty for no ceiling. */
+  maxPositionSize: string;
 }
 
 /** The validated, canonical form. Amounts are integer smallest units. */
@@ -245,6 +258,17 @@ export interface AgentConfig {
     /** Integer smallest units, or `null` for no per-call ceiling. */
     perTransactionCap: string | null;
     recipients: Address[];
+    /**
+     * The pairs this agent may trade, as `INPUT/OUTPUT` contract ids.
+     *
+     * Empty when no output asset was given, and empty means **no pair is
+     * allowed** — the runtime refuses every swap rather than permitting any.
+     * Same direction as `recipients`, and for the same reason: a list nobody
+     * filled in is not permission.
+     */
+    allowedPairs: string[];
+    /** The largest single trade, in integer smallest units, or `null`. */
+    maxPositionSize: string | null;
   };
 
   /** Display only. Kept beside the config so a screen need not re-derive it. */
@@ -321,6 +345,9 @@ export function emptyDraft(): AgentConfigDraft {
     expiryId: DEFAULT_EXPIRY_ID,
     perTransactionCap: '',
     recipients: [],
+    outputAssetContractId: '',
+    outputAssetLabel: '',
+    maxPositionSize: '',
   };
 }
 
@@ -366,6 +393,9 @@ export function reviveDraft(stored: unknown, description = ''): AgentConfigDraft
     description: description.length > 0 ? description : text('description'),
     assetLabel: text('assetLabel'),
     assetContractId: text('assetContractId'),
+    outputAssetContractId: text('outputAssetContractId'),
+    outputAssetLabel: text('outputAssetLabel'),
+    maxPositionSize: text('maxPositionSize'),
     assetDecimals: text('assetDecimals'),
     cap: text('cap'),
     windowId: text('windowId'),
@@ -489,6 +519,51 @@ export function validate(draft: AgentConfigDraft): ValidationResult {
     refuse('recipients', `At most ${MAX_RECIPIENTS} approved recipients, so the list stays one a person reads.`);
   }
 
+  /**
+   * The output asset, and the pair it makes.
+   *
+   * Optional: an agent that only pays has no output asset, and requiring one
+   * would refuse a payment agent for lacking a field it does not use. When one
+   * is given it has to be a real contract address and it has to differ from the
+   * input, because a pair of one token is not a trade.
+   */
+  const outputAssetContractId = draft.outputAssetContractId.trim();
+  const allowedPairs: string[] = [];
+  if (outputAssetContractId.length > 0) {
+    if (!CONTRACT_ADDRESS.test(outputAssetContractId)) {
+      refuse(
+        'outputAssetContractId',
+        `${outputAssetContractId} is not a token contract address. Contract addresses begin with C.`,
+      );
+    } else if (outputAssetContractId === assetContractId) {
+      refuse('outputAssetContractId', 'A pair needs two different tokens.');
+    } else {
+      allowedPairs.push(`${assetContractId}/${outputAssetContractId}`);
+    }
+  }
+
+  /**
+   * The maximum position, parsed the same way the cap is.
+   *
+   * A per-trade ceiling, and deliberately not compared against the cap here.
+   * One larger than the window cap is not a contradiction — it simply never
+   * binds, because the network refuses first — and refusing it would be Limen
+   * having an opinion about a number the chain already governs.
+   */
+  let maxPositionSize: string | null = null;
+  const rawPosition = draft.maxPositionSize.trim();
+  if (rawPosition.length > 0 && decimalsValid) {
+    maxPositionSize = toSmallestUnits(rawPosition, assetDecimals);
+    if (maxPositionSize === null) {
+      refuse(
+        'maxPositionSize',
+        `Not an amount this asset can express at ${assetDecimals} decimal places.`,
+      );
+    } else if (BigInt(maxPositionSize) <= 0n) {
+      refuse('maxPositionSize', 'Leave this empty for no per-trade ceiling rather than setting zero.');
+    }
+  }
+
   if (problems.length > 0) return { ok: false, problems };
 
   /**
@@ -518,7 +593,7 @@ export function validate(draft: AgentConfigDraft): ValidationResult {
         windowLedgers: window.ledgers,
         validityLedgers: expiry.ledgers,
       },
-      enforcedOffChain: { perTransactionCap, recipients },
+      enforcedOffChain: { perTransactionCap, recipients, allowedPairs, maxPositionSize },
       display: {
         assetLabel: draft.assetLabel.trim(),
         assetDecimals,

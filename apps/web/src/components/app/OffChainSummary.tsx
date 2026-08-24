@@ -44,11 +44,15 @@ import { fromSmallestUnits } from '@/lib/agent-config';
 export function OffChainSummary({
   perTransactionCap,
   recipients,
+  allowedPairs,
+  maxPositionSize,
   assetLabel,
   assetDecimals,
 }: {
   perTransactionCap: string | null;
   recipients: readonly string[];
+  allowedPairs: readonly string[];
+  maxPositionSize: string | null;
   assetLabel: string;
   assetDecimals: number;
 }) {
@@ -88,6 +92,42 @@ export function OffChainSummary({
                 <span className="value">
                   {fromSmallestUnits(perTransactionCap, assetDecimals)} {asset}
                 </span>
+              )}
+            </dd>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <dt className="col-head text-muted-dim">max position size</dt>
+            <dd className="text-[13px] text-foreground">
+              {maxPositionSize === null ? (
+                <span className="text-muted">
+                  None. A single trade may spend the whole of the remaining cap.
+                </span>
+              ) : (
+                <span className="value">
+                  {fromSmallestUnits(maxPositionSize, assetDecimals)} {asset}
+                </span>
+              )}
+            </dd>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <dt className="col-head text-muted-dim">allowed pairs</dt>
+            <dd className="text-[13px] text-foreground">
+              {allowedPairs.length === 0 ? (
+                // The same direction the counterparty list takes, and worth as
+                // many words: an empty list is not "any pair", it is none.
+                <span className="text-muted">
+                  None. Limen refuses every swap this agent proposes until a pair is configured.
+                </span>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {allowedPairs.map((pair) => (
+                    <li key={pair} className="scroll-x font-mono text-[12px] break-words">
+                      {pair}
+                    </li>
+                  ))}
+                </ul>
               )}
             </dd>
           </div>

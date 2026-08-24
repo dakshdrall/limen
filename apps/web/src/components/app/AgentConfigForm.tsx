@@ -251,6 +251,41 @@ export function AgentConfigForm({
         </Field>
 
         <Field
+          label="Allowed pair"
+          htmlFor="agent-output-asset"
+          messages={messagesFor('outputAssetContractId')}
+          hint="Optional. The token this agent may buy, as a contract address. With the token above — the one it spends — this is the pair it may trade. Leave it empty for an agent that only pays."
+        >
+          <input
+            id="agent-output-asset"
+            className="field"
+            type="text"
+            spellCheck={false}
+            placeholder="C…"
+            value={draft.outputAssetContractId}
+            disabled={disabled}
+            onChange={(event) => set('outputAssetContractId', event.target.value)}
+          />
+        </Field>
+
+        <Field
+          label="Max position size"
+          htmlFor="agent-max-position"
+          messages={messagesFor('maxPositionSize')}
+          hint="Optional. The most any single trade may spend. Different from the spend cap above, which governs a whole window — an agent under a daily cap can otherwise spend all of it in one trade. Leave it empty for no ceiling."
+        >
+          <input
+            id="agent-max-position"
+            className="field"
+            type="text"
+            inputMode="decimal"
+            value={draft.maxPositionSize}
+            disabled={disabled}
+            onChange={(event) => set('maxPositionSize', event.target.value)}
+          />
+        </Field>
+
+        <Field
           label="Allowed counterparties"
           htmlFor="agent-recipients"
           messages={messagesFor('recipients')}

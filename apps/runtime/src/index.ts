@@ -115,3 +115,14 @@ export type { Job, ReservedJob } from './queue.js';
 export type { JobHandler } from './worker.js';
 export type { AgentForTurn, RuntimeStore, TurnRecord, TurnRequest } from './store.js';
 export type { ToolResult } from './tools/types.js';
+export {
+  executeTradingDecision,
+  evaluateTrigger,
+  readPrice,
+  PRICE_PROBE_AMOUNT,
+  type CycleResult,
+  type PriceReading,
+  type TradingConfig,
+  type TradingTrigger,
+  type TriggerVerdict,
+} from './trading.js';

@@ -38,6 +38,15 @@ function policyToScVal(policy: PolicyProposal['policies'][number]): xdr.ScVal {
       ['window_ledgers', u32(policy.windowLedgers)],
     ]);
   }
+  if (policy.kind === 'venue') {
+    // A venue names no functions, because it constrains none. Encoding an
+    // empty `functions` list would claim an allowlist that permits nothing,
+    // which is the opposite of what a venue rule does.
+    return map([
+      ['kind', sym('venue')],
+      ['contract_id', addr(policy.contractId)],
+    ]);
+  }
   return map([
     ['kind', sym('function_allowlist')],
     ['contract_id', addr(policy.contractId)],

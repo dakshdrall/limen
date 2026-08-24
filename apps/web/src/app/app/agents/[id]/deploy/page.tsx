@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { BuildSteps } from '@/components/app/BuildSteps';
 import { DeployStep } from '@/components/app/DeployStep';
+import { OffChainSummary } from '@/components/app/OffChainSummary';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
 import { requireUser } from '@/lib/route-session';
 import { drizzleAgentStore } from '@/lib/stores';
@@ -59,6 +60,24 @@ export default async function DeployPage({ params }: { params: Promise<{ id: str
           </p>
 
           <DeployStep agentId={agent.id} plan={policy.installPlan} />
+
+          {/*
+            The limits the chain will NOT enforce, shown beside the ones it
+            will. Rendered from the stored row rather than recomputed, so what
+            is on screen is what was written down. Every constraint the builder
+            collects appears here — a limit collected and never shown is the
+            per-transaction-ceiling gap all over again.
+          */}
+          {policy.enforcedOffChain !== null && (
+            <OffChainSummary
+              perTransactionCap={policy.enforcedOffChain.perTransactionCap}
+              recipients={policy.enforcedOffChain.recipients}
+              allowedPairs={policy.enforcedOffChain.allowedPairs ?? []}
+              maxPositionSize={policy.enforcedOffChain.maxPositionSize ?? null}
+              assetLabel={policy.proposal.policies.find((p) => p.kind === 'spending_limit')?.asset ?? ''}
+              assetDecimals={7}
+            />
+          )}
         </div>
 
         <aside className="flex flex-col gap-8 lg:border-l lg:border-border-subtle lg:pl-8">

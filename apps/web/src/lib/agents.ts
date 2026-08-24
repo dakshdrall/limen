@@ -214,6 +214,14 @@ export interface ProposedPolicy {
   proposal: PolicyProposal;
   installPlan: InstallPlan;
   validUntilLedger: number | null;
+  /**
+   * The limits Limen enforces, read back so the deploy screen can render them.
+   *
+   * Read from the stored row rather than recomputed from the draft: what a
+   * person is shown before deploying has to be what was written down, not what
+   * a second derivation happens to produce.
+   */
+  enforcedOffChain: AgentConfig['enforcedOffChain'] | null;
 }
 
 /**

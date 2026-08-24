@@ -128,6 +128,12 @@ describe('the two halves stay apart', () => {
     expect(result.config.enforcedOffChain).toEqual({
       perTransactionCap: '100000000',
       recipients: [SUPPLIER, OTHER_SUPPLIER],
+      // Both empty here because this draft configures a payment agent: no
+      // output asset means no pair, and no pair means Limen refuses every
+      // swap — which is the safe direction and the same one `recipients`
+      // takes. A trading draft is covered separately below.
+      allowedPairs: [],
+      maxPositionSize: null,
     });
   });
 
@@ -477,5 +483,75 @@ describe('a config compiles into the pipeline that already exists', () => {
     const observed = compileToObservation(result.config, { atLedger: 1_000_000 });
     expect(JSON.stringify(observed)).not.toContain(SUPPLIER);
     expect(JSON.stringify(observed)).not.toContain(OTHER_SUPPLIER);
+  });
+});
+
+/**
+ * The two constraints a trading agent adds, and the one thing they must not be.
+ *
+ * `allowedPairs` and `maxPositionSize` are Limen's, because the account cannot
+ * see either — it sees an amount and a period, never which asset came back and
+ * never a per-call ceiling. So they are collected here, validated here, and
+ * rendered on the deploy screen; a limit collected and never shown is the
+ * per-transaction-ceiling gap repeated.
+ *
+ * What they must not become is a second cap. The window cap is the network's
+ * and it refuses on a ledger with a code and a hash — PLAN-V8 C0 measured it —
+ * so nothing below compares an amount against it.
+ */
+describe('a trading draft carries the two limits the account cannot see', () => {
+  const XLM_CONTRACT = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+  const USDC_CONTRACT = 'CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F';
+
+  const trading = () => ({
+    ...emptyDraft(),
+    name: 'Dip buyer',
+    description: 'buy XLM whenever the price drops 5%, spend at most 20 USDC a day',
+    assetContractId: USDC_CONTRACT,
+    assetLabel: 'USDC',
+    assetDecimals: '7',
+    cap: '20',
+    outputAssetContractId: XLM_CONTRACT,
+    outputAssetLabel: 'XLM',
+    maxPositionSize: '5',
+  });
+
+  it('builds the pair from the token it spends and the token it buys', () => {
+    const result = validate(trading());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.enforcedOffChain.allowedPairs).toEqual([`${USDC_CONTRACT}/${XLM_CONTRACT}`]);
+    expect(result.config.enforcedOffChain.maxPositionSize).toBe('50000000');
+  });
+
+  it('refuses a pair of one token', () => {
+    const result = validate({ ...trading(), outputAssetContractId: USDC_CONTRACT });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.problems.some((p) => p.field === 'outputAssetContractId')).toBe(true);
+  });
+
+  it('refuses an output asset that is not a contract address', () => {
+    const result = validate({ ...trading(), outputAssetContractId: 'not-an-address' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('allows a position size above the window cap, because the network refuses first', () => {
+    // Deliberately NOT refused, and the asymmetry with `perTransactionCap` is
+    // the point. That one is refused above the cap because it could never bind
+    // and would read as protection that is not there. A position size above
+    // the cap is the same shape — but the cap here is the *network's*, and
+    // Limen having an opinion about a number the chain already governs is the
+    // inversion this project exists to avoid. It simply never binds.
+    const result = validate({ ...trading(), maxPositionSize: '999' });
+    expect(result.ok).toBe(true);
+  });
+
+  it('leaves a payment draft with no pair and no position size', () => {
+    const result = validate({ ...trading(), outputAssetContractId: '', maxPositionSize: '' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.enforcedOffChain.allowedPairs).toEqual([]);
+    expect(result.config.enforcedOffChain.maxPositionSize).toBeNull();
   });
 });
