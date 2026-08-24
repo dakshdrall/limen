@@ -121,6 +121,12 @@ describe('the chain figures are what the deployments file says', () => {
       // again, from a passkey registered in the page, so it is an eighth
       // account and not a re-run against any of the seven above.
       ...recorded.agentBuilderRun.runs.map((run) => run.smartAccount),
+      // The trading run's account, and the ninth. Its owner is an ed25519 key
+      // the run generated and held, which is what let it sign a real over-cap
+      // swap rather than only simulating one — the earlier accounts are owned
+      // by browser passkeys no script can sign for. It is also the only account
+      // here carrying two context rules.
+      recorded.tradingRun.smartAccount,
     ]);
     expect(EVIDENCE.chain.smartAccounts).toBe(accounts.size);
     expect(accounts.size).toBeGreaterThan(1);

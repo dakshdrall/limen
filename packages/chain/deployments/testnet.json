@@ -307,5 +307,38 @@
     "verifiedBy": "Three independent reads, none of them the screen. /api/agents/[id]/deployed re-read the account's context rules over RPC and the numbers matched the cap and window typed into the form. The agents, agent_accounts and policies rows were then read back out of Postgres by the test process over raw SQL rather than through the application's own store. All five hashes were afterwards confirmed SUCCESS against soroban-testnet.stellar.org by getTransaction.",
     "agentKeyNote": "agent_keys is empty for this run and that is correct rather than missing: the browser-driven path generates the agent key in the page and keeps it in localStorage, so no server-side envelope-encrypted key is written. The master key environment variable was set for the run and was not reached by it. It is named here by description rather than spelled out: this file ships to the browser inside evidence.json, and the CI fence proving that variable's name never reaches the client bundle has to be a plain grep to be worth anything.",
     "foundByThisRun": "Two defects in the spec, both fixed before the run that passed, neither in the product. `section.filter({ has: h3 }).first()` also matches step 2's own <section>, which wraps both halves of the partition, so the check that the per-payment ceiling is not in the on-chain group was reading the whole step and asserting nothing. And the two friendbot panels are matched by one locator, so the single-element `not.toContainText` on them died of strict mode with both fundings already on a ledger."
+  },
+  "tradingRun": {
+    "note": "PLAN-V8 C0's open question, closed: does the installed spending_limit bind a Soroswap swap? A fresh account was deployed with ed25519 signer keys the run held, BOTH rules were installed — the token rule carrying the cap and the venue rule authorizing the router — and two real swaps were submitted. The under-cap swap succeeded. The over-cap swap was refused by the account with SpendingLimitExceeded#3221, on a ledger, with a hash. No Limen-side amount check exists on this path and none was written; the cap is the network's and it enforced it.",
+    "producedBy": "a one-off script, not scripts/ — the run is recorded here because the hashes are checkable, and the script was deleted rather than kept as a half-finished tool",
+    "signedBy": "local ed25519 keys generated in-process; the agent signed both swaps alone, with context_rule_ids = [venue, token]",
+    "ranAt": "2026-08-24",
+    "smartAccount": "CB5RIOQKCQ2J7EUNPZCEAJEW34CP2T2XO74PYGJUA3XFFKOCQX3N2KWK",
+    "deployTx": "19721882ff67a500d3aa9b38e3c2048846c0fda36508ef0b917a886f030c9fdc",
+    "venue": "CCJUD55AG6W5HAI5LRVNKAE5WDP5XGZBUDS5WNTIVDU7O264UZZE7BRD",
+    "venueNote": "Soroswap testnet router, agreeing between soroswap/core public/testnet.contracts.json and their live GET /api/testnet/router, and probed on testnet before being written down.",
+    "inputAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "outputAsset": "CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F",
+    "tokenRuleId": 1,
+    "venueRuleId": 2,
+    "cap": "10000000",
+    "capNote": "1 XLM at 7 decimals, per 17280 ledgers.",
+    "swaps": [
+      {
+        "which": "under the cap",
+        "amount": "3000000",
+        "outcome": "succeeded",
+        "hash": "3b6e6a1bfcdebeb89b79541837f4859b03aa468f0e2c0782940d8ffde78f846b"
+      },
+      {
+        "which": "over the cap",
+        "amount": "50000000",
+        "outcome": "refused_by_network",
+        "contractError": "SpendingLimitExceeded#3221",
+        "hash": "f50d843159121842d8084be0d0827b4021fef4a1455f3a15900c81d0a09fe995",
+        "onLedgerNote": "Forced onto a ledger using the under-cap swap’s footprint, the way testnet.mjs does for the transfer axis. A refusal at simulation costs no fee and produces no hash, which makes it Limen’s report of what the network would have said rather than the network saying it. The code was decoded from the transaction’s own diagnostic events."
+      }
+    ],
+    "foundByThisRun": "The auth tree a router call raises under the account’s credentials is two contexts — the swap, and a token.transfer beneath it with from = the smart account. AuthPayload carries one context_rule_id per context, so a swap needs both rules; a token rule cannot validate the router context (UnvalidatedContext#3002) and the agent is not a signer on the Default rule, so before the venue rule existed the agent could not authorize a swap at any amount."
   }
 }
