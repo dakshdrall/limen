@@ -37,8 +37,8 @@ import { fromSmallestUnits } from '@/lib/agent-config';
  *
  * ## The empty case is a claim, not a gap
  *
- * No approved recipients is not "unrestricted" — it is Limen refusing every
- * payment the agent proposes. That is worth more words than a dash, because a
+ * No allowed counterparties is not "unrestricted" — it is Limen refusing every
+ * trade the agent proposes. That is worth more words than a dash, because a
  * blank list in a permissions screen reads as *no limit* to almost everybody.
  */
 export function OffChainSummary({
@@ -69,7 +69,7 @@ export function OffChainSummary({
           </strong>{' '}
           No audited policy contract constrains a transfer&rsquo;s destination or the size of a
           single call — OpenZeppelin&rsquo;s spending limit takes an amount and a period and sees
-          nothing else. Limen&rsquo;s server refuses a payment that breaks these. Someone holding
+          nothing else. Limen&rsquo;s server refuses a trade that breaks these. Someone holding
           the agent&rsquo;s key could ignore Limen and send to any address, up to the cap above.
           Lower the cap if that matters more than convenience.
         </p>
@@ -78,11 +78,11 @@ export function OffChainSummary({
       <div className="panel" data-tone="unproven">
         <dl className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <dt className="col-head text-muted-dim">per-payment ceiling</dt>
+            <dt className="col-head text-muted-dim">per-trade cap</dt>
             <dd className="text-[13px] text-foreground">
               {perTransactionCap === null ? (
                 <span className="text-muted">
-                  None. Any single payment may be as large as the remaining cap allows.
+                  None. Any single trade may be as large as the remaining cap allows.
                 </span>
               ) : (
                 <span className="value">
@@ -94,14 +94,14 @@ export function OffChainSummary({
 
           <div className="flex flex-col gap-1">
             <dt className="col-head text-muted-dim">
-              approved recipients {recipients.length > 0 && `(${recipients.length})`}
+              allowed counterparties {recipients.length > 0 && `(${recipients.length})`}
             </dt>
             <dd className="text-[13px]">
               {recipients.length === 0 ? (
                 // Not a dash. A blank list in a permissions screen reads as
                 // "no limit" to almost everybody, and it means the opposite.
                 <span className="text-muted">
-                  None approved, so Limen refuses every payment this agent proposes until you add
+                  None allowed, so Limen refuses every trade this agent proposes until you add
                   one. This is a stop, not an absence of one.
                 </span>
               ) : (

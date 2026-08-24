@@ -1061,3 +1061,79 @@ describe('the accurate-or-absent rule is written down where it is enforced', () 
     expect(README).toContain('Ingest is accurate or absent, never quietly narrowed.');
   });
 });
+
+/**
+ * The copy is about trading now, and the one thing it must not say.
+ *
+ * The product moved from payments to trading and the interface said payments
+ * for a while afterwards — a placeholder offering *"pay approved suppliers up
+ * to 50 USDC"*, a review step labelled "Per-payment ceiling". Copy that
+ * describes the previous product is not a cosmetic problem: a placeholder is
+ * the strongest instruction on a form, because it is the shape of answer people
+ * copy.
+ *
+ * The trap this file exists for is the opposite mistake, and it is the one that
+ * would matter: **rewriting the copy into a claim that trading works.** It does
+ * not. There is no swap tool, `send_payment` is the only thing an agent can
+ * call, and whether a spending limit even binds a swap is unmeasured. So the
+ * assertions below come in two halves — what the copy now says, and what it is
+ * still not allowed to say.
+ */
+describe('the app surface speaks about trading, and does not claim it trades', () => {
+  const strategyInput = source('components/app/StrategyInput.tsx');
+  const configForm = source('components/app/AgentConfigForm.tsx');
+  const offChain = source('components/app/OffChainSummary.tsx');
+  const newPage = source('app/app/agents/new/page.tsx');
+
+  it('offers a strategy as the example, not a payment to a supplier', () => {
+    // Scoped to the constant rather than the file, and deliberately: the
+    // component's header quotes the retired placeholder to record why it went,
+    // and a check that forbids naming the thing it forbids also forbids
+    // documenting the decision. `design-system.test.ts` hit exactly this with
+    // Geist and resolved it the same way — match the declaration, not the prose.
+    const placeholder = /const PLACEHOLDER = '([^']+)'/.exec(strategyInput)?.[1];
+    expect(placeholder, 'no PLACEHOLDER constant found').toBeDefined();
+    expect(placeholder).toBe('buy XLM whenever the price drops 5%, spend at most 20 USDC a day');
+    expect(placeholder).not.toMatch(/suppliers?|invoice|payroll/i);
+  });
+
+  it('labels the review fields as trading limits', () => {
+    expect(configForm).toContain('label="Per-trade cap"');
+    expect(configForm).toContain('label="Allowed counterparties"');
+    expect(configForm).toContain('label="Spend cap"');
+    // The window is selectable between per day and per week, so the cap field
+    // is not called a daily cap — it is a daily cap only when the window beside
+    // it says so, and the hint is where that is stated.
+    expect(configForm).not.toContain('label="Per-payment ceiling"');
+    expect(configForm).not.toContain('label="Approved recipients"');
+  });
+
+  it('keeps the off-chain summary in the same words as the fields it summarises', () => {
+    // These two render the same two constraints and drifted apart once before,
+    // which is how a screen ends up calling one thing by two names.
+    expect(offChain).toContain('per-trade cap');
+    expect(offChain).toContain('allowed counterparties');
+    expect(offChain).not.toContain('per-payment ceiling');
+  });
+
+  it('does not promise that this flow places a trade', () => {
+    // The load-bearing assertion. Everything above renames a limit; this one
+    // stops the rename becoming a claim. Nothing in this product executes a
+    // swap, and the builder says so on the screen where somebody would most
+    // reasonably assume otherwise.
+    expect(newPage).toContain('Nothing here places a trade');
+    for (const page of [newPage, strategyInput]) {
+      expect(page).not.toMatch(/executes? (a )?(trade|swap)/i);
+      expect(page).not.toMatch(/places? (the )?(trade|order)s? for you/i);
+    }
+  });
+
+  it('still says Limen rather than the ledger enforces the two off-chain limits', () => {
+    // The rename must not blur the partition. The per-trade cap and the
+    // counterparty list are Limen's opinion; the spend cap is the network's
+    // rule. That distinction survived the rewrite word for word.
+    expect(configForm).toContain('The ledger does not enforce these.');
+    expect(configForm).toContain('Limen records what you put here and will refuse a trade that breaks it');
+    expect(configForm).toContain('could ignore Limen entirely');
+  });
+});

@@ -154,10 +154,10 @@ export function AgentConfigForm({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
-            label="Spending cap"
+            label="Spend cap"
             htmlFor="agent-cap"
             messages={messagesFor('cap')}
-            hint="The most this agent may move in one window. The window resets on a rolling basis; it is not a per-payment limit."
+            hint="The most this agent may spend in one window — with the window set to per day, this is its daily cap. The window resets on a rolling basis, and this is not a per-trade limit."
           >
             <input
               id="agent-cap"
@@ -225,19 +225,19 @@ export function AgentConfigForm({
           </div>
           <p className="measure text-[12.5px] leading-relaxed text-muted">
             <strong className="font-semibold text-foreground">The ledger does not enforce these.</strong>{' '}
-            No audited policy contract constrains a transfer&rsquo;s destination or the size of a
-            single call — the spending limit sees an amount and a period and nothing else. Limen
-            records what you put here and will refuse a payment that breaks it, and someone holding
-            the agent&rsquo;s key could ignore Limen entirely and send to any address, up to your
-            cap. Lower the cap if that matters more to you than convenience.
+            No audited policy contract constrains where a token goes or the size of a single call —
+            the spending limit sees an amount and a period and nothing else. Limen records what you
+            put here and will refuse a trade that breaks it, and someone holding the agent&rsquo;s
+            key could ignore Limen entirely and move funds to any address, up to your cap. Lower the
+            cap if that matters more to you than convenience.
           </p>
         </div>
 
         <Field
-          label="Per-payment ceiling"
+          label="Per-trade cap"
           htmlFor="agent-per-transaction"
           messages={messagesFor('perTransactionCap')}
-          hint="Optional. The most any single payment may move. Leave it empty for no ceiling."
+          hint="Optional. The most any single trade may spend. Leave it empty for no ceiling."
         >
           <input
             id="agent-per-transaction"
@@ -251,10 +251,10 @@ export function AgentConfigForm({
         </Field>
 
         <Field
-          label="Approved recipients"
+          label="Allowed counterparties"
           htmlFor="agent-recipients"
           messages={messagesFor('recipients')}
-          hint="One address per line. Leave it empty to approve none — which means Limen refuses every payment this agent proposes until you add one."
+          hint="One address per line — the venues or accounts this agent may send the token to. Leave it empty to approve none, which means Limen refuses every trade this agent proposes until you add one."
         >
           <textarea
             id="agent-recipients"
