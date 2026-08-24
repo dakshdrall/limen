@@ -908,3 +908,65 @@ describe('accessibility is a constraint, not a pass', () => {
     ).toEqual([]);
   });
 });
+
+describe('the console is scoped to the app surface', () => {
+  /**
+   * The risk this file exists to catch, in its newest form.
+   *
+   * The site and the app now run on two palettes out of one stylesheet. The way
+   * that goes wrong is not a bad colour — `contrast.test.ts` measures those —
+   * it is a console class appearing where the narrative lives, or an app screen
+   * quietly losing it. Both are invisible in a diff and obvious on the page,
+   * which is the combination worth a test.
+   */
+
+  it('declares the console on the app layout, and nowhere else', () => {
+    const wearing = tsx.filter(([, source]) => /className="[^"]*\bconsole\b/.test(source));
+    expect(
+      wearing.map(([path]) => path),
+      'the console class is applied outside app/app/layout.tsx',
+    ).toEqual(['app/app/layout.tsx']);
+  });
+
+  it('puts every app screen under that layout, so none can miss it', () => {
+    // A page under `/app` is a console screen by virtue of where it sits. This
+    // asserts the tree rather than the class, because the class is applied once
+    // and inherited — the failure mode is a page that escapes the subtree, not
+    // one that forgets an attribute.
+    const appPages = tsx.filter(([path]) => path.startsWith('app/app/') && path.endsWith('/page.tsx'));
+    expect(appPages.length, 'no app pages found, so this check is about nothing').toBeGreaterThan(0);
+    expect(present('app/app/layout.tsx')).toBe(true);
+  });
+
+  it('leaves the narrative and the docs outside it', () => {
+    // The landing page and the four docs pages must not be under a console
+    // layout, and no layout above them may introduce one.
+    for (const path of ['app/layout.tsx', 'app/docs/layout.tsx']) {
+      if (!present(path)) continue;
+      expect(read(path), `${path} puts the console above the narrative`).not.toMatch(
+        /className="[^"]*\bconsole\b/,
+      );
+    }
+  });
+
+  it('paints the chrome from the same declaration rather than a second copy', () => {
+    // The header and footer are siblings of the app subtree, so they follow by
+    // cascade. If someone splits these selectors apart to "fix" the chrome, the
+    // two blocks drift and the header ends up a palette behind the screen.
+    expect(declarations).toMatch(/\.console,\s*body:has\(\.console\)\s*\{/);
+  });
+
+  it('aliases the palette without naming a colour, so nothing escapes the pin', () => {
+    // Every declaration inside the console block must be a var() alias or a
+    // non-colour property. A literal here would be a token that never reaches
+    // lib/theme.ts and never gets measured.
+    const block = /\.console,\s*body:has\(\.console\)\s*\{([^}]*)\}/.exec(declarations)?.[1] ?? '';
+    expect(block.length, 'the console block was not found').toBeGreaterThan(0);
+    expect(block, 'a colour literal is declared inside the console block').not.toMatch(
+      /:\s*#[0-9a-fA-F]{3,8}\s*;/,
+    );
+    expect(block, 'an rgb() literal is declared inside the console block').not.toMatch(
+      /:\s*rgba?\([^)]*\)\s*;/,
+    );
+  });
+});

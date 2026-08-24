@@ -657,8 +657,32 @@ body::before {
         only choose which one is in scope.
 
      `color-scheme` is set so form controls, scrollbars and the caret follow.
-     Without it a native `<select>` renders as a white slab on a dark panel. */
-  .console {
+     Without it a native `<select>` renders as a white slab on a dark panel.
+
+     ## Why `body:has(.console)` is the second selector
+
+     The header and the footer are siblings of the page, not children of it —
+     they live in the root layout, which is a server component and cannot know
+     which route rendered. So a class on the app's own wrapper would leave light
+     chrome bolted to a dark screen.
+
+     Re-pointing the tokens on `body` when a console is anywhere inside it fixes
+     that by cascade rather than by JavaScript: the header and footer already
+     read `var(--background)` and `var(--border-subtle)`, so they follow without
+     either of them learning what a console is. No pathname check, no client
+     component, and nothing for hydration to disagree about.
+
+     Both selectors carry the same declarations deliberately. `body:has()` is
+     what actually paints the chrome; `.console` is what makes the class mean
+     something on its own, and keeps the app surface correct if it is ever
+     rendered somewhere a `body` is not the ancestor — a portal, a test
+     harness, an embedded preview.
+
+     A browser without `:has()` gets the light chrome and the dark screen, which
+     is a worse-looking page and not a broken one. Nothing about the app's
+     behaviour depends on this rule. */
+  .console,
+  body:has(.console) {
     --background: var(--app-background);
     --surface: var(--app-surface);
     --surface-raised: var(--app-surface-raised);
