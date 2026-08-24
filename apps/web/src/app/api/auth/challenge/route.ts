@@ -24,9 +24,28 @@ import { BadRequest, failure, readBody } from '@/lib/auth-route';
  */
 const limit = createRateLimit({ max: 20, windowMs: 5 * 60 * 1000, namespace: 'auth-challenge' });
 
+/**
+ * The purpose, checked against a written-out list rather than a cast.
+ *
+ * Every member is named here on purpose. `ChallengePurpose` gained `'wallet'`
+ * when wallet sign-in landed and this guard did not, so the route kept refusing
+ * the one purpose the new ceremony needed — a 400 at the first step of a flow
+ * whose every other part was in place. Widening a union does not widen the
+ * validator that admits it, and the only thing that would have caught this
+ * earlier is the check being somewhere a type error could reach it.
+ *
+ * It stays an explicit list rather than becoming a set derived from the type,
+ * because a purpose is a thing this endpoint hands out to unauthenticated
+ * callers. A guard that admits whatever the union happens to contain would
+ * silently start minting challenges for any ceremony added later, including one
+ * that was never meant to be reachable from here.
+ */
+const PURPOSES: readonly ChallengePurpose[] = ['register', 'login', 'wallet'];
+
 function purposeOf(body: Record<string, unknown>): ChallengePurpose {
-  if (body.purpose === 'register' || body.purpose === 'login') return body.purpose;
-  throw new BadRequest("'purpose' must be 'register' or 'login'.");
+  const purpose = PURPOSES.find((candidate) => candidate === body.purpose);
+  if (purpose !== undefined) return purpose;
+  throw new BadRequest(`'purpose' must be one of: ${PURPOSES.join(', ')}.`);
 }
 
 export async function POST(request: Request): Promise<Response> {
