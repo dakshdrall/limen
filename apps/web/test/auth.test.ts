@@ -44,6 +44,8 @@ const hex = (bytes: Uint8Array): string => Buffer.from(bytes).toString('hex');
 
 class FakeUsers implements UserStore {
   rows = new Map<string, UserRecord>();
+  /** Wallet users, keyed by address — a separate index, as the unique column is. */
+  wallets = new Map<string, UserRecord>();
   #next = 0;
 
   findByCredentialId(credentialId: Uint8Array) {
@@ -51,18 +53,44 @@ class FakeUsers implements UserStore {
   }
 
   findById(id: string) {
-    return Promise.resolve([...this.rows.values()].find((row) => row.id === id));
+    return Promise.resolve(
+      [...this.rows.values(), ...this.wallets.values()].find((row) => row.id === id),
+    );
+  }
+
+  findByStellarAddress(address: string) {
+    return Promise.resolve(this.wallets.get(address));
   }
 
   createPasskeyUser(input: { credentialId: Uint8Array; publicKey: Uint8Array; displayName: string | null }) {
     this.#next += 1;
     const record: UserRecord = {
+      authMethod: 'passkey',
       id: `u${this.#next}`,
       displayName: input.displayName,
       credentialId: input.credentialId,
       publicKey: input.publicKey,
+      stellarAddress: null,
     };
     this.rows.set(hex(input.credentialId), record);
+    return Promise.resolve(record);
+  }
+
+  createWalletUser(input: { stellarAddress: string; displayName: string | null }) {
+    this.#next += 1;
+    const record: UserRecord = {
+      authMethod: 'wallet',
+      id: `u${this.#next}`,
+      displayName: input.displayName,
+      credentialId: null,
+      publicKey: null,
+      stellarAddress: input.stellarAddress,
+    };
+    // Mirrors the unique index: one address is one row, and a second create
+    // for the same address returns the first rather than making a twin.
+    const existing = this.wallets.get(input.stellarAddress);
+    if (existing !== undefined) return Promise.resolve(existing);
+    this.wallets.set(input.stellarAddress, record);
     return Promise.resolve(record);
   }
 }
@@ -202,6 +230,11 @@ describe('a genuine registration', () => {
     // The whole point of parsing server-side: these bytes are the ones inside
     // the attestation object, not a field the caller computed. They match the
     // key only because the parser read the same point the authenticator emitted.
+    // Narrowed rather than asserted non-null: `UserRecord` is a union now, and
+    // a registration that returned a wallet user would be a real failure worth
+    // seeing as one instead of as a null-dereference.
+    expect(result.user.authMethod).toBe('passkey');
+    if (result.user.authMethod !== 'passkey') throw new Error('expected a passkey user');
     expect(hex(result.user.publicKey)).toBe(hex(credential.publicKey));
     expect(hex(result.user.credentialId)).toBe(hex(credential.credentialId));
     expect(deps.users.rows.size).toBe(1);

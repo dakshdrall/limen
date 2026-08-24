@@ -48,23 +48,52 @@ import type { SessionRecord, SessionStore } from './session';
 import type { AgentRecord, AgentStatus, AgentStore, ProposedPolicy } from './agents';
 import { webDb } from './db';
 
+/**
+ * A row becomes whichever kind of user it actually is, or nothing.
+ *
+ * The dispatch is on the columns rather than on `auth_method`, deliberately.
+ * The enum says what the row *claims* to be; the columns say what it can
+ * actually do. A row marked `'wallet'` with a null address cannot log in no
+ * matter what the enum says, and trusting the label would mean constructing a
+ * `WalletUser` whose `stellarAddress` is null — which the type forbids and
+ * which would then be asserted away right here, at the one place that knows
+ * better.
+ *
+ * Both kinds fail the same way: a row that satisfies neither shape comes back
+ * as "no such user" rather than as a half-built record. The original reasoning
+ * for that, written for passkeys, applies unchanged — a user with an empty key
+ * surfaces as a WebCrypto import error three layers from the cause.
+ */
 function toUser(row: {
   id: string;
   displayName: string | null;
   passkeyCredentialId: Uint8Array | null;
   passkeyPublicKey: Uint8Array | null;
+  stellarAddress: string | null;
 }): UserRecord | undefined {
-  // A passkey user with either column null is a row that cannot log in. It is
-  // returned as "no such user" rather than as a user with an empty key,
-  // because the alternative is a `verifyAssertion` call against zero bytes and
-  // an error from WebCrypto about key import, three layers from the cause.
-  if (row.passkeyCredentialId === null || row.passkeyPublicKey === null) return undefined;
-  return {
-    id: row.id,
-    displayName: row.displayName,
-    credentialId: row.passkeyCredentialId,
-    publicKey: row.passkeyPublicKey,
-  };
+  if (row.passkeyCredentialId !== null && row.passkeyPublicKey !== null) {
+    return {
+      authMethod: 'passkey',
+      id: row.id,
+      displayName: row.displayName,
+      credentialId: row.passkeyCredentialId,
+      publicKey: row.passkeyPublicKey,
+      stellarAddress: null,
+    };
+  }
+
+  if (row.stellarAddress !== null && row.stellarAddress.length > 0) {
+    return {
+      authMethod: 'wallet',
+      id: row.id,
+      displayName: row.displayName,
+      credentialId: null,
+      publicKey: null,
+      stellarAddress: row.stellarAddress,
+    };
+  }
+
+  return undefined;
 }
 
 export function drizzleUserStore(db: WebDb = webDb()): UserStore {
@@ -79,6 +108,11 @@ export function drizzleUserStore(db: WebDb = webDb()): UserStore {
       return row === undefined ? undefined : toUser(row);
     },
 
+    async findByStellarAddress(address) {
+      const [row] = await db.select().from(users).where(eq(users.stellarAddress, address)).limit(1);
+      return row === undefined ? undefined : toUser(row);
+    },
+
     async createPasskeyUser({ credentialId, publicKey, displayName }) {
       const [row] = await db
         .insert(users)
@@ -90,6 +124,37 @@ export function drizzleUserStore(db: WebDb = webDb()): UserStore {
         // throws rather than returning undefined so that a future edit which
         // breaks the pair fails here instead of at the next login.
         throw new Error('stores: the inserted user came back without a credential.');
+      }
+      return created;
+    },
+
+    /**
+     * The one insert here that can lose a race, and it is made to lose it
+     * safely.
+     *
+     * Two first-time sign-ins from the same wallet arriving together both find
+     * no row and both insert. `users_stellar_address_key` makes the second one
+     * a constraint violation rather than a second account — which is exactly
+     * the outcome wanted, because the alternative is a user who owns none of
+     * the agents they created a moment ago.
+     *
+     * `onConflictDoUpdate` on the address, rather than catching the violation:
+     * it is one statement, it returns the row either way, and the "update" sets
+     * the address to the value it already has. That is a no-op write chosen
+     * over `onConflictDoNothing` for one reason — `DO NOTHING` returns no rows
+     * on conflict, so the loser of the race would get `undefined` and have to
+     * re-read, and a read-then-write here is the shape this file's header says
+     * belongs in the runtime.
+     */
+    async createWalletUser({ stellarAddress, displayName }) {
+      const [row] = await db
+        .insert(users)
+        .values({ authMethod: 'wallet', stellarAddress, displayName })
+        .onConflictDoUpdate({ target: users.stellarAddress, set: { stellarAddress } })
+        .returning();
+      const created = row === undefined ? undefined : toUser(row);
+      if (created === undefined) {
+        throw new Error('stores: the inserted wallet user came back without an address.');
       }
       return created;
     },

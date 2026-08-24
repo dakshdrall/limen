@@ -173,3 +173,35 @@ export const PASSKEY_LABEL = 'TESTNET ONLY · PASSKEY' satisfies StatusLabelName
  * proved able to fire before there is anything for it to fire on.
  */
 export const AGENT_KEY_LABEL = 'TESTNET ONLY · AGENT KEY (LIMEN-HELD)' satisfies StatusLabelName;
+
+/**
+ * What a connected wallet does, and what it does not do — one sentence, once.
+ *
+ * Not a `StatusLabelName`: the labels above are chips a screen renders in a
+ * fixed vocabulary, and this is a sentence. It lives beside them because it is
+ * governed by the same rule for the same reason — it must not drift in wording
+ * between the header tooltip, the sign-in notice and the README, and it is the
+ * copy F4's objection is aimed at.
+ *
+ * ## Why the wording is this wording
+ *
+ * PLAN-V4's F4 declined a wallet-for-identity button in these terms:
+ * *"someone who connects a wallet has told you what they believe is about to
+ * happen, and a caption underneath correcting them is worse than never offering
+ * the button."* The objection is about **placement** — a correction arriving
+ * after the promise does not undo the promise — so the disclosure is attached
+ * to the control itself, before it is clicked, and repeated after.
+ *
+ * So the sentence has to do two jobs in the order a person reads them: say what
+ * the wallet *is* for (signing in), and say what it is *not* (ownership),
+ * without a "but" that reads as a footnote. It names the browser key explicitly
+ * rather than saying "something else owns it", because a person who has just
+ * connected a wallet needs to know *which* key they must not lose.
+ *
+ * The F4 finding it rests on is unchanged and is not softened by this: a wallet
+ * still cannot be an `External` signer, and this button does not make it one.
+ */
+export const WALLET_DISCLOSURE =
+  'Your wallet is your login. It signs a one-time challenge to prove the address is yours — ' +
+  'nothing else. It does not own your smart account and never signs for it: the disposable key ' +
+  'in this browser is the owner, and it is what you lose if you clear your browser data.';

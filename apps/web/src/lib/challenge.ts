@@ -69,9 +69,38 @@ function keyValue() {
  * checks `clientDataJSON.type` for the same reason; this is the server-side
  * half, so the two cannot be crossed even if a browser lies about `type`.
  */
-export type ChallengePurpose = 'register' | 'login';
+export type ChallengePurpose = 'register' | 'login' | 'wallet';
 
-const key = (purpose: ChallengePurpose, challenge: string): string => `webauthn:${purpose}:${challenge}`;
+/**
+ * The two purposes that are WebAuthn ceremonies, as their own type.
+ *
+ * `expectationFor` builds a `webauthn.create` or `webauthn.get` expectation and
+ * has no meaning for a wallet. Without this, `AuthDeps.expectation` would be
+ * typed on the full `ChallengePurpose` and — because method-syntax parameters
+ * are bivariant — `expectationFor` would still be assignable to it, so passing
+ * `'wallet'` would type-check and quietly yield `webauthn.get`. Naming the
+ * subset makes that a compile error instead of a silent wrong expectation.
+ */
+export type WebAuthnPurpose = Exclude<ChallengePurpose, 'wallet'>;
+
+/**
+ * The stored key, namespaced by ceremony **family** and then by purpose.
+ *
+ * `'wallet'` does not live under `webauthn:` — it is a different ceremony with
+ * a different signature scheme, and a key prefix that said `webauthn` for a
+ * SEP-53 challenge would be a lie told to whoever next reads a key out of
+ * Redis. Everything else about the store is shared on purpose: one TTL, one
+ * size, one single-use rule, and `consumeChallenge` still refuses a challenge
+ * presented to a ceremony it was not minted for.
+ *
+ * That refusal is the reason the purpose is in the key at all, and it matters
+ * more now than it did with two purposes. A wallet challenge and a login
+ * challenge are both random strings signed by a key; if they shared a
+ * namespace, a signature collected for one could be spent on the other, and the
+ * two verify against entirely different credentials.
+ */
+const key = (purpose: ChallengePurpose, challenge: string): string =>
+  purpose === 'wallet' ? `wallet:${challenge}` : `webauthn:${purpose}:${challenge}`;
 
 export interface IssuedChallenge {
   challenge: string;

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { StatusLabel } from '@/components/StatusLabel';
-import { truncateCredentialId } from '@/lib/format';
-import { PASSKEY_LABEL } from '@limen/shared/status-labels';
-import { isRouteRefusal, registerIdentity, signIn, signOut } from '@/lib/identity';
+import { truncateAddress, truncateCredentialId } from '@/lib/format';
+import { PASSKEY_LABEL, WALLET_DISCLOSURE } from '@limen/shared/status-labels';
+import { isRouteRefusal, registerIdentity, signIn, signInWithWallet, signOut } from '@/lib/identity';
 import { useIdentity } from '@/lib/use-identity';
 
 /**
@@ -54,13 +54,21 @@ import { useIdentity } from '@/lib/use-identity';
 /** A success notice is transient; a refusal waits to be read. */
 const SUCCESS_MS = 8_000;
 
-type Busy = 'register' | 'sign-in' | 'sign-out' | null;
+type Busy = 'register' | 'sign-in' | 'sign-out' | 'wallet' | null;
 
 interface Notice {
   tone: 'permitted' | 'refused';
   text: string;
   /** Only a fresh credential earns the label. */
   registered?: boolean;
+  /**
+   * A wallet sign-in says what the wallet did *not* do, in the same panel.
+   *
+   * Separate from `registered` because the two notices make opposite points —
+   * one announces a key this browser now holds, the other announces that no key
+   * changed hands at all.
+   */
+  wallet?: boolean;
 }
 
 export function SessionControl() {
@@ -115,6 +123,30 @@ export function SessionControl() {
     <>
       {identity.status === 'signed-out' ? (
         <div className="flex shrink-0 items-center gap-0.5">
+          {/*
+            The wallet is the route a user meets, and the label carries the
+            whole disclosure rather than deferring it to a caption underneath.
+            F4 declined this arrangement when the correction arrived *after* the
+            promise; `title` is the tooltip on the promise itself, and the
+            notice panel repeats it once the ceremony is done.
+          */}
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            data-register="label"
+            data-wallet="sign-in"
+            disabled={busy !== null}
+            title={WALLET_DISCLOSURE}
+            onClick={() =>
+              void run('wallet', async () => {
+                await signInWithWallet();
+                return { tone: 'permitted', text: 'Signed in with your wallet.', wallet: true };
+              })
+            }
+          >
+            {busy === 'wallet' ? 'Waiting…' : 'Connect wallet'}
+          </button>
           <button
             type="button"
             className="btn"
@@ -128,7 +160,7 @@ export function SessionControl() {
               })
             }
           >
-            {busy === 'sign-in' ? 'Waiting…' : 'Sign in'}
+            {busy === 'sign-in' ? 'Waiting…' : 'Passkey'}
           </button>
           <button
             type="button"
@@ -150,10 +182,16 @@ export function SessionControl() {
         <div className="flex shrink-0 items-center gap-2">
           <span
             className="hidden font-mono text-[10.5px] tracking-[0.08em] text-muted-dim md:inline"
-            title={`Signed in with the passkey ${identity.user.credentialId}\n${PASSKEY_LABEL}`}
+            title={
+              identity.user.authMethod === 'wallet'
+                ? `Signed in with the wallet ${identity.user.stellarAddress}\n${WALLET_DISCLOSURE}`
+                : `Signed in with the passkey ${identity.user.credentialId}\n${PASSKEY_LABEL}`
+            }
           >
             <span className="sr-only">Signed in as </span>
-            {identity.user.displayName ?? truncateCredentialId(identity.user.credentialId)}
+            {identity.user.authMethod === 'wallet'
+              ? truncateAddress(identity.user.stellarAddress)
+              : (identity.user.displayName ?? truncateCredentialId(identity.user.credentialId))}
           </span>
           <button
             type="button"
@@ -190,6 +228,9 @@ export function SessionControl() {
                 The private half is held by your device and never reaches Limen. This browser now signs
                 with this passkey.
               </p>
+            )}
+            {notice.wallet === true && (
+              <p className="text-[12.5px] leading-relaxed text-muted">{WALLET_DISCLOSURE}</p>
             )}
             <button
               type="button"

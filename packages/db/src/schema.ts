@@ -108,7 +108,18 @@ const instant = (name: string) => timestamp(name, { withTimezone: true, mode: 'd
  */
 export const network = pgEnum('network', ['testnet']);
 
-export const authMethod = pgEnum('auth_method', ['passkey', 'browser_key']);
+/**
+ * How a user proves who they are — which is not how their account is owned.
+ *
+ * `'wallet'` joined this enum when Freighter sign-in landed, and the distinction
+ * it introduces is the one thing about it worth stating in the schema: a
+ * `'wallet'` user authenticates with a Stellar keypair held in a browser
+ * extension, and their smart account is still owned by the browser's disposable
+ * key. Nothing in this table describes on-chain ownership; `agent_accounts`
+ * does, through `owner_signer_kind`, and that column is untouched by wallet
+ * sign-in. See the README's "The wallet button, and what it does not do".
+ */
+export const authMethod = pgEnum('auth_method', ['passkey', 'browser_key', 'wallet']);
 
 export const agentStatus = pgEnum('agent_status', [
   'DRAFT',
@@ -174,9 +185,29 @@ export const users = pgTable(
      * same bytes, not two encodings of the same point.
      */
     passkeyPublicKey: bytea('passkey_public_key'),
+    /**
+     * The `G…` address of a wallet user, as the strkey it is displayed as.
+     *
+     * Text and not `bytea`, which is the opposite of the choice made two columns
+     * up, and the reason is that these two values are used for opposite things.
+     * `passkey_public_key` is *installed on chain* as `Signer::External`, so it
+     * is stored in the contract's shape to keep what is registered and what is
+     * installed the same bytes. An address here is never installed anywhere: it
+     * is an identity to look a user up by and a string to render. Strkey is the
+     * canonical, checksummed, single spelling of that identity — an ed25519
+     * public key has two base32 spellings only if somebody writes the encoder
+     * twice — so storing the decoded bytes would mean re-encoding on every read
+     * for display and gaining nothing.
+     *
+     * Null for every passkey user, and unique so one address is one account.
+     */
+    stellarAddress: text('stellar_address'),
     displayName: text('display_name'),
   },
-  (table) => [uniqueIndex('users_passkey_credential_id_key').on(table.passkeyCredentialId)],
+  (table) => [
+    uniqueIndex('users_passkey_credential_id_key').on(table.passkeyCredentialId),
+    uniqueIndex('users_stellar_address_key').on(table.stellarAddress),
+  ],
 );
 
 export const sessions = pgTable(

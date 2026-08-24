@@ -116,6 +116,52 @@ export async function currentAddress(): Promise<string | null> {
 }
 
 /**
+ * Sign a login challenge, and hand back exactly what the extension returned.
+ *
+ * The one capability wallet sign-in needs, and the only place in the product
+ * that asks a wallet to sign something that is not a transaction.
+ *
+ * ## `signedMessage` is passed through untouched, on purpose
+ *
+ * The return type is `unknown` rather than `string`, and that is not laziness.
+ * `signMessage` has two documented response shapes — v3 answered with a
+ * `Buffer`, v4 with a base64 `string` — and only v4 was measured against this
+ * deployment (the probe at `/app/dev/freighter`, recorded in PLAN-V8: an
+ * 88-character base64 string, 64 signature bytes, verifying under SEP-53).
+ *
+ * Coercing here would destroy the distinction. `String(buffer)` produces
+ * something that looks like a signature and is not one, and the server would
+ * then refuse it as "not base64" — an accurate message about the wrong problem,
+ * telling a person on an old Freighter nothing they can act on. So the value
+ * crosses this boundary as it arrived and `wallet-auth.ts` decides what it is,
+ * where the v3 shape is named as a legacy wallet and the answer is "update
+ * Freighter".
+ *
+ * ## The address comes back too, and the server trusts neither
+ *
+ * `signerAddress` is what the extension says signed. It is returned so the
+ * caller can post it, not so anything here can rely on it: the server verifies
+ * the signature against that address, so a wallet claiming an address it does
+ * not hold the key for fails verification. What it is genuinely useful for is
+ * the case where a person switches accounts in Freighter mid-ceremony — the
+ * address that signed is then not the one that was connected, and posting the
+ * signer rather than the connected address is what keeps those consistent.
+ */
+export async function signChallenge(
+  challenge: string,
+  address: string,
+): Promise<{ signerAddress: string; signedMessage: unknown }> {
+  const { signMessage } = await api();
+  const result = await signMessage(challenge, { networkPassphrase: NETWORK_PASSPHRASE, address });
+  const record = result as unknown as Record<string, unknown>;
+  if (record.error !== undefined) throw new Error(`Freighter: ${JSON.stringify(record.error)}`);
+  return {
+    signerAddress: typeof record.signerAddress === 'string' ? record.signerAddress : '',
+    signedMessage: record.signedMessage,
+  };
+}
+
+/**
  * A connected wallet as a fee source.
  *
  * `signEnvelope` round-trips XDR through the extension rather than mutating the

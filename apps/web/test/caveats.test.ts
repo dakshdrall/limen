@@ -752,7 +752,12 @@ describe('the landing does not let its two testnet runs read as one pass', () =>
    * rather than made by a test.
    */
   it('has not lost the two limits the landing dropped — they survive in the README', () => {
-    expect(README).toContain('Why there is no wallet button');
+    // The wallet heading changed when wallet sign-in landed: there *is* a
+    // wallet button now. What the old heading was really pinning is the claim
+    // underneath it — that the wallet is not the owner — so that is what is
+    // pinned here, rather than a heading that is no longer true.
+    expect(README).toContain('The wallet button, and what it does not do');
+    expect(README).toContain('Your wallet is your login. It does not own your smart account.');
     expect(README).toContain('Your account is stranded if you clear your browser');
     expect(README).toContain('Only single-token transfer flows can be installed');
   });
@@ -1018,8 +1023,35 @@ describe('the agent-key claim keeps its narrow form, wherever it now lives', () 
     // it" are different claims, and only the second is true here. This left the
     // docs in the split and is pinned in the README, which is the only place it
     // is now stated.
+    //
+    // Both assertions survive wallet sign-in unchanged, and that is the point:
+    // what F4 measured was a wallet as the *owner*, and sign-in did not make a
+    // wallet an owner. A change that softened either sentence to make room for
+    // the button would be the failure this file exists to catch.
     expect(README).toContain('dropped on a measurement rather than on effort');
     expect(README).toContain('Discovery-by-simulation is unavailable on *both* simulations');
+  });
+
+  /**
+   * Added with wallet sign-in, and pointed at the specific way it could go
+   * wrong.
+   *
+   * The risk is not that the ownership finding gets deleted — the two
+   * assertions above cover that. It is that the README grows a wallet button
+   * and the sentence saying what the button does *not* do quietly weakens into
+   * something reassuring, which is exactly the drift F4's objection describes.
+   * So the disclosure is pinned in both directions: it must name the browser
+   * key as the owner, and it must not claim the wallet signs for the account.
+   */
+  it('does not let the wallet button imply the wallet controls the account', () => {
+    expect(README).toContain('It does not own your smart account');
+    expect(README).toContain('the disposable ed25519 key in this browser');
+    expect(README).toContain('A wallet still cannot be an `External` signer');
+
+    // The claim that would be false. Pinned as an absence, because a sentence
+    // nobody wrote is the thing a test cannot otherwise notice.
+    expect(README).not.toContain('sign in with your wallet to own');
+    expect(README).not.toContain('your wallet controls');
   });
 });
 

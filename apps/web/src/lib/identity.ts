@@ -61,15 +61,42 @@ import {
  */
 export { PASSKEY_LABEL };
 
-/** What the three routes return, as `publicUser` projects it. */
-export interface Identity {
-  id: string;
-  displayName: string | null;
-  /** base64url. Public, and the id the authenticator answers to. */
-  credentialId: string;
-  /** base64url of the 65-byte uncompressed SEC1 point. See `publicUser`. */
-  publicKey: string;
-}
+/**
+ * What the routes return, as `publicUser` projects it.
+ *
+ * A union rather than a record with nullable fields, mirroring `UserRecord` on
+ * the server and for the same reason: a wallet user has no passkey, and a shape
+ * that merely leaves `publicKey` null lets a caller reach for it and get a
+ * `null` at runtime. `signIn` adopts the credential it just proved possession
+ * of — `rememberCredential(user.credentialId, …)` — and that call must be
+ * unreachable for a wallet user by construction rather than by remembering.
+ */
+export type Identity =
+  | {
+      authMethod: 'passkey';
+      id: string;
+      displayName: string | null;
+      /** base64url. Public, and the id the authenticator answers to. */
+      credentialId: string;
+      /** base64url of the 65-byte uncompressed SEC1 point. See `publicUser`. */
+      publicKey: string;
+      stellarAddress: null;
+    }
+  | {
+      authMethod: 'wallet';
+      id: string;
+      displayName: string | null;
+      credentialId: null;
+      publicKey: null;
+      /**
+       * The `G…` this user signed in with.
+       *
+       * An identity, and nothing more. It is not this account's on-chain owner
+       * and it is not a fee source — the browser's disposable key is still
+       * both. See the README's "The wallet button, and what it does not do".
+       */
+      stellarAddress: string;
+    };
 
 export type IdentityState =
   | { readonly status: 'unknown' }
@@ -153,6 +180,18 @@ function sentenceFor(status: number, body: RouteFailure): string {
     case 'user_not_verified':
     case 'user_not_present':
       return 'Your device did not verify you, and a credential without that cannot own an account. Try again and complete the biometric or PIN prompt.';
+    case 'legacy_wallet':
+      // The one wallet refusal a person can act on, which is why it is not
+      // folded in with the others. See `wallet-auth.ts`.
+      return 'This version of Freighter returns the older signature format. Update Freighter and sign in again.';
+    case 'bad_address':
+      return 'Freighter reported an address this deployment cannot verify a signature against.';
+    case 'bad_signature_shape':
+      return 'Freighter returned a signature in a shape this deployment does not recognise.';
+    case 'signature_mismatch':
+      return 'That signature does not match the address that offered it. Nothing was signed in.';
+    case 'wrong_network':
+      return 'Freighter is not on testnet. Switch networks and try again.';
     case 'rate_limited':
       return 'Too many attempts from here. Wait a few minutes.';
     case 'unavailable':
@@ -244,7 +283,10 @@ export async function registerIdentity(label: string): Promise<Identity> {
     }),
   );
 
-  rememberCredential(user.credentialId, credential.point);
+  // Narrowed for the same reason `signIn` is: `/api/auth/register` returns a
+  // passkey user by construction, and the check is cheaper than an assertion
+  // that would outlive the reason it was safe.
+  if (user.authMethod === 'passkey') rememberCredential(user.credentialId, credential.point);
   publish({ status: 'signed-in', user });
   return user;
 }
@@ -278,7 +320,71 @@ export async function signIn(): Promise<Identity> {
   // application, rather than the chain, is responsible for: a browser that
   // holds nothing adopts the credential it just proved possession of. A browser
   // that already holds one keeps it — see `rememberCredential`.
-  rememberCredential(user.credentialId, fromBase64Url(user.publicKey));
+  //
+  // Narrowed rather than asserted: `/api/auth/login` cannot return a wallet
+  // user, so this is unreachable, and it is written as a check because the
+  // alternative is a non-null assertion on a field the type says may be null.
+  if (user.authMethod === 'passkey') {
+    rememberCredential(user.credentialId, fromBase64Url(user.publicKey));
+  }
+  publish({ status: 'signed-in', user });
+  return user;
+}
+
+/**
+ * Sign in with a wallet: a SEP-53 signature over a server challenge.
+ *
+ * The fourth ceremony, and the one a person now meets first. It is
+ * **authentication only** — every sentence of copy around it has to survive
+ * that, because the failure mode F4 named is a wallet button that implies
+ * ownership it does not have.
+ *
+ * The shape is the same as `signIn`: mint a challenge server-side, get it
+ * signed, post the result. The differences are that the challenge is signed as
+ * a *string* rather than as bytes inside `clientDataJSON` — SEP-53 signs the
+ * bare message — and that `signedMessage` is forwarded exactly as the extension
+ * produced it so the server can tell a v3 wallet from a malformed signature.
+ *
+ * `assertTestnet` before anything, for the reason every other ceremony applies
+ * it. And the *signer* address is posted rather than the connected one: if
+ * somebody switches account in Freighter between connecting and signing, the
+ * key that signed is the identity, and the server verifies against exactly the
+ * address it is given.
+ */
+export async function signInWithWallet(): Promise<Identity> {
+  assertTestnet(NETWORK_PASSPHRASE);
+
+  const { connect, currentNetwork, signChallenge } = await import('@/lib/freighter');
+
+  // Refused before a signature is requested, never after one is given —
+  // `freighter.ts` states the rule and this is the call site that honours it.
+  const network = await currentNetwork();
+  if (network.passphrase !== NETWORK_PASSPHRASE) {
+    throw new RouteError(
+      'wrong_network',
+      `Freighter is on ${network.name}. Switch it to testnet — this deployment does not serve any other network.`,
+    );
+  }
+
+  const address = await connect();
+  const issued = await post('/api/auth/challenge', { purpose: 'wallet' });
+  const challenge = issued.challenge;
+  if (typeof challenge !== 'string' || challenge.length === 0) {
+    throw new RouteError('no_challenge', 'The server issued no challenge.');
+  }
+
+  const signed = await signChallenge(challenge, address);
+  const user = identityFrom(
+    await post('/api/auth/wallet', {
+      address: signed.signerAddress.length > 0 ? signed.signerAddress : address,
+      challenge,
+      signedMessage: signed.signedMessage,
+    }),
+  );
+
+  // No `rememberCredential`. A wallet sign-in creates no passkey and adopts
+  // none — the browser's own key is untouched by this ceremony, which is
+  // precisely the property the copy promises.
   publish({ status: 'signed-in', user });
   return user;
 }

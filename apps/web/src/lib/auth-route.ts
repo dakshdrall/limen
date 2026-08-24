@@ -15,6 +15,7 @@ import { consumeChallenge } from './challenge';
 import { drizzleSessionStore, drizzleUserStore } from './stores';
 import { expectationFor } from './webauthn-config';
 import { base64UrlToBytes, WebAuthnError } from './webauthn';
+import { WalletAuthError } from './wallet-auth';
 import { clearedSessionCookieOptions, sessionCookieOptions, SESSION_COOKIE } from './session';
 import type { AuthDeps, UserRecord } from './auth';
 
@@ -135,18 +136,49 @@ export function base64Url(bytes: Uint8Array): string {
  * into `Signer::External` on a public ledger the moment an account is deployed,
  * and it is returned only to a request carrying a session cookie that names
  * this exact user.
+ *
+ * ## And why a wallet user has neither
+ *
+ * `authMethod` is in the projection so a screen can tell the two apart without
+ * inferring it from which fields are null. A wallet user's `credentialId` and
+ * `publicKey` are null because they have no passkey — not because the value was
+ * withheld — and `stellarAddress` is the identity they signed in with.
+ *
+ * That address is emphatically **not** the parallel of `publicKey` above. The
+ * passkey's point is what gets installed as an on-chain owner; the wallet
+ * address is installed nowhere and owns nothing. It is returned so the screen
+ * can show which wallet is signed in, and for no other purpose.
  */
 export function publicUser(user: UserRecord): {
   id: string;
   displayName: string | null;
-  credentialId: string;
-  publicKey: string;
+  authMethod: UserRecord['authMethod'];
+  credentialId: string | null;
+  publicKey: string | null;
+  stellarAddress: string | null;
 } {
+  // Switched on the discriminant rather than `?? null`-ing the two byte fields,
+  // so that adding a third kind of user is a compile error here instead of a
+  // silent pair of nulls. The absence of a passkey key on a wallet user is a
+  // fact about that user, not a missing value.
+  if (user.authMethod === 'wallet') {
+    return {
+      id: user.id,
+      displayName: user.displayName,
+      authMethod: 'wallet',
+      credentialId: null,
+      publicKey: null,
+      stellarAddress: user.stellarAddress,
+    };
+  }
+
   return {
     id: user.id,
     displayName: user.displayName,
+    authMethod: 'passkey',
     credentialId: base64Url(user.credentialId),
     publicKey: base64Url(user.publicKey),
+    stellarAddress: null,
   };
 }
 
@@ -193,6 +225,19 @@ export function failure(error: unknown): Response {
   }
   if (error instanceof WebAuthnError) {
     const status = error.reason === 'credential_registered' ? 409 : 401;
+    return Response.json({ error: error.reason, message: error.message }, { status });
+  }
+  // Wallet refusals follow the same rule as WebAuthn ones — one status for
+  // every ceremony failure, with the reason in the body — with one deliberate
+  // exception. `bad_address` and `bad_signature_shape` are 400: they mean the
+  // caller sent something that is not a wallet signature at all, which is
+  // decided before any verification and is the same distinction `BadRequest`
+  // already draws above. `legacy_wallet` is 400 for a sharper reason: it is
+  // the one refusal here a person can act on, and it must not be buried in the
+  // same 401 as "that signature does not match", or the browser cannot tell
+  // them to update Freighter.
+  if (error instanceof WalletAuthError) {
+    const status = error.reason === 'signature_mismatch' ? 401 : 400;
     return Response.json({ error: error.reason, message: error.message }, { status });
   }
   // Anything else is a bug or an outage — a database that will not answer, a

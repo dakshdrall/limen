@@ -341,12 +341,21 @@ did *not* do — approximate, drop a constraint, or widen a cap to fit. The
 `over-limit` preset exists to demonstrate this on demand. A system that can only
 be seen succeeding gives you no evidence about when it declines.
 
-### Why there is no wallet button
+### The wallet button, and what it does not do
 
-Connecting Freighter or xBull as the owner of a smart account was planned, and
-was dropped on a measurement rather than on effort. The finding is recorded here
-because "we did not get to it" and "we tried it and the platform does not
-support it" are different statements, and only one of them is true.
+**Your wallet is your login. It does not own your smart account.**
+
+Connect Freighter and it signs a one-time challenge to prove the address is
+yours; the server verifies that signature and issues a session. That is the
+whole of it. The account your agent acts through is still owned by the
+disposable ed25519 key in this browser, which is what you lose if you clear your
+browser data — the wallet cannot recover it, because the wallet never owned it.
+
+That division is not a design preference. Connecting a wallet **as the owner**
+was planned, and was dropped on a measurement rather than on effort. The finding
+is recorded here because "we did not get to it" and "we tried it and the
+platform does not support it" are different statements, and only one of them is
+true.
 
 A wallet cannot be an `External` signer: `External` verification hands raw bytes
 to a verifier contract, and wallets sign envelopes and auth entries, not
@@ -391,12 +400,37 @@ names exactly what is missing, and `auth_digest` is already computed
 client-side. It is unverifiable: there is no simulation to check the invocation
 tree against, so a mistake is discovered only by spending a submission.
 
-The fallback — connect a wallet for identity and fees while the browser key
-stays the actual owner — was also declined. Someone who connects a wallet has
-told you what they believe is about to happen, and a caption correcting them is
-worse than never offering the button. So the owner is this browser's disposable
-key, the screen says which key owns the account at the moment it is created, and
-there is no wallet button to misread.
+#### The fallback, declined once and then shipped on different terms
+
+The remaining arrangement — connect a wallet for identity while the browser key
+stays the actual owner — was declined when F4 was written, in these words:
+*someone who connects a wallet has told you what they believe is about to
+happen, and a caption correcting them is worse than never offering the button.*
+
+That objection is about **placement**, not about the arrangement. A correction
+printed underneath a button that has already made a promise does not undo the
+promise. So the arrangement now ships with the disclosure moved *into* the
+promise: the control carries what the wallet will and will not do before it is
+clicked, and the same sentence — one constant, `WALLET_DISCLOSURE` in
+[`packages/shared`](./packages/shared/src/status-labels.ts), so it cannot drift
+between surfaces — is repeated when the ceremony completes. Whether that is
+enough is a judgement, and it is recorded as one rather than presented as though
+F4 had been satisfied by argument.
+
+What the wallet path is measured to do is narrow and exact. Freighter's
+`signMessage` returns a base64 string of 64 signature bytes, and that signature
+verifies under **SEP-53** — `SHA-256("Stellar Signed Message:\n" | message)` —
+and under nothing else. The raw-UTF8 and bare-SHA-256 envelopes were both tried
+and both failed. That was measured with a throwaway probe rather than recalled
+from documentation, because `@stellar/freighter-api` is a relay containing no
+signing code at all: 10,687 bytes, zero references to ed25519, and its own unit
+test mocks the signature as the string `"foo"`. The server therefore accepts
+exactly one envelope and one encoding, and refuses the older v3 `Buffer` shape
+by name rather than guessing at it.
+
+None of that changes the ownership finding above. A wallet still cannot be an
+`External` signer, this button does not make it one, and the on-chain owner and
+the signing layer are untouched by sign-in.
 
 The full finding, including what it costs, is in [`PLAN-V4.md`](./PLAN-V4.md)
 under F4.
