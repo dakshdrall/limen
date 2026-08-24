@@ -40,12 +40,63 @@ import type { AgentConfig } from './agent-config';
 /** The lifecycle, as `agent_status` names it. A subset — this flow uses five. */
 export type AgentStatus = 'DRAFT' | 'CONFIGURED' | 'DEPLOYING' | 'ACTIVE' | 'ERROR';
 
+/**
+ * The largest stored proposal, in characters of JSON.
+ *
+ * A draft is ten short string fields and a small array of addresses; four
+ * kilobytes is an order of magnitude of headroom over any honest one. The cap
+ * exists because this value goes into a `jsonb` column having come from a
+ * request body, and the size of a thing written to a database should be bounded
+ * where it enters rather than trusted to be reasonable — the same rule
+ * `auth-route.ts` states for `MAX_BODY`.
+ */
+export const MAX_DRAFT_JSON = 4_096;
+
+/**
+ * An untrusted proposal, bounded — or nothing at all.
+ *
+ * Deliberately *not* a validator. The column holds what a model suggested, and
+ * checking its fields here would imply the stored value had been vetted, which
+ * would then be one refactor away from something trusting it. `reviveDraft`
+ * narrows it at the point of use and `validate` refuses it at the point it
+ * could matter; this only stops the database being used as storage for
+ * something that is not a draft at all.
+ *
+ * Three things are refused: a non-object, an array, and anything that does not
+ * serialise or serialises too large. Everything else is stored verbatim.
+ */
+export function boundedDraft(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  let serialised: string;
+  try {
+    serialised = JSON.stringify(value);
+  } catch {
+    // Circular, or a BigInt. Neither is a draft.
+    return null;
+  }
+  return serialised.length > MAX_DRAFT_JSON ? null : value;
+}
+
 export interface AgentRecord {
   id: string;
   userId: string;
   name: string;
   description: string | null;
   status: AgentStatus;
+  /**
+   * The limits a model proposed for this agent, if one has been asked yet.
+   *
+   * `unknown` on purpose. It is whatever came back from a model and was stored
+   * without being trusted, so the type says exactly that and every reader has
+   * to narrow it before use — `agent-config.ts`'s `reviveDraft` is the one
+   * place that does. Typing it as `AgentConfigDraft` would claim the database
+   * holds a valid draft, which nothing has checked at the point it is read.
+   *
+   * Null means no proposal was kept: an agent described before this column
+   * existed, or one whose description has not been read yet. The review screen
+   * treats that as "ask again", never as "there are no limits".
+   */
+  draft: unknown;
 }
 
 /**
@@ -91,12 +142,19 @@ export interface AgentSummary {
  * interface stops here until then.
  */
 export interface AgentStore {
-  createDraft(input: { userId: string; name: string; description: string }): Promise<AgentRecord>;
+  createDraft(input: {
+    userId: string;
+    name: string;
+    description: string;
+    /** The proposal, stored so it survives the navigation to the review screen. */
+    draft?: unknown;
+  }): Promise<AgentRecord>;
   updateDraft(input: {
     id: string;
     userId: string;
     name: string;
     description: string;
+    draft?: unknown;
   }): Promise<AgentRecord | undefined>;
   findForUser(id: string, userId: string): Promise<AgentRecord | undefined>;
   /**

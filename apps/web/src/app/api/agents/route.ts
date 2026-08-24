@@ -37,7 +37,7 @@
  */
 
 import { readAllContextRules, readSpendingLimit } from '@limen/chain';
-import { cleanAgentName } from '@/lib/agents';
+import { boundedDraft, cleanAgentName } from '@/lib/agents';
 import { MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH } from '@/lib/agent-config';
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
 import { requireUser } from '@/lib/route-session';
@@ -210,9 +210,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'rate_limited' }, { status: 429 });
   }
 
-  let body: { name?: unknown; description?: unknown };
+  let body: { name?: unknown; description?: unknown; draft?: unknown };
   try {
-    body = (await request.json()) as { name?: unknown; description?: unknown };
+    body = (await request.json()) as { name?: unknown; description?: unknown; draft?: unknown };
   } catch {
     return Response.json({ error: 'request body must be JSON' }, { status: 400 });
   }
@@ -237,6 +237,10 @@ export async function POST(request: Request): Promise<Response> {
       // anything deploys.
       name: cleanAgentName(body.name, MAX_NAME_LENGTH),
       description,
+      // Stored as it arrived and trusted with nothing. It is a suggestion the
+      // review screen reads back; every field is re-validated by `configure`
+      // before any of it can reach a policy. See the column's comment.
+      draft: boundedDraft(body.draft),
     });
     return Response.json({ agent }, { headers: { 'cache-control': 'no-store' } });
   } catch (error) {

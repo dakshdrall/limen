@@ -13,7 +13,7 @@
  * that an id exists.
  */
 
-import { cleanAgentName } from '@/lib/agents';
+import { boundedDraft, cleanAgentName } from '@/lib/agents';
 import { MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH } from '@/lib/agent-config';
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
 import { requireUser } from '@/lib/route-session';
@@ -36,9 +36,9 @@ export async function PATCH(
 
   const { id } = await params;
 
-  let body: { name?: unknown; description?: unknown };
+  let body: { name?: unknown; description?: unknown; draft?: unknown };
   try {
-    body = (await request.json()) as { name?: unknown; description?: unknown };
+    body = (await request.json()) as { name?: unknown; description?: unknown; draft?: unknown };
   } catch {
     return Response.json({ error: 'request body must be JSON' }, { status: 400 });
   }
@@ -60,6 +60,7 @@ export async function PATCH(
       userId: gate.user.id,
       name: cleanAgentName(body.name, MAX_NAME_LENGTH),
       description,
+      draft: boundedDraft(body.draft),
     });
     if (agent === undefined) return Response.json({ error: 'not_found' }, { status: 404 });
     return Response.json({ agent }, { headers: { 'cache-control': 'no-store' } });

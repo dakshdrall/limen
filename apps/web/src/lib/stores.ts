@@ -229,6 +229,7 @@ function toAgent(row: {
   name: string;
   description: string | null;
   status: string;
+  draftJson?: unknown;
 }): AgentRecord {
   return {
     id: row.id,
@@ -236,21 +237,37 @@ function toAgent(row: {
     name: row.name,
     description: row.description,
     status: narrowStatus(row.status),
+    // Passed through untyped and unvalidated, which is what the column holds.
+    // `?? null` rather than left undefined so "no proposal" is one value.
+    draft: row.draftJson ?? null,
   };
 }
 
 export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
   return {
-    async createDraft({ userId, name, description }) {
-      const [row] = await db.insert(agents).values({ userId, name, description }).returning();
+    async createDraft({ userId, name, description, draft }) {
+      const [row] = await db
+        .insert(agents)
+        .values({ userId, name, description, draftJson: draft ?? null })
+        .returning();
       if (row === undefined) throw new Error('stores: the inserted agent came back empty.');
       return toAgent(row);
     },
 
-    async updateDraft({ id, userId, name, description }) {
+    /**
+     * `draft` is written only when the caller supplies one.
+     *
+     * Renaming an agent must not erase the proposal it is being reviewed
+     * against, and `set({ draftJson: undefined })` in Drizzle omits the column
+     * rather than nulling it — which is the behaviour wanted, but only by
+     * accident of the library. The conditional spread makes it the behaviour
+     * asked for, so a future Drizzle that treats `undefined` as `NULL` does not
+     * quietly delete a proposal on every rename.
+     */
+    async updateDraft({ id, userId, name, description, draft }) {
       const [row] = await db
         .update(agents)
-        .set({ name, description })
+        .set({ name, description, ...(draft === undefined ? {} : { draftJson: draft }) })
         .where(and(eq(agents.id, id), eq(agents.userId, userId)))
         .returning();
       return row === undefined ? undefined : toAgent(row);

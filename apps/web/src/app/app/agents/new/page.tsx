@@ -1,68 +1,78 @@
-import { AgentBuilder } from '@/components/app/AgentBuilder';
+import { BuildSteps } from '@/components/app/BuildSteps';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
+import { StrategyInput } from '@/components/app/StrategyInput';
 
 export const metadata = {
-  title: 'Limen — deploy an agent',
+  title: 'Limen — build an agent',
   description:
-    'Describe an agent in a sentence, review the limits it would be given, and deploy it onto Stellar testnet under a boundary the network enforces.',
+    'Describe a trading strategy, review the limits it would run under, and deploy it onto Stellar testnet inside a boundary the network enforces.',
 };
 
 /**
- * Describe an agent, review what it would be allowed to do, deploy it.
+ * Build an Agent — step one of three, and the screen is the step.
  *
- * The other screens in this application are the permission layer with its
- * hands showing: observe a transaction, derive a boundary, install it, watch
- * the chain refuse. This one is the product on top of that — a person says
- * what they want an agent to do, and the boundary is derived underneath
- * without them ever authoring a policy.
+ * ## What moved, and why it is not here any more
  *
- * **Nothing about the permission layer changes here.** The sentence goes to a
- * model, the model proposes fields, a person corrects them, and the corrected
- * fields compile into exactly the `ObservedTransaction` → `synthesize` →
- * `lower` → `add_context_rule` path `/app/try` already walks. What the model
- * writes is a proposal on a form. What the chain enforces is what was
- * installed, and the two are separated by a person reading the second one.
+ * This screen opened with two paragraphs and four status labels stacked above a
+ * three-row textarea, and then revealed the review and deploy sections below
+ * itself as they became reachable. Two things were wrong with that.
  *
- * ## Why this screen is behind a sign-in and the others are not
+ * The first is order. A person arriving to build an agent met an explanation
+ * before the thing being explained. The two paragraphs said that a model reads
+ * the description and that nothing reaches the chain until the review step —
+ * both true, and both *about the review step*, which is where they now are.
+ * Copy belongs on the screen it is about; read a step early it is a caveat, and
+ * read in place it is an instruction.
  *
- * Every other screen here keeps its state in the browser and asks nothing of
- * anybody. An agent is different: it is a row in Postgres with an owner, and
- * `agents.user_id` is `NOT NULL` because an agent nobody owns is an agent
- * nobody can revoke. The passkey sign-in in the header is what supplies it.
+ * The second is that sections stacking below one another are not steps. There
+ * was one URL for the whole flow, so the back button left the builder entirely,
+ * a reload lost everything, and the proposal existed only in the tab that
+ * generated it. Three routes fix all three, and the cost is that orientation
+ * has to be drawn rather than implied — see {@link BuildSteps}.
  *
- * ## The labels, and the one that is deliberately absent
+ * ## The labels stay, and they moved rather than shrank
  *
- * `NO OWNER CUSTODY` is true on this screen and is not rendered on it, for the
- * reason `/app/accounts/new` gives about what a second label does to the loud
- * one beside it. `LIMEN HOLDS THE AGENT KEY` is absent because it is **not
- * true yet**: the agent key this flow creates is generated in this browser and
- * stays in it, exactly as `/app/try` does it. Server-held agent keys are the
- * runtime's work, and the label goes up in the commit that makes it true.
+ * `ScreenHeader` requires them, and the requirement is right: every screen here
+ * is testnet-only and unaudited, and a screen that could omit that is a screen
+ * that eventually does. They are above the fold and beside the input rather
+ * than in a row under the title, which keeps them read without making them the
+ * first four things on the page.
+ *
+ * ## The layout uses the width because a console should
+ *
+ * A single measure-width column on a wide screen reads as a page that has not
+ * finished loading. The input takes the room — a strategy is a few sentences
+ * and wants to look like it — and the rail beside it carries position and
+ * caveats, which are exactly the things you want visible and not in the way.
+ * Below the `lg` breakpoint the two stack, input first.
  */
 export default function NewAgentPage() {
   return (
     <main className="screen">
-      <ScreenHeader
-        eyebrow="interface"
-        title="Deploy an agent"
-        lede={
-          <>
-            <p>
-              Describe what the agent should be able to do. Limen turns that into a set of limits,
-              you correct anything it got wrong, and deploying installs those limits on a smart
-              account as a context rule the network enforces.
-            </p>
-            <p>
-              The description is read by a model and the model can be wrong. Nothing it proposes
-              reaches the chain until you have read it on the review step — that step is the
-              boundary between a suggestion and a permission.
-            </p>
-          </>
-        }
-        labels={['TESTNET ONLY', 'NOT AUDITED', 'COMPOSITION ONLY', 'IN DEVELOPMENT']}
-      />
+      <ScreenHeader eyebrow="build" title="Build an Agent" labels={['TESTNET ONLY', 'NOT AUDITED', 'IN DEVELOPMENT']} />
 
-      <AgentBuilder />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-12">
+        <div className="flex flex-col gap-4">
+          <p className="measure text-[13px] leading-relaxed text-muted">
+            Say what the agent should do and what it may spend. Limen drafts the limits from it,
+            you correct them on the next screen, and only then does anything reach a chain.
+          </p>
+
+          <StrategyInput />
+        </div>
+
+        <aside className="flex flex-col gap-8 lg:border-l lg:border-border-subtle lg:pl-8">
+          <BuildSteps current="strategy" />
+
+          <div className="flex flex-col gap-2">
+            <span className="col-head text-muted-dim">what this does not do</span>
+            <p className="text-[12.5px] leading-relaxed text-muted">
+              Nothing here places a trade. This flow installs a boundary on a smart account —
+              the limits an agent cannot exceed — and stops there.
+            </p>
+          </div>
+        </aside>
+      </div>
     </main>
   );
 }

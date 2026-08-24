@@ -14,7 +14,7 @@ export const metadata = {
  * identity states — unknown, signed-out, unavailable — are decided in the
  * browser from the session store, because a server render cannot read the
  * cookie during a static pass and its only honest answer is `unknown`.
- * `AgentBuilder` settled that shape and `use-identity.ts` records the React
+ * `StrategyInput` settled that shape and `use-identity.ts` records the React
  * #418 that came from doing it the other way; this screen inherits both rather
  * than re-deciding.
  */

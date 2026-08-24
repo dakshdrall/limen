@@ -1,0 +1,20 @@
+-- The proposal a model made, kept so it can survive a navigation.
+--
+-- The agent builder became one screen per step. Describing the agent, reviewing
+-- the limits and deploying are now three routes rather than three sections of
+-- one page, which means the generated proposal has to outlive a navigation —
+-- and a back-navigation, and a reload. It used to live in React state, which
+-- lasted exactly as long as the flow was a single screen.
+--
+-- This is NOT `policies.proposal_json`, and the difference is the reason both
+-- exist. That row is written by `configure`, after a person has read these
+-- numbers and corrected them; it records what was **accepted** and it is what
+-- the install plan is derived from. This column records what was **suggested**.
+-- Nothing that builds a transaction reads it, and it carries no authority: the
+-- server re-validates every field through `validate` on the way to a policy.
+--
+-- Nullable with no default and no backfill. Every existing agent was described
+-- before this column existed, so the honest value for them is "no proposal was
+-- kept" — which is what NULL says, and which the review screen handles by
+-- reading the description again rather than by inventing fields.
+ALTER TABLE "agents" ADD COLUMN "draft_json" jsonb;

@@ -92,15 +92,26 @@ export async function saveDraft({
   agentId,
   name,
   description,
+  draft,
 }: {
   agentId: string | null;
   name: string;
   description: string;
+  /**
+   * The proposal, stored alongside the row so the review screen can read it.
+   *
+   * Sent because the builder is one screen per step now: without this the
+   * generated numbers live only in the tab that generated them and are gone
+   * the moment the flow navigates. It is stored untrusted — see the column's
+   * comment in the schema — and re-validated server-side on the way to a
+   * policy, so sending it grants it nothing.
+   */
+  draft?: unknown;
 }): Promise<AgentRecord> {
   const response = await fetch(agentId === null ? '/api/agents' : `/api/agents/${agentId}`, {
     method: agentId === null ? 'POST' : 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, draft }),
   });
   if (!response.ok) throw await refusalFrom(response);
   const body = (await response.json()) as { agent: AgentRecord };

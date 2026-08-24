@@ -325,6 +325,57 @@ export function emptyDraft(): AgentConfigDraft {
 }
 
 /**
+ * A stored proposal, narrowed back into a draft — or the empty draft.
+ *
+ * `agents.draft_json` holds whatever a model produced, written without being
+ * trusted, so this is the one place that turns `unknown` into an
+ * `AgentConfigDraft`. It reads field by field and keeps only strings, falling
+ * back to the empty draft's value for anything missing, mistyped or absent.
+ *
+ * It cannot fail. A malformed stored draft yields a draft with empty fields,
+ * which is the same state a person sees before a model has answered — and which
+ * `validate` will refuse for the ordinary reason if they try to continue. That
+ * is deliberately not an error path: a proposal is a suggestion, and the
+ * failure mode for a bad suggestion is an empty field, not a broken screen.
+ *
+ * What it must never do is widen anything. Nothing here fills a value in on a
+ * model's behalf, and `recipients` keeps only strings, so a stored
+ * `["ok", {"$ne": null}]` becomes `["ok"]` rather than reaching a form as an
+ * object.
+ */
+export function reviveDraft(stored: unknown, description = ''): AgentConfigDraft {
+  const empty = emptyDraft();
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) {
+    return { ...empty, description };
+  }
+
+  const row = stored as Record<string, unknown>;
+  const text = (key: keyof AgentConfigDraft): string => {
+    const value = row[key];
+    return typeof value === 'string' ? value : (empty[key] as string);
+  };
+
+  const recipients = Array.isArray(row.recipients)
+    ? row.recipients.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  return {
+    name: text('name'),
+    // The description on the row wins over any the proposal carried: the row is
+    // what the person actually wrote, and the proposal only echoes it.
+    description: description.length > 0 ? description : text('description'),
+    assetLabel: text('assetLabel'),
+    assetContractId: text('assetContractId'),
+    assetDecimals: text('assetDecimals'),
+    cap: text('cap'),
+    windowId: text('windowId'),
+    expiryId: text('expiryId'),
+    perTransactionCap: text('perTransactionCap'),
+    recipients,
+  };
+}
+
+/**
  * Every refusal, at once, rather than the first one.
  *
  * A form that reports one problem per submission makes the user discover its

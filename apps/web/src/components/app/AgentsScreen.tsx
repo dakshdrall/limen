@@ -8,7 +8,7 @@ import { ExplorerLink } from '@/components/ExplorerLink';
 import { StatusLabel } from '@/components/StatusLabel';
 import { chainContractUrl } from '@/lib/explorer';
 import { useIdentity } from '@/lib/use-identity';
-import { AGENT_BUILDER_PASSKEY_LABEL } from '@/components/app/AgentBuilder';
+import { STRATEGY_INPUT_PASSKEY_LABEL } from '@/components/app/StrategyInput';
 
 /**
  * The agents this person owns, and what each one is actually allowed to do.
@@ -44,7 +44,7 @@ import { AGENT_BUILDER_PASSKEY_LABEL } from '@/components/app/AgentBuilder';
  *
  * ## The three identity states are the builder's, deliberately
  *
- * `AgentBuilder` already decided what signed-out, unavailable and unknown look
+ * `StrategyInput` already decided what signed-out, unavailable and unknown look
  * like on a screen that needs a database, and a second screen inventing its own
  * phrasing for the same three facts is how a product ends up with two different
  * explanations of the same situation.
@@ -158,11 +158,12 @@ export function AgentsScreen() {
     return (
       <EmptyState title="Sign in to see your agents">
         <p>
-          Use the passkey control in the header. An agent has an owner: the row that records this
-          agent records who may pause and revoke it, and this list is scoped to that owner.
+          Use <span className="value">Connect wallet</span>{' '}
+          at the top right, or sign in with a passkey. An agent has an owner: the row that records
+          this agent records who may pause and revoke it, and this list is scoped to that owner.
         </p>
         <p>
-          <StatusLabel name={AGENT_BUILDER_PASSKEY_LABEL} />
+          <StatusLabel name={STRATEGY_INPUT_PASSKEY_LABEL} />
         </p>
       </EmptyState>
     );

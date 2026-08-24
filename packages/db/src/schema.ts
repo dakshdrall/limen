@@ -288,6 +288,30 @@ export const agents = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description'),
+    /**
+     * The limits a model *proposed*, before anybody corrected them.
+     *
+     * Written when the description is read and replaced whenever it is read
+     * again. It exists because the builder is one step per screen: the
+     * proposal has to survive the navigation from the description to the
+     * review, and a back-navigation to the description and forward again.
+     * While the builder was a single screen this lived in React state, which
+     * is exactly as long as that arrangement lasted.
+     *
+     * **This is not `policies.proposal_json` and must not be confused with
+     * it.** That row is written by `configure`, after a person has read these
+     * numbers and corrected them, and it records what was *accepted* — it is
+     * the thing the install plan is derived from and the thing the chain ends
+     * up enforcing. This column records what was *suggested*, is never read by
+     * anything that builds a transaction, and carries no authority at all.
+     *
+     * Untyped `jsonb` for the same reason the column is untrusted: it holds
+     * whatever a model returned, and the server re-validates every field
+     * through `validate` before any of it reaches a policy. A schema here
+     * would suggest the contents had been checked at the point they were
+     * stored, which they have not.
+     */
+    draftJson: jsonb('draft_json'),
     status: agentStatus('status').notNull().default('DRAFT'),
     network: network('network').notNull().default('testnet'),
     modelProvider: text('model_provider'),
