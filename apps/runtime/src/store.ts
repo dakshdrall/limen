@@ -46,6 +46,7 @@ import {
 } from '@limen/db';
 import type { RuntimeDb } from '@limen/db/runtime';
 import type { SealedAgentKey } from '@limen/custody';
+import type { EnforcedOffchain } from './policy/gate.js';
 
 /** What was asked. A tool invocation today; a chat message when the loop lands. */
 export type TurnRequest =
@@ -57,8 +58,15 @@ export type TurnRequest =
    * a decision and possibly a write, and the decision is the part worth
    * recording separately. A cycle that arrived as `swap_tokens` would lose the
    * reason it traded, which is the only thing making the trade reproducible.
+   *
+   * **It carries nothing.** The pair and the trigger are read from the agent
+   * when the worker runs it, so this row records an intent — *run this agent
+   * once* — rather than a configuration. A `config` field used to live here,
+   * carrying a trigger the browser invented per press; a stored row holding one
+   * would mean two cycles of the same agent could run different strategies and
+   * the difference would live in a request body nobody kept.
    */
-  | { kind: 'cycle'; config: unknown };
+  | { kind: 'cycle' };
 
 export type TurnChannel = 'web' | 'telegram' | 'api';
 
@@ -128,7 +136,22 @@ export interface AgentForTurn {
    * audited on-chain primitive can. Anything read from here and acted on must
    * be reported as a Limen refusal — never as the network's.
    */
-  enforcedOffchain: { recipients?: string[]; perTransactionCap?: string | null } | null;
+  enforcedOffchain: EnforcedOffchain | null;
+  /**
+   * `agents.trigger_json`, exactly as stored, and deliberately `unknown`.
+   *
+   * This is what makes the agent act, and it is the one field here the runtime
+   * *evaluates* rather than points at. It arrives untyped for `draft_json`'s
+   * reason: nothing checked it at the point it was written, so a type here
+   * would be a claim this row cannot support. `turn.ts` parses it against a
+   * schema on every cycle and reports a trigger it cannot read as
+   * `trigger_unreadable` — which is a third fact, distinct from an agent that
+   * has no trigger and from one that decided not to trade.
+   *
+   * Null means no trigger, permanently and legitimately: that agent reads the
+   * price, records it, and trades nothing.
+   */
+  trigger: unknown;
 }
 
 export interface RuntimeStore {
@@ -178,6 +201,34 @@ export interface RuntimeStore {
     isBoundaryRefusal: boolean | null;
     isRevokedRule: boolean | null;
   }): Promise<void>;
+  /**
+   * Move a trigger's reference down, and refuse to move it any other way.
+   *
+   * The UPDATE applies only where the stored reference is still numerically
+   * above `mustBeAbove` — which is the *new* reference, so the write happens
+   * only when it lowers the number. That makes a widening re-stamp impossible
+   * at the database rather than merely absent from `restampReference`: two
+   * independent refusals for the one direction of self-mutation this project
+   * will not ship.
+   *
+   * It is also what makes the write safe against a concurrent cycle. The guard
+   * compares against whatever is stored *now* rather than against the value
+   * this caller read, so a cycle that finishes second with an older, higher
+   * price matches no row instead of walking the reference back up.
+   *
+   * Returns whether the row moved. `false` is not an error: it is the guard
+   * doing its job, and the caller records it as `not_restamped` rather than
+   * retrying into the same race.
+   */
+  restampTrigger(input: {
+    agentId: string;
+    /**
+     * The stored reference must still be strictly above this for the write to
+     * apply — so this is the new reference, not the one being replaced.
+     */
+    mustBeAbove: string;
+    trigger: unknown;
+  }): Promise<boolean>;
   audit(input: {
     actor: 'user' | 'agent' | 'system' | 'operator';
     actorId: string | null;
@@ -219,6 +270,7 @@ export function drizzleRuntimeStore(db: RuntimeDb): RuntimeStore {
           feeAccount: agentAccounts.agentFeeAccount,
           contextRuleId: agentAccounts.contextRuleId,
           venueContextRuleId: agentAccounts.venueContextRuleId,
+          trigger: agents.triggerJson,
           ciphertext: agentKeys.ciphertext,
           wrappedDataKey: agentKeys.wrappedDataKey,
           kmsKeyId: agentKeys.kmsKeyId,
@@ -265,7 +317,32 @@ export function drizzleRuntimeStore(db: RuntimeDb): RuntimeStore {
           algorithm: row.algorithm,
         },
         enforcedOffchain: (policy?.enforcedOffchainJson ?? null) as AgentForTurn['enforcedOffchain'],
+        trigger: row.trigger,
       };
+    },
+
+    /**
+     * The ratchet, as one statement.
+     *
+     * The `WHERE` does the work: the row moves only if the stored reference is
+     * still strictly above the new one, so an upward re-stamp matches nothing
+     * and writes nothing. `numeric` rather than a text comparison because
+     * these are numbers written as strings — `'900000' > '1000000'` is true
+     * lexically and false in every sense that matters here, and getting it
+     * wrong would silently invert the guard rather than break it.
+     */
+    async restampTrigger({ agentId, mustBeAbove, trigger }) {
+      const updated = await db
+        .update(agents)
+        .set({ triggerJson: trigger })
+        .where(
+          and(
+            eq(agents.id, agentId),
+            sql`(${agents.triggerJson} ->> 'referencePrice')::numeric > ${mustBeAbove}::numeric`,
+          ),
+        )
+        .returning({ id: agents.id });
+      return updated.length > 0;
     },
 
     async createTurn({ agentId, channel, request }) {

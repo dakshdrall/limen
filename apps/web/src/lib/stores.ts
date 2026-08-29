@@ -230,6 +230,7 @@ function toAgent(row: {
   description: string | null;
   status: string;
   draftJson?: unknown;
+  triggerJson?: unknown;
 }): AgentRecord {
   return {
     id: row.id,
@@ -240,6 +241,7 @@ function toAgent(row: {
     // Passed through untyped and unvalidated, which is what the column holds.
     // `?? null` rather than left undefined so "no proposal" is one value.
     draft: row.draftJson ?? null,
+    trigger: row.triggerJson ?? null,
   };
 }
 
@@ -366,7 +368,13 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         }),
         db
           .update(agents)
-          .set({ name: input.name, status: 'CONFIGURED' })
+          // The trigger is written in the same batch as the policy row, so an
+          // agent never exists in a state where a person reviewed a rule that
+          // was not stored. It is set unconditionally, including to null:
+          // reconfiguring an agent to have no trigger has to clear the old one,
+          // and a conditional write would leave the previous rule live under a
+          // configuration that no longer mentions it.
+          .set({ name: input.name, status: 'CONFIGURED', triggerJson: input.trigger })
           .where(and(eq(agents.id, input.agentId), eq(agents.userId, input.userId)))
           .returning(),
       ]);

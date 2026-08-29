@@ -228,6 +228,21 @@ export interface AgentConfigDraft {
   outputAssetLabel: string;
   /** The largest single trade, as a decimal amount. Empty for no ceiling. */
   maxPositionSize: string;
+  /**
+   * How far the price must fall before this agent trades, in basis points.
+   *
+   * With {@link AgentConfigDraft.triggerAmount} this is the whole of what the
+   * builder collects about *when* to trade. The third number a trigger needs —
+   * the reference the fall is measured from — is deliberately not here: it is a
+   * price, and a person typing a price is a person reading numbers off a venue
+   * and retyping them. The configure route reads it from the venue at the
+   * moment the agent is configured and stamps it with the ledger it was read
+   * at, so the stored rule means *"5% below where it was when I set this up"*,
+   * which is what the sentence in the description says.
+   */
+  triggerDropBps: string;
+  /** How much to trade when it fires, as a decimal amount. Empty for no trigger. */
+  triggerAmount: string;
 }
 
 /** The validated, canonical form. Amounts are integer smallest units. */
@@ -270,6 +285,26 @@ export interface AgentConfig {
     /** The largest single trade, in integer smallest units, or `null`. */
     maxPositionSize: string | null;
   };
+
+  /**
+   * What makes this agent act, or `null` for one that acts only when asked.
+   *
+   * A third half, and it is neither of the other two. `onChain` is what the
+   * network refuses and `enforcedOffChain` is what Limen refuses; this refuses
+   * nothing — it is the rule that *starts* a trade. Rendering it under either
+   * heading would tell somebody a trigger bounds their agent, which is the
+   * opposite of what it does.
+   *
+   * The reference price is absent by construction. `validate` runs in a browser
+   * and in a route handler and neither can read a venue synchronously; the
+   * configure route completes this into a stored trigger with a price it read
+   * and the ledger it read it at.
+   */
+  trigger: {
+    dropBps: number;
+    /** Integer smallest units of the input asset. */
+    amount: string;
+  } | null;
 
   /** Display only. Kept beside the config so a screen need not re-derive it. */
   display: {
@@ -348,6 +383,13 @@ export function emptyDraft(): AgentConfigDraft {
     outputAssetContractId: '',
     outputAssetLabel: '',
     maxPositionSize: '',
+    // Both empty, and that matters: an empty draft is a *payment* agent's
+    // draft, and a prefilled `500` here would make every payment agent arrive
+    // at the review step half-configured for trading, then be refused for a
+    // trade size it was never asked for. The form offers 500 as a placeholder,
+    // which suggests without filling in.
+    triggerDropBps: '',
+    triggerAmount: '',
   };
 }
 
@@ -396,6 +438,8 @@ export function reviveDraft(stored: unknown, description = ''): AgentConfigDraft
     outputAssetContractId: text('outputAssetContractId'),
     outputAssetLabel: text('outputAssetLabel'),
     maxPositionSize: text('maxPositionSize'),
+    triggerDropBps: text('triggerDropBps'),
+    triggerAmount: text('triggerAmount'),
     assetDecimals: text('assetDecimals'),
     cap: text('cap'),
     windowId: text('windowId'),
@@ -564,6 +608,89 @@ export function validate(draft: AgentConfigDraft): ValidationResult {
     }
   }
 
+  /**
+   * The trigger: what makes this agent act, rather than what bounds it.
+   *
+   * Both fields together or neither. A drop with no amount is a rule that fires
+   * and trades nothing; an amount with no drop is a size for a trade nothing
+   * starts. Either alone is a half-configured strategy that would look
+   * configured on the screen, so both are refused with a message naming the
+   * missing half.
+   *
+   * A trigger also needs somewhere to fire: a price is quoted for a pair, so an
+   * agent with no output asset has nothing to measure a fall in. That refusal
+   * lands on the pair field rather than on the trigger, because the pair is the
+   * thing to go and fill in.
+   */
+  let trigger: { dropBps: number; amount: string } | null = null;
+  const rawDropBps = draft.triggerDropBps.trim();
+  const rawTriggerAmount = draft.triggerAmount.trim();
+
+  if (rawDropBps.length > 0 || rawTriggerAmount.length > 0) {
+    const dropBps = Number(rawDropBps);
+    const dropValid =
+      /^[0-9]+$/.test(rawDropBps) && Number.isInteger(dropBps) && dropBps >= 1 && dropBps < 10_000;
+
+    // The missing half and the malformed value are two different messages, and
+    // exactly one of them applies. Both at once would put two refusals on one
+    // empty field and make the form look angrier than the mistake.
+    if (rawDropBps.length === 0) {
+      refuse(
+        'triggerDropBps',
+        'Set how far the price must fall, or clear the trade size for an agent with no trigger.',
+      );
+    } else if (!dropValid) {
+      refuse(
+        'triggerDropBps',
+        'A fall is a whole number of basis points between 1 and 9,999 — 500 is five percent. ' +
+          '10,000 would be the price reaching zero, which is not a trigger.',
+      );
+    }
+
+    let triggerAmount: string | null = null;
+    if (rawTriggerAmount.length === 0) {
+      refuse(
+        'triggerAmount',
+        'Set how much to trade when this fires. A trigger with no size is a rule that fires and trades nothing.',
+      );
+    } else if (decimalsValid) {
+      triggerAmount = toSmallestUnits(rawTriggerAmount, assetDecimals);
+      if (triggerAmount === null) {
+        refuse('triggerAmount', `Not an amount this asset can express at ${assetDecimals} decimal places.`);
+      } else if (BigInt(triggerAmount) <= 0n) {
+        refuse('triggerAmount', 'Clear both trigger fields for an agent with no trigger rather than trading zero.');
+      }
+    }
+
+    if (allowedPairs.length === 0) {
+      refuse(
+        'outputAssetContractId',
+        'A trigger measures a fall in a price, and a price is quoted for a pair. Set the token this agent may buy, or clear the trigger.',
+      );
+    }
+
+    // Two numbers Limen computes locally, contradicting each other. Unlike the
+    // window cap — which the network governs, so Limen has no business having
+    // an opinion about it — both of these are Limen's, and a trigger that
+    // proposes more than the position ceiling would be refused by `gate.ts` on
+    // every single cycle. That is a configuration guaranteed never to trade,
+    // and it is better said here than discovered in an activity log.
+    if (
+      triggerAmount !== null &&
+      maxPositionSize !== null &&
+      BigInt(triggerAmount) > BigInt(maxPositionSize)
+    ) {
+      refuse(
+        'triggerAmount',
+        `This trades ${rawTriggerAmount} but Limen refuses any single trade over ${draft.maxPositionSize.trim()}, so this trigger could never trade. Lower the size or raise the maximum position.`,
+      );
+    }
+
+    if (dropValid && triggerAmount !== null) {
+      trigger = { dropBps, amount: triggerAmount };
+    }
+  }
+
   if (problems.length > 0) return { ok: false, problems };
 
   /**
@@ -594,6 +721,7 @@ export function validate(draft: AgentConfigDraft): ValidationResult {
         validityLedgers: expiry.ledgers,
       },
       enforcedOffChain: { perTransactionCap, recipients, allowedPairs, maxPositionSize },
+      trigger,
       display: {
         assetLabel: draft.assetLabel.trim(),
         assetDecimals,

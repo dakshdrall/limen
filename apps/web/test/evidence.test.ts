@@ -47,6 +47,12 @@ const recorded = JSON.parse(recordedText) as {
     shortRuleInstallTx: string;
     axes: { ledger: string; hash?: string }[];
   };
+  /** The C0 close-out: two real swaps, one under the cap and one over it. */
+  tradingRun: {
+    smartAccount: string;
+    deployTx: string;
+    swaps: { which: string; outcome: string; hash: string; contractError?: string }[];
+  };
 };
 
 describe('the chain figures are what the deployments file says', () => {

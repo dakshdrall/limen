@@ -1,0 +1,64 @@
+-- What makes a trading agent act, stored on the agent.
+--
+-- `executeTradingDecision` evaluates a structured trigger — a reference price,
+-- a fall in basis points, and a size — and until now no row held one. The
+-- trigger was invented in the browser and posted with the cycle, which meant an
+-- agent had no stored rule for *when* to trade and the Run Agent screen had to
+-- ask a person for it every time. A rule a person retypes each run is not a
+-- rule the agent has.
+--
+-- ## Why here and not in `policies.enforced_offchain_json`
+--
+-- That column already travels with every turn and would have cost no new query.
+-- It is the wrong home anyway. Everything in it *refuses* — an allowed pair, a
+-- position ceiling, a recipient list — and the column is named
+-- `enforced_offchain` rather than `limits` precisely so a screen cannot list
+-- those beside the installed cap as though the network refused both. A trigger
+-- is the opposite kind of thing: it is what makes the agent act. Filed there it
+-- would render under "Enforced by Limen", where a rule that starts trades reads
+-- as a rule that stops them — the same misrepresentation running backwards.
+--
+-- On `agents` it sits beside `description` and `risk_level`, which is the row
+-- that says what this agent is rather than what bounds it.
+--
+-- ## Untyped, and untrusted on read
+--
+-- `jsonb` for the reason `draft_json` is untyped: a schema here would suggest
+-- the contents had been checked at the point they were stored. The runtime
+-- re-validates this column against a Zod schema on every cycle, and a stored
+-- trigger that fails to parse is reported as `trigger_unreadable` — a third
+-- fact, distinct from "no trigger configured" and from "decided not to trade".
+--
+-- ## The reference moves down and never up, and that is not a missing case
+--
+-- A cycle that trades re-stamps `referencePrice` to the price it traded at, so
+-- a `price_drop` agent buys each further fall instead of firing once and then
+-- either never again or on every cycle forever. That re-stamp is a ratchet: it
+-- only ever lowers the reference, which only ever makes the trigger harder to
+-- fire.
+--
+-- Upward movement is TAKE PROFIT — a different strategy, with its own trigger
+-- kind, its own field and its own test. It is not this one's unwritten half.
+-- A ratchet that could also widen would be an agent loosening its own rule
+-- with no person present, which is the one direction of self-mutation this
+-- project will not ship. It is refused twice: by `restampReference`, and again
+-- by the WHERE clause of the UPDATE that writes it.
+--
+-- ## Null is a legitimate, permanent state
+--
+-- An agent with no trigger reads the price, records it, and trades nothing.
+-- That is what a payment agent is, and it is what every agent deployed before
+-- this migration is. Null is never "not yet filled in".
+--
+-- The stored shape, as written by the configure route:
+--
+--   { "kind": "price_drop",
+--     "referencePrice": "2500000",   -- output units per 1 unit of input
+--     "referenceLedger": 1234567,    -- the ledger that price was read at
+--     "dropBps": 500,
+--     "amount": "3000000" }          -- input asset, smallest units
+--
+-- `referenceLedger` is carried because a price is a read, and every read value
+-- in this schema states the ledger it was read at. It also gives a re-stamp — if
+-- one is ever wired — somewhere to record that the reference moved and when.
+ALTER TABLE "agents" ADD COLUMN "trigger_json" jsonb;

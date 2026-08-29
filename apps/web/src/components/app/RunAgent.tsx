@@ -14,28 +14,46 @@ import { chainTxUrl } from '@/lib/explorer';
  * somebody asks it to, once, and an agent that could start itself would be one
  * you cannot stop by stopping asking.
  *
- * ## The trigger is on this screen because it is not yet on the agent
+ * ## The trigger is shown here and is no longer asked for here
  *
- * The builder collects a pair and a position size; it does not yet collect a
- * rule for *when* to trade. Rather than invent one at cycle time or pretend an
- * agent has a stored strategy it does not, this asks — with the reference
- * prefilled from the price the server just read, so the common case is one
- * click. The prose strategy above it is what the agent is *for*; these numbers
- * are what this cycle will actually evaluate, and the difference is stated on
- * screen rather than blurred.
+ * This screen used to carry three inputs — a reference price, a fall, a size —
+ * because the builder collected no rule for *when* to trade and something had
+ * to. That made the agent a one-shot with a form in front of it: two presses
+ * could run two different strategies, and the rule a person thought they had
+ * configured existed only in a text box.
+ *
+ * The rule now lives on the agent. What is left here is the rule, rendered so a
+ * person can read what is about to be evaluated, and a button. Nothing on this
+ * screen is sent — the runtime reads the trigger from storage — so what is
+ * displayed and what runs cannot drift apart.
  *
  * ## What this control does not do
  *
- * It does not bound anything. Whatever it sends, `gate.ts` refuses what only
- * Limen can see and the installed cap refuses what exceeds it — on a ledger,
- * with a hash. A form that pre-checked an amount against the cap would be the
- * inversion this project exists to avoid, so it does not.
+ * It does not bound anything. Whatever the trigger says, `gate.ts` refuses what
+ * only Limen can see and the installed cap refuses what exceeds it — on a
+ * ledger, with a hash. A form that pre-checked an amount against the cap would
+ * be the inversion this project exists to avoid, so it does not.
  */
 
 interface CycleOutcome {
   outcome: string;
   summary: string;
   hash: string | null;
+}
+
+/**
+ * The stored trigger, as much of it as a screen can trust.
+ *
+ * Narrowed from `agents.trigger_json` by the page, which is `unknown` there for
+ * the reason the column gives. `null` covers both an agent with no trigger and
+ * one whose stored trigger this build could not read; the two are told apart in
+ * the prose below, because they are different facts.
+ */
+export interface StoredTrigger {
+  referencePrice: string;
+  referenceLedger: number;
+  dropBps: number;
+  amount: string;
 }
 
 /** The same cadence `AgentChat` polls at, and the same ceiling. */
@@ -93,22 +111,15 @@ async function poll(turnId: string): Promise<CycleOutcome> {
 
 export function RunAgent({
   agentId,
-  inputAsset,
-  outputAsset,
-  livePrice,
-  suggestedAmount,
+  trigger,
+  triggerUnreadable = false,
 }: {
   agentId: string;
-  inputAsset: string;
-  outputAsset: string;
-  /** Output units per probe of input, read server-side. Null when unavailable. */
-  livePrice: string | null;
-  /** The max position size, when one is configured. The obvious trade size. */
-  suggestedAmount: string | null;
+  /** The stored rule, or null when there is none. */
+  trigger: StoredTrigger | null;
+  /** True when a trigger is stored and this build could not read it. */
+  triggerUnreadable?: boolean;
 }) {
-  const [reference, setReference] = useState(livePrice ?? '');
-  const [dropBps, setDropBps] = useState('500');
-  const [amount, setAmount] = useState(suggestedAmount ?? '');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CycleOutcome | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -119,20 +130,10 @@ export function RunAgent({
     setResult(null);
 
     try {
-      const trigger =
-        reference.trim().length > 0 && amount.trim().length > 0
-          ? {
-              kind: 'price_drop' as const,
-              referencePrice: reference.trim(),
-              dropBps: Number(dropBps),
-              amount: amount.trim(),
-            }
-          : null;
-
+      // No body. The strategy is on the agent, and a payload here would be a
+      // second place for it to live.
       const response = await fetch(`/api/agents/${agentId}/cycle`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ config: { inputAsset, outputAsset, trigger } }),
         cache: 'no-store',
       });
       const started = (await response.json()) as { turnId?: string; message?: string; error?: string };
@@ -155,52 +156,62 @@ export function RunAgent({
       <div className="flex flex-col gap-1">
         <span className="col-head text-muted-dim">run one cycle</span>
         <p className="measure text-[12.5px] leading-relaxed text-muted">
-          Reads the price from the venue, evaluates the trigger below, and trades only if it fires.
-          One cycle per press — there is no scheduler, and nothing here runs on its own.
+          Reads the price from the venue, evaluates this agent&rsquo;s stored trigger, and trades
+          only if it fires. One cycle per press — there is no scheduler, and nothing here runs on
+          its own.
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <label className="flex flex-col gap-1">
-          <span className="col-head text-muted-dim">reference price</span>
-          <input
-            className="field"
-            type="text"
-            inputMode="numeric"
-            value={reference}
-            disabled={busy}
-            onChange={(event) => setReference(event.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="col-head text-muted-dim">fires on a fall of (bps)</span>
-          <input
-            className="field"
-            type="text"
-            inputMode="numeric"
-            value={dropBps}
-            disabled={busy}
-            onChange={(event) => setDropBps(event.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="col-head text-muted-dim">trade size</span>
-          <input
-            className="field"
-            type="text"
-            inputMode="numeric"
-            value={amount}
-            disabled={busy}
-            onChange={(event) => setAmount(event.target.value)}
-          />
-        </label>
-      </div>
+      {triggerUnreadable ? (
+        // Not "no trigger". This agent has a rule and this build could not read
+        // it, and telling somebody they have no rule when they have an
+        // unreadable one is a lie about which of the two is wrong.
+        <div className="panel" data-tone="unproven">
+          <span className="col-head text-muted">the stored trigger could not be read</span>
+          <p className="measure text-[12.5px] leading-relaxed text-muted">
+            This agent has a trigger stored and Limen could not make sense of it. A cycle will
+            refuse rather than guess at what it meant. Reconfigure the agent to replace it.
+          </p>
+        </div>
+      ) : trigger === null ? (
+        <div className="panel" data-tone="unproven">
+          <span className="col-head text-muted">no trigger configured</span>
+          <p className="measure text-[12.5px] leading-relaxed text-muted">
+            This agent has no rule for when to trade, so a cycle reads the price, records it, and
+            trades nothing. That is a real outcome, not a failure. Configure a trigger to give it
+            one.
+          </p>
+        </div>
+      ) : (
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <div className="flex flex-col gap-1">
+            <dt className="col-head text-muted-dim">reference price</dt>
+            <dd className="font-mono text-[13px] text-foreground">{trigger.referencePrice}</dd>
+            {/* The ledger travels with the price, here as everywhere. It is also
+                what tells a reference a person accepted apart from one a trade
+                re-stamped. */}
+            <dd className="text-[11.5px] text-faint">
+              read at ledger {trigger.referenceLedger.toLocaleString('en-US')}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="col-head text-muted-dim">fires on a fall of</dt>
+            <dd className="font-mono text-[13px] text-foreground">{trigger.dropBps} bps</dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="col-head text-muted-dim">trade size</dt>
+            <dd className="font-mono text-[13px] text-foreground">{trigger.amount}</dd>
+          </div>
+        </dl>
+      )}
 
-      <p className="text-[12px] leading-relaxed text-faint">
-        The reference is prefilled with the price the server read for this page. Amounts are in the
-        input asset&rsquo;s smallest unit. Leave the reference or the size empty to read the price
-        without trading.
-      </p>
+      {trigger !== null && !triggerUnreadable && (
+        <p className="text-[12px] leading-relaxed text-faint">
+          Amounts are in the input asset&rsquo;s smallest unit. This is the agent&rsquo;s stored
+          rule — nothing on this screen is sent with the cycle, so what you read here is what runs.
+          A cycle that trades moves the reference down to the price it traded at; it never moves up.
+        </p>
+      )}
 
       <div>
         <button

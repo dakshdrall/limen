@@ -23,13 +23,13 @@
  * trades nothing. That is reported as what it is — *no trigger configured* —
  * rather than as a decision not to trade, because those are different facts.
  *
- * ## The price comes from the chain, not from an API
+ * ## The price comes from the chain, and no longer from here
  *
- * `router_get_amounts_out(amount_in, path)` on the Soroswap router, read by
- * simulation. It costs no fee, needs no key, and it is the same contract the
- * swap will actually go through, so the number the decision is made on is the
- * venue's own. The Route API's `POST /quote` would give a better *route* across
- * pools; it needs a registered key and it is not what a price check is for.
+ * `readPrice` moved to `@limen/chain`'s `quote.ts` when the builder needed the
+ * same call: a stored trigger's reference is stamped from the live venue at
+ * configure time, and two copies of a quote could disagree about the probe
+ * amount a reference is denominated in. This module still owns the *decision*;
+ * it no longer owns the read.
  *
  * ## What bounds any of this
  *
@@ -39,10 +39,8 @@
  * argue against — see `gate.ts`.
  */
 
-import { Address, nativeToScVal, scValToNative, rpc, TransactionBuilder, Operation, Keypair } from '@stellar/stellar-sdk';
-import { invokeContract } from '@limen/chain';
-import { TESTNET_PASSPHRASE } from '@limen/chain/network';
-import { SOROSWAP_TESTNET_ROUTER, swapTokens } from './tools/swap.js';
+import { PRICE_PROBE_AMOUNT, readPrice, type PriceReading } from '@limen/chain';
+import { swapTokens } from './tools/swap.js';
 import type { ToolContext } from './tools/registry.js';
 import type { ToolResult } from './tools/types.js';
 
@@ -62,6 +60,17 @@ export interface TradingTrigger {
   kind: 'price_drop';
   /** The price this is measured against: output units per `probeAmount` input. */
   referencePrice: string;
+  /**
+   * The ledger `referencePrice` was read at.
+   *
+   * A price is a read, and every stored read in this project states when it was
+   * taken. It is also the only way to tell a reference a person accepted at
+   * configure time from one a later cycle re-stamped: the ledger moves with the
+   * price, so *"this reference is from three weeks ago"* and *"this reference is
+   * from the trade an hour ago"* are distinguishable without the audit log —
+   * though the audit log carries both halves too.
+   */
+  referenceLedger: number;
   /** How far it must fall, in basis points of the reference. */
   dropBps: number;
   /** How much to trade when it fires, in the input asset's smallest unit. */
@@ -75,67 +84,13 @@ export interface TradingConfig {
 }
 
 /**
- * The input amount every price is quoted for.
+ * Re-exported so a caller reasoning about a cycle has one import.
  *
- * Prices are read as "how much output for this much input", so a fixed probe
- * makes two readings comparable. One whole unit at seven decimals — big enough
- * that pool rounding is not the signal, small enough not to move the pool it is
- * measuring.
+ * The definitions live in `@limen/chain/quote.js`; these names are part of this
+ * module's surface because `evaluateTrigger` takes a {@link PriceReading} and a
+ * reference is denominated in {@link PRICE_PROBE_AMOUNT}.
  */
-export const PRICE_PROBE_AMOUNT = 10_000_000n;
-
-export interface PriceReading {
-  inputAsset: string;
-  outputAsset: string;
-  /** Output units received for {@link PRICE_PROBE_AMOUNT} of input. */
-  outFor: bigint;
-  probeAmount: bigint;
-  ledger: number;
-}
-
-/**
- * Ask the venue what one unit buys, right now.
- *
- * A simulation, so nothing is signed and no fee is spent. It throws rather than
- * returning a fallback: a cycle that traded on a price it could not read would
- * be trading on a guess, and "the venue did not answer" is a real outcome the
- * caller has to be able to report.
- */
-export async function readPrice(
-  options: { rpcUrl: string; simulationSource: string },
-  { inputAsset, outputAsset }: { inputAsset: string; outputAsset: string },
-): Promise<PriceReading> {
-  const server = new rpc.Server(options.rpcUrl);
-  const account = await server.getAccount(options.simulationSource);
-  const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase: TESTNET_PASSPHRASE })
-    .addOperation(
-      Operation.invokeHostFunction({
-        func: invokeContract(SOROSWAP_TESTNET_ROUTER, 'router_get_amounts_out', [
-          nativeToScVal(PRICE_PROBE_AMOUNT, { type: 'i128' }),
-          nativeToScVal([new Address(inputAsset), new Address(outputAsset)], { type: 'address' }),
-        ]),
-        auth: [],
-      }),
-    )
-    .setTimeout(60)
-    .build();
-
-  const sim = await server.simulateTransaction(tx);
-  if (rpc.Api.isSimulationError(sim)) {
-    throw new Error(`the venue could not quote ${inputAsset}/${outputAsset}: ${sim.error.split('\n')[0]}`);
-  }
-  const amounts = scValToNative(sim.result!.retval) as bigint[];
-  const out = amounts[amounts.length - 1];
-  if (out === undefined) throw new Error('the venue returned no output amount');
-
-  return {
-    inputAsset,
-    outputAsset,
-    outFor: BigInt(out),
-    probeAmount: PRICE_PROBE_AMOUNT,
-    ledger: (await server.getLatestLedger()).sequence,
-  };
-}
+export { PRICE_PROBE_AMOUNT, readPrice, type PriceReading };
 
 export type TriggerVerdict =
   | { fires: true; amount: bigint; reason: string }
@@ -193,6 +148,87 @@ export function evaluateTrigger(trigger: TradingTrigger | null, price: PriceRead
   };
 }
 
+/**
+ * Whether this cycle moves the trigger's reference, and where to.
+ *
+ * ## Why a re-stamp exists at all
+ *
+ * A reference stamped once at configure time and never touched makes a
+ * one-shot, not an agent. After the trigger fires the price is below the
+ * reference, and it stays below until it recovers — so the agent either fires
+ * on every cycle forever or, if the price recovers past the reference, never
+ * fires again. Neither is a trading strategy; both are an artefact of the
+ * reference being frozen.
+ *
+ * So a cycle that actually traded re-stamps the reference to the price it
+ * traded at, and the agent buys each further fall.
+ *
+ * ## The three conditions, and why each is a refusal rather than a filter
+ *
+ * 1. **Only on `succeeded`.** A refusal — by Limen, by the network, by an
+ *    over-cap `spending_limit` — moved no money, and moving the strategy
+ *    because a trade was *rejected* would let a bounded agent walk its own
+ *    trigger down by repeatedly proposing trades it is not allowed to make.
+ *    The reference tracks what the agent *did*, never what it attempted.
+ * 2. **Downward only.** The new reference must be strictly below the old one.
+ *    This is what makes the re-stamp a ratchet: every application makes the
+ *    trigger harder to fire, never easier. An upward re-stamp is take profit —
+ *    a different strategy with its own trigger kind — and not the unwritten
+ *    half of this one.
+ * 3. **A trigger must exist.** There is nothing to re-stamp otherwise, and an
+ *    agent with no trigger did not trade on one.
+ *
+ * Pure, for `evaluateTrigger`'s reason: the decision to move a stored strategy
+ * has to be recomputable from the audit row by hand. The second refusal —
+ * downward only — is also enforced in the `WHERE` clause of the UPDATE that
+ * writes it, so a widening re-stamp is impossible at the database and not
+ * merely absent from this function.
+ */
+export type RestampVerdict =
+  | { restamps: true; from: string; to: string; ledger: number; reason: string }
+  | { restamps: false; reason: string };
+
+export function restampReference(
+  trigger: TradingTrigger | null,
+  price: PriceReading,
+  outcome: ToolResult['outcome'],
+): RestampVerdict {
+  if (trigger === null) {
+    return { restamps: false, reason: 'There is no trigger, so there is no reference to move.' };
+  }
+
+  if (outcome !== 'succeeded') {
+    return {
+      restamps: false,
+      reason:
+        `This cycle ended as ${outcome} rather than succeeding, so no money moved and the ` +
+        `reference stays at ${trigger.referencePrice}. A reference tracks what this agent traded, ` +
+        'never what it attempted.',
+    };
+  }
+
+  const reference = BigInt(trigger.referencePrice);
+  if (price.outFor >= reference) {
+    return {
+      restamps: false,
+      reason:
+        `The traded price of ${price.outFor} is at or above the reference of ${reference}, and a ` +
+        'reference only ever moves down. Moving it up would loosen this trigger, which is take ' +
+        'profit and is a different strategy.',
+    };
+  }
+
+  return {
+    restamps: true,
+    from: trigger.referencePrice,
+    to: price.outFor.toString(),
+    ledger: price.ledger,
+    reason:
+      `This cycle traded at ${price.outFor}, below the reference of ${reference}, so the reference ` +
+      `moves down to ${price.outFor} at ledger ${price.ledger}. The next fall is measured from there.`,
+  };
+}
+
 export interface CycleResult {
   price: PriceReading | null;
   verdict: TriggerVerdict | null;
@@ -200,6 +236,15 @@ export interface CycleResult {
   swap: ToolResult | null;
   /** The transaction hash, when a swap reached a ledger — refused or not. */
   hash: string | null;
+  /**
+   * Whether this cycle moved the trigger's reference, and why or why not.
+   *
+   * Null only when there was no price to judge against — the venue could not be
+   * asked. Every other cycle returns a verdict, including the overwhelming
+   * majority that do not re-stamp, because *"the reference did not move"* is a
+   * fact about a stored strategy and should not be inferred from silence.
+   */
+  restamp: RestampVerdict | null;
   summary: string;
 }
 
@@ -230,7 +275,7 @@ export async function executeTradingDecision(
       result: 'price_unavailable',
       metadata: { turnId: ctx.turnId, summary },
     });
-    return { price: null, verdict: null, swap: null, hash: null, summary };
+    return { price: null, verdict: null, swap: null, hash: null, restamp: null, summary };
   }
 
   const verdict = evaluateTrigger(config.trigger, price);
@@ -250,7 +295,19 @@ export async function executeTradingDecision(
         reason: verdict.reason,
       },
     });
-    return { price, verdict, swap: null, hash: null, summary: verdict.reason };
+    return {
+      price,
+      verdict,
+      swap: null,
+      hash: null,
+      // Not `null`: a cycle that read a price and chose not to trade has a
+      // real answer to "did the reference move", and it is no.
+      restamp: {
+        restamps: false,
+        reason: 'This cycle traded nothing, so there was nothing to move the reference to.',
+      },
+      summary: verdict.reason,
+    };
   }
 
   // The trigger fired. Everything from here is `swap_tokens`, unchanged — the
@@ -284,5 +341,60 @@ export async function executeTradingDecision(
     },
   });
 
-  return { price, verdict, swap, hash, summary: `${verdict.reason} ${swap.summary}` };
+  // The strategy moves only after the trade that justifies it is recorded, and
+  // only ever downward. `restampReference` gives the reason either way; the
+  // UPDATE refuses an upward move a second time, in SQL.
+  const restamp = restampReference(config.trigger, price, swap.outcome);
+  if (restamp.restamps) {
+    const next: TradingTrigger = {
+      ...(config.trigger as TradingTrigger),
+      referencePrice: restamp.to,
+      referenceLedger: restamp.ledger,
+    };
+    const applied = await ctx.store.restampTrigger({
+      agentId: ctx.agent.id,
+      // The new reference, not the old one. The guard reads "the stored
+      // reference must still be above this", so passing the value being
+      // replaced would compare a number against itself and refuse every write.
+      mustBeAbove: restamp.to,
+      trigger: next,
+    });
+
+    // Its own audit row rather than a field on the cycle's, because this is a
+    // different kind of event: the cycle is something the agent did, and this
+    // is the agent's stored strategy changing with no person present. That
+    // deserves a name somebody can grep for, and the pair of prices on the row
+    // is what makes the change reconstructible from the log alone.
+    await ctx.store.audit({
+      actor: 'agent',
+      actorId: ctx.agent.id,
+      action: 'trading.restamp',
+      target: ctx.agent.smartAccount,
+      result: applied ? 'restamped' : 'not_restamped',
+      metadata: {
+        turnId: ctx.turnId,
+        referenceFrom: restamp.from,
+        referenceTo: restamp.to,
+        referenceLedger: restamp.ledger,
+        hash,
+        reason: applied
+          ? restamp.reason
+          : // The database refused it. Either something else moved the reference
+            // between the read and this write, or the guard caught a widening
+            // this function should have caught first. Recorded rather than
+            // retried: a second attempt would be racing the same row again.
+            `${restamp.reason} The write did not apply — the stored reference was no longer above ` +
+            `${restamp.to} when it ran, so the reference was left as it stands.`,
+      },
+    });
+  }
+
+  return {
+    price,
+    verdict,
+    swap,
+    hash,
+    restamp,
+    summary: `${verdict.reason} ${swap.summary}`,
+  };
 }

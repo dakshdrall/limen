@@ -286,6 +286,41 @@ export function AgentConfigForm({
         </Field>
 
         <Field
+          label="Fires on a fall of"
+          htmlFor="agent-trigger-drop"
+          messages={messagesFor('triggerDropBps')}
+          hint="Optional, in basis points — 500 is five percent. This is what makes the agent trade: a cycle reads the price and acts only if it has fallen this far from the reference. The reference is read from the venue when you configure this agent, not typed here."
+        >
+          <input
+            id="agent-trigger-drop"
+            className="field"
+            type="text"
+            inputMode="numeric"
+            placeholder="500"
+            value={draft.triggerDropBps}
+            disabled={disabled}
+            onChange={(event) => set('triggerDropBps', event.target.value)}
+          />
+        </Field>
+
+        <Field
+          label="Trade size when it fires"
+          htmlFor="agent-trigger-amount"
+          messages={messagesFor('triggerAmount')}
+          hint="How much to spend on each trade the trigger starts. Different from the maximum position above, which refuses a trade that is too large — this one is the size the agent actually trades. Leave both trigger fields empty for an agent that only acts when you ask it to."
+        >
+          <input
+            id="agent-trigger-amount"
+            className="field"
+            type="text"
+            inputMode="decimal"
+            value={draft.triggerAmount}
+            disabled={disabled}
+            onChange={(event) => set('triggerAmount', event.target.value)}
+          />
+        </Field>
+
+        <Field
           label="Allowed counterparties"
           htmlFor="agent-recipients"
           messages={messagesFor('recipients')}

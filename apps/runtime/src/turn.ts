@@ -28,12 +28,12 @@
  */
 
 import { z } from 'zod';
-import { executeTradingDecision } from './trading.js';
+import { executeTradingDecision, type TradingConfig } from './trading.js';
 import type { KeyProvider } from '@limen/custody';
 import { invokeTool, TOOLS } from './tools/index.js';
 import type { ToolResult } from './tools/types.js';
 import type { Job, JobHandler } from './worker-types.js';
-import type { RuntimeStore, TurnRecord } from './store.js';
+import type { AgentForTurn, RuntimeStore, TurnRecord } from './store.js';
 
 /** The one job kind the runtime knows how to run. */
 export const TURN_JOB_KIND = 'turn.run';
@@ -55,25 +55,97 @@ const payloadSchema = z.strictObject({
 export type TurnJobPayload = z.infer<typeof payloadSchema>;
 
 /**
- * A cycle's configuration, validated rather than trusted.
+ * A stored trigger, validated rather than trusted.
  *
- * The trigger is optional and a missing one is legitimate: the cycle reads the
- * price, reports that there is nothing to evaluate, and trades nothing. That is
- * a different fact from deciding not to trade, and `trading.ts` keeps them apart.
+ * This used to validate a request body: the trigger arrived from the browser
+ * with every cycle, because no row held one. It now validates
+ * `agents.trigger_json`, and the change of subject is the whole point — an
+ * agent has a rule for when to trade, and nobody retypes it per run.
+ *
+ * Still `strictObject`, and still parsed on every cycle. The column is written
+ * by the configure route after validation, but a column is not a promise: an
+ * older build, a hand-edited row, or a future field all reach this line, and a
+ * trigger this schema cannot read is reported as `trigger_unreadable` rather
+ * than being coerced into something evaluable.
  */
-const cycleConfigSchema = z.strictObject({
-  inputAsset: z.string().regex(/^C[A-Z2-7]{55}$/),
-  outputAsset: z.string().regex(/^C[A-Z2-7]{55}$/),
-  trigger: z
-    .strictObject({
-      kind: z.literal('price_drop'),
-      referencePrice: z.string().regex(/^[0-9]{1,39}$/),
-      dropBps: z.number().int().min(0).max(10_000),
-      amount: z.string().regex(/^[1-9][0-9]{0,38}$/),
-    })
-    .nullable()
-    .default(null),
+const storedTriggerSchema = z.strictObject({
+  kind: z.literal('price_drop'),
+  referencePrice: z.string().regex(/^[0-9]{1,39}$/),
+  referenceLedger: z.number().int().nonnegative(),
+  dropBps: z.number().int().min(1).max(10_000),
+  amount: z.string().regex(/^[1-9][0-9]{0,38}$/),
 });
+
+/** `INPUT/OUTPUT`, as `enforcedOffchain.allowedPairs` stores it. */
+const PAIR = /^(C[A-Z2-7]{55})\/(C[A-Z2-7]{55})$/;
+
+/**
+ * One cycle's configuration, read off the agent rather than off a request.
+ *
+ * Two things have to be true before a cycle can run, and each absence is
+ * reported as itself rather than as a generic failure:
+ *
+ *   - **An allowed pair.** `enforcedOffchain.allowedPairs` is Limen's list of
+ *     what this agent may trade, and an empty one means *no pair is allowed* —
+ *     the same direction `gate.ts` reads it in. A cycle with no pair has
+ *     nothing to price, so it does not reach the venue at all.
+ *   - **A readable trigger.** A null trigger is legitimate and is not handled
+ *     here: it travels into `executeTradingDecision`, which reads the price,
+ *     records it, and reports *no trigger configured*. What is handled here is
+ *     a trigger that exists and cannot be parsed, which is a third fact and
+ *     must never be flattened into either of the other two — telling somebody
+ *     their agent has no rule when it has one Limen could not read is a lie
+ *     about which of the two is wrong.
+ *
+ * The pair is taken from the first entry. That is a real limitation stated
+ * rather than hidden: an agent with two allowed pairs trades the first on a
+ * cycle, because one trigger names one reference price and a reference is
+ * denominated in one pair. Two pairs need two triggers, which needs the
+ * roadmap's second trigger field.
+ */
+function cycleConfigFor(
+  agent: AgentForTurn,
+): { value: TradingConfig } | { problem: Extract<ToolResult, { outcome: 'agent_error' }> } {
+  const pair = agent.enforcedOffchain?.allowedPairs?.[0];
+  const matched = pair === undefined ? null : PAIR.exec(pair);
+  if (matched === null) {
+    return {
+      problem: {
+        outcome: 'agent_error',
+        summary:
+          'This agent has no allowed pair, so there is nothing for it to trade and no price to ' +
+          'read. Limen refuses every swap until a pair is configured; nothing was evaluated and ' +
+          'nothing reached a ledger.',
+        detail: `pair_not_configured: ${pair === undefined ? 'no allowed pair' : `unreadable pair ${pair}`}`,
+      },
+    };
+  }
+
+  if (agent.trigger === null || agent.trigger === undefined) {
+    // Legitimate, and deliberately not a problem. The cycle runs, prices the
+    // pair, and says there was nothing to evaluate.
+    return { value: { inputAsset: matched[1]!, outputAsset: matched[2]!, trigger: null } };
+  }
+
+  const parsed = storedTriggerSchema.safeParse(agent.trigger);
+  if (!parsed.success) {
+    return {
+      problem: {
+        outcome: 'agent_error',
+        summary:
+          'This agent has a stored trigger that Limen could not read, so nothing was evaluated ' +
+          'and nothing was traded. This is not the same as having no trigger: the rule is there ' +
+          'and this build could not make sense of it, so the cycle refused rather than guessing ' +
+          'at what it meant.',
+        detail: `trigger_unreadable: ${parsed.error.issues
+          .map((issue) => `${issue.path.join('.') || '(root)'} ${issue.message}`)
+          .join('; ')}`,
+      },
+    };
+  }
+
+  return { value: { inputAsset: matched[1]!, outputAsset: matched[2]!, trigger: parsed.data } };
+}
 
 export interface TurnDeps {
   store: RuntimeStore;
@@ -168,21 +240,25 @@ async function runClaimedTurn(
       turnId: turn.id,
     });
   } else if (request.kind === 'cycle') {
-    // One cycle. The tool context is built exactly as it is for a tool call —
-    // the cycle runs `swap_tokens` through it, so anything different here would
-    // be a second way to reach the same write path.
-    const parsedConfig = cycleConfigSchema.safeParse(request.config);
-    if (!parsedConfig.success) {
-      result = {
-        outcome: 'agent_error',
-        summary: 'This cycle was not configured in a way Limen can evaluate.',
-        detail: parsedConfig.error.issues.map((issue) => issue.message).join('; '),
-      };
+    // One cycle, configured entirely from storage. The tool context is built
+    // exactly as it is for a tool call — the cycle runs `swap_tokens` through
+    // it, so anything different here would be a second way to reach the same
+    // write path.
+    //
+    // Nothing about this cycle comes from the caller. The pair is the agent's
+    // allowed pair and the trigger is the agent's stored rule, so pressing the
+    // button twice runs the same strategy twice, and a cycle is reproducible
+    // from the agent alone rather than from the agent plus whatever was typed
+    // into a form at the time.
+    const config = cycleConfigFor(agent);
+
+    if ('problem' in config) {
+      result = config.problem;
     } else {
       const executionId = await deps.store.recordToolExecution({
         agentId: agent.id,
         toolName: 'trading_cycle',
-        args: parsedConfig.data,
+        args: config.value,
       });
       const cycle = await executeTradingDecision(
         {
@@ -194,7 +270,7 @@ async function runClaimedTurn(
           turnId: turn.id,
           executionId,
         },
-        parsedConfig.data,
+        config.value,
       );
       // The cycle's own result when it did not trade, and the swap's when it
       // did. A cycle that decided not to act is a success — it ran and

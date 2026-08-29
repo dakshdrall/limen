@@ -165,7 +165,14 @@ export function startTurn(
 export function startCycle(
   agentId: string,
   token: string | undefined,
-  request: { config: Record<string, unknown>; channel: 'web' | 'telegram' | 'api' },
+  /**
+   * A channel, and nothing else.
+   *
+   * A `config` used to travel with every cycle, carrying a trigger the screen
+   * invented per press. The agent now stores its own, so this asks the runtime
+   * to run *that agent*, once — and two presses run the same strategy twice.
+   */
+  request: { channel: 'web' | 'telegram' | 'api' },
 ): Promise<RuntimeCall<StartedTurn>> {
   return call<StartedTurn>(`/agents/${agentId}/cycles`, token, {
     method: 'POST',

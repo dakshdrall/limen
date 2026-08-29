@@ -51,7 +51,7 @@
 
 import { rpc } from '@stellar/stellar-sdk';
 import { SynthesisError, synthesize } from '@limen/core';
-import { NotEnforceableError, SOROSWAP_TESTNET_ROUTER, lower } from '@limen/chain';
+import { NotEnforceableError, SOROSWAP_TESTNET_ROUTER, lower, readPrice } from '@limen/chain';
 import { MAX_NAME_LENGTH } from '@/lib/agent-config';
 import {
   compileToObservation,
@@ -64,6 +64,7 @@ import { cleanAgentName } from '@/lib/agents';
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
 import { requireUser } from '@/lib/route-session';
 import { AgentNotFound, drizzleAgentStore } from '@/lib/stores';
+import { simulationSource } from '@/lib/simulation-source';
 
 // The Stellar SDK does not run on the Edge runtime.
 export const runtime = 'nodejs';
@@ -147,6 +148,67 @@ export async function POST(
     );
   }
 
+  /**
+   * The trigger's reference price, read from the venue now.
+   *
+   * The two numbers a person gave — how far it must fall and how much to trade
+   * — are meaningless without a third: the price the fall is measured from. It
+   * is read here rather than typed because a person typing a price is a person
+   * copying numbers off an explorer, and it is read *now* rather than at cycle
+   * time because *"drops 5%"* in the sentence they wrote means five percent
+   * from where it was when they set the agent up.
+   *
+   * The ledger travels with it, for the reason every read value in this project
+   * carries one, and for a second reason specific to this column: a cycle that
+   * trades re-stamps the reference, so the ledger is what distinguishes the
+   * price a person accepted from one a later trade moved.
+   *
+   * A venue that cannot be quoted refuses the whole configure rather than
+   * storing a trigger with no reference. A trigger missing its reference is not
+   * a partial rule; it is a rule that cannot be evaluated, and writing one
+   * would put an agent on screen that says it trades on a 5% fall and never
+   * fires.
+   */
+  let trigger: Record<string, unknown> | null = null;
+  if (config.trigger !== null) {
+    const source = simulationSource();
+    if (source === undefined) {
+      return Response.json(
+        {
+          error: 'simulation_source_unconfigured',
+          message:
+            'This deployment cannot read a price from the venue, so a trigger cannot be given the reference it is measured against. Nothing was written.',
+        },
+        { status: 503 },
+      );
+    }
+
+    const [inputAsset, outputAsset] = config.enforcedOffChain.allowedPairs[0]!.split('/');
+    try {
+      const price = await readPrice(
+        { rpcUrl, simulationSource: source },
+        { inputAsset: inputAsset!, outputAsset: outputAsset! },
+      );
+      trigger = {
+        kind: 'price_drop',
+        referencePrice: price.outFor.toString(),
+        referenceLedger: price.ledger,
+        dropBps: config.trigger.dropBps,
+        amount: config.trigger.amount,
+      };
+    } catch (error) {
+      return Response.json(
+        {
+          error: 'price_unavailable',
+          message:
+            'The venue could not quote this pair, so the trigger has no reference price to measure a fall from. Nothing was written.',
+          detail: error instanceof Error ? error.message : String(error),
+        },
+        { status: 502 },
+      );
+    }
+  }
+
   // Derivation and lowering, both deterministic, both the same functions the
   // demonstrated mode uses. Neither knows which mode produced its input.
   let proposal;
@@ -215,6 +277,7 @@ export async function POST(
       proposal,
       installPlan: plan,
       enforcedOffChain: config.enforcedOffChain,
+      trigger,
       headroomBps: synthesisOptionsFor(config).headroomBps,
       windowLedgers: config.onChain.windowLedgers,
       validUntilLedger: proposal.contextRule.validUntilLedger,

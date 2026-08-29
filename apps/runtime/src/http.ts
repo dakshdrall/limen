@@ -40,8 +40,15 @@ import type { RuntimeStore, TurnChannel } from './store.js';
 /** Bodies are small — a tool name and two fields. Anything larger is refused. */
 const MAX_BODY_BYTES = 16 * 1024;
 
+/**
+ * A cycle asks for nothing but a channel.
+ *
+ * `strictObject`, so a caller still sending a `config` — an older web build,
+ * say — gets a 400 naming the key rather than having its trigger silently
+ * ignored while the agent runs a different strategy from storage. A request
+ * that is quietly not what the sender thought it was is the worse failure here.
+ */
 const cycleRequestSchema = z.strictObject({
-  config: z.unknown(),
   channel: z.enum(['web', 'telegram', 'api']).default('web'),
 });
 
@@ -180,7 +187,7 @@ async function postCycle(
   const turn = await deps.store.createTurn({
     agentId,
     channel: parsed.data.channel as TurnChannel,
-    request: { kind: 'cycle', config: parsed.data.config },
+    request: { kind: 'cycle' },
   });
 
   await deps.queue.enqueue({

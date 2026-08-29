@@ -312,6 +312,53 @@ export const agents = pgTable(
      * stored, which they have not.
      */
     draftJson: jsonb('draft_json'),
+    /**
+     * What makes this agent act, in numbers. Null for an agent that does not
+     * trade, and null is never "not yet filled in".
+     *
+     * `executeTradingDecision` evaluates this rather than the sentence in
+     * `description`. That split is the honest version of "evaluate the
+     * strategy": parsing prose at cycle time would mean a trade whose reason
+     * cannot be reproduced, and a structured trigger read by a pure function
+     * gives a decision anybody can recompute from the audit row.
+     *
+     * **This is not a limit and must never be rendered as one.** Everything in
+     * `policies.enforced_offchain_json` refuses something; this starts
+     * something. Filed in that column it would render under "Enforced by
+     * Limen", where a rule that begins a trade reads as a rule that stops one —
+     * which is the misrepresentation that column's name exists to prevent, in
+     * the other direction. Hence a column here, beside `description` and
+     * `risk_level`: what this agent *is*, not what bounds it.
+     *
+     * Untyped `jsonb` for `draft_json`'s reason. The runtime re-validates it on
+     * every cycle and reports a trigger it cannot parse as `trigger_unreadable`
+     * — a distinct fact from "no trigger configured", because telling somebody
+     * their agent has no rule when it has one Limen broke is a lie about which
+     * of them is wrong.
+     *
+     *
+     * ## The reference moves down and never up, and that is not a missing case
+     *
+     * A cycle that trades re-stamps `referencePrice` to the price it traded
+     * at, so a `price_drop` agent buys each further fall instead of firing
+     * once and then either never again or on every cycle forever. The
+     * re-stamp is a ratchet: it only ever lowers the reference, which only
+     * ever makes the trigger *harder* to fire.
+     *
+     * Upward movement is **take profit** — a different strategy, with its own
+     * trigger kind, its own field and its own test. It is not this one's
+     * unwritten half, and reading a downward-only ratchet as an oversight gets
+     * the design backwards. A ratchet that could also widen would be an agent
+     * loosening its own rule with no person present, which is the one
+     * direction of self-mutation this project will not ship. It is refused
+     * twice: by `restampReference`, and again by the `WHERE` clause of the
+     * UPDATE that writes it.
+     *
+     * `{ kind: 'price_drop', referencePrice, referenceLedger, dropBps, amount }`
+     * today. `referenceLedger` is carried because a price is a read, and every
+     * read value in this schema states the ledger it was read at.
+     */
+    triggerJson: jsonb('trigger_json'),
     status: agentStatus('status').notNull().default('DRAFT'),
     network: network('network').notNull().default('testnet'),
     modelProvider: text('model_provider'),

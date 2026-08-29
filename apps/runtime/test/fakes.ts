@@ -40,12 +40,15 @@ export function fakeAgent(overrides: Partial<AgentForTurn> = {}): AgentForTurn {
       algorithm: 'ed25519-seed:aes-256-gcm/aes-256-gcm-envelope-v1',
     },
     enforcedOffchain: null,
+    trigger: null,
     ...overrides,
   };
 }
 
 export interface Recorded {
   toolExecutions: { id: string; toolName: string; args: unknown }[];
+  /** Every re-stamp the store was asked for, applied or refused by the guard. */
+  restamps: { agentId: string; mustBeAbove: string; trigger: unknown; applied: boolean }[];
   decisions: { id: string; decision: string; reason: string | null }[];
   outcomes: { id: string; outcome: ToolOutcome }[];
   transactions: unknown[];
@@ -61,6 +64,7 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
   let nextId = 0;
   const recorded: Recorded = {
     toolExecutions: [],
+    restamps: [],
     decisions: [],
     outcomes: [],
     transactions: [],
@@ -152,6 +156,25 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
 
     async recordTransaction(input) {
       recorded.transactions.push(input);
+    },
+
+    /**
+     * The guard, in the fake, for the reason the real one is in SQL.
+     *
+     * `store-postgres.test.ts` proves the `WHERE` clause actually refuses an
+     * upward write, because that is a property of Postgres and asserting it
+     * against a fake would be writing a fake that agrees with the design. What
+     * this reproduces is the *contract* — the write applies only where the
+     * stored reference is still above the new one — so a caller test can reach
+     * the branch that records `not_restamped` rather than only ever seeing the
+     * happy path. A fake agent with no stored trigger has nothing to compare
+     * against and applies, which is the shape every cycle test here uses.
+     */
+    async restampTrigger({ agentId, mustBeAbove, trigger }) {
+      const stored = (agent?.trigger as { referencePrice?: string } | null)?.referencePrice;
+      const applied = stored === undefined ? true : BigInt(stored) > BigInt(mustBeAbove);
+      recorded.restamps.push({ agentId, mustBeAbove, trigger, applied });
+      return applied;
     },
 
     async audit(input) {

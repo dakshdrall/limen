@@ -3219,3 +3219,70 @@ restored rather than the sentences struck.
 Everything else in this document follows from the §3 answer, and the §3 answer
 follows from one sentence: an agent that answers a message signs while nobody's
 browser is open.
+
+---
+
+**RUN — the stored trigger lands, and the ratchet is proved against Postgres,
+2026-08-27.** C1's remaining gap closed: an agent had no stored rule for *when*
+to trade, so `RunAgent` asked a person for one on every press and two cycles of
+the same agent could run two different strategies.
+
+```
+migration    0008_agent_trigger  ALTER TABLE agents ADD COLUMN trigger_json jsonb
+applied to   Neon (direct endpoint), 9 migrations recorded, column jsonb NULL-able
+existing     0 agents carry a trigger — every pre-existing row reads as "no trigger"
+```
+
+The trigger is `{ kind, referencePrice, referenceLedger, dropBps, amount }` on
+`agents`, **not** in `policies.enforced_offchain_json`. Everything in that column
+refuses something; a trigger starts something, and filing it there would render
+it under "Enforced by Limen" where a rule that begins a trade reads as one that
+stops it.
+
+`readPrice` moved to `@limen/chain`'s `quote.ts`, because the configure route now
+reads the venue to stamp `referencePrice` and two copies of a quote could
+disagree about the probe amount a reference is denominated in. A venue that
+cannot be quoted refuses the whole configure rather than storing a rule that can
+never be evaluated.
+
+**The re-stamp, and the option taken.** A reference frozen at configure time
+makes a one-shot: after the trigger fires the price is below it, so the agent
+either fires every cycle forever or never again. Option 2 of four was chosen —
+re-stamp on `succeeded` only, from the price the cycle traded at, downward only,
+with the audit row carrying both halves. Upward movement is take profit, a
+different trigger kind, and is not this one's unwritten half.
+
+The downward-only property is refused twice, and the second refusal is the one
+that survives a future caller:
+
+```
+restampReference   pure; refuses !succeeded, refuses price >= reference
+UPDATE ... WHERE   (trigger_json->>'referencePrice')::numeric > $new::numeric
+```
+
+**A real Postgres caught what a fake would not have.** The first version passed
+the *old* reference to the guard, so the comparison was `stored > stored` — false
+for every write, and the three refusal tests all passed vacuously beside it. The
+two downward tests failed against a throwaway `postgres:16`, which is the whole
+argument `store-postgres.test.ts` makes for existing.
+
+```
+apps/runtime   130 passed, 0 skipped   (TEST_DATABASE_URL + REDIS_URL set)
+packages/db     34 passed, 0 skipped
+apps/web       812 passed, 0 failed
+```
+
+Two web failures were logged here first as *pre-existing*, and they were not.
+`design-system.test.ts` had caught the swallowed-space defect twice on
+`OffChainSummary.tsx:144` — a line this milestone rewrote, so `<em>payment</em>`
+would have rendered as `paymentthis agent`. Both rules were pointing at new
+work, and reading them as somebody else's is the exact failure the rules exist to
+prevent: the defect is invisible in a diff and survives every type check. Fixed
+with the `{' '}` the rule asks for.
+
+The cycle request now carries nothing: `{ kind: 'cycle' }`, no config, and the
+runtime derives the pair from `allowedPairs[0]` and the trigger from the column.
+A stored trigger that fails its schema is reported as `trigger_unreadable` —
+distinct from "no trigger configured", because telling somebody their agent has
+no rule when it has one Limen could not read is a lie about which of the two is
+wrong.

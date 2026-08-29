@@ -38,7 +38,7 @@ import { fromSmallestUnits } from '@/lib/agent-config';
  * ## The empty case is a claim, not a gap
  *
  * No allowed counterparties is not "unrestricted" — it is Limen refusing every
- * trade the agent proposes. That is worth more words than a dash, because a
+ * *payment* the agent proposes. That is worth more words than a dash, because a
  * blank list in a permissions screen reads as *no limit* to almost everybody.
  */
 export function OffChainSummary({
@@ -141,8 +141,10 @@ export function OffChainSummary({
                 // Not a dash. A blank list in a permissions screen reads as
                 // "no limit" to almost everybody, and it means the opposite.
                 <span className="text-muted">
-                  None allowed, so Limen refuses every trade this agent proposes until you add
-                  one. This is a stop, not an absence of one.
+                  None allowed, so Limen refuses every <em>payment</em>{' '}
+                  this agent proposes until you add one. This is a stop, not an absence of one.
+                  It does not gate swaps: a swap&rsquo;s counterparty is a pool the venue picks,
+                  not an address this agent names, so there is nothing for a payee list to match.
                 </span>
               ) : (
                 <ul className="flex flex-col gap-1">

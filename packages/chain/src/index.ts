@@ -119,3 +119,5 @@ export {
   type EnforcedSpend,
 } from './events.js';
 export { SOROSWAP_TESTNET_ROUTER, SOROSWAP_SWAP_FN, SOROSWAP_QUOTE_FN } from './venues.js';
+
+export { PRICE_PROBE_AMOUNT, readPrice, type PriceReading } from './quote.js';

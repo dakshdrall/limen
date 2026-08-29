@@ -8,14 +8,15 @@
  * route it sits beside, and it enqueues rather than executing: the answer comes
  * back by polling the turn, the same way every other write does.
  *
- * The trigger arrives from the screen rather than from storage, and that is
- * stated rather than hidden. The builder does not collect one yet, so an agent
- * has no stored rule that says when to trade; the detail screen asks for it,
- * prefilled from the live price. A cycle with no trigger reads the price and
- * trades nothing — which is a real outcome and is reported as one.
+ * The request carries nothing but the intent. The pair and the trigger are the
+ * agent's own — collected by the builder, stored on the row, and read by the
+ * runtime when it runs the cycle — so this route cannot influence what the
+ * agent does beyond asking it to act once. A cycle is therefore reproducible
+ * from the agent alone: press the button twice and the same rule is evaluated
+ * twice, against whatever the price is at the time.
  *
- * `TODO(roadmap)`: collect the trigger in the builder and store it beside the
- * off-chain constraints, so a cycle is reproducible from the agent alone.
+ * An agent with no trigger reads the price and trades nothing, which is a real
+ * outcome and is reported as one rather than as a failure.
  */
 
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
@@ -52,25 +53,11 @@ export async function POST(
   const agent = await drizzleAgentStore().findForUser(id, gate.user.id);
   if (agent === undefined) return Response.json({ error: 'not_found' }, { status: 404 });
 
-  let body: { config?: unknown };
-  try {
-    body = (await request.json()) as { config?: unknown };
-  } catch {
-    return Response.json({ error: 'bad_request', message: 'Body must be JSON.' }, { status: 400 });
-  }
-
-  const config = body.config;
-  if (typeof config !== 'object' || config === null) {
-    return Response.json(
-      { error: 'bad_request', message: 'config must be an object naming the pair to trade.' },
-      { status: 400 },
-    );
-  }
-
-  const started = await startCycle(id, await sessionToken(), {
-    config: config as Record<string, unknown>,
-    channel: 'web',
-  });
+  // No body is read, and none is required. There is nothing a caller could put
+  // in one that this route would honour — the strategy is on the agent — so
+  // parsing one would only create a way for a request to look like it
+  // configured something it did not.
+  const started = await startCycle(id, await sessionToken(), { channel: 'web' });
 
   if (!started.ok) {
     // The runtime's word for its own refusal, kept rather than flattened —

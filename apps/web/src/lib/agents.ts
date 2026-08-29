@@ -97,6 +97,18 @@ export interface AgentRecord {
    * treats that as "ask again", never as "there are no limits".
    */
   draft: unknown;
+  /**
+   * The stored trigger: what makes this agent act, or null for one that does
+   * not act on a rule.
+   *
+   * `unknown` for `draft`'s reason and one more of its own. This column is
+   * evaluated by the runtime rather than displayed by it, and the runtime
+   * re-validates it on every cycle; a type here would let a screen render a
+   * rule as though it were known-good when the thing that actually reads it has
+   * its own opinion. The detail screen narrows it for display and says
+   * "unreadable" rather than guessing when it cannot.
+   */
+  trigger: unknown;
 }
 
 /**
@@ -332,6 +344,20 @@ export interface ConfigureInput {
   installPlan: InstallPlan;
   /** Recipients and the per-payment ceiling. Enforced by nothing today. */
   enforcedOffChain: AgentConfig['enforcedOffChain'];
+  /**
+   * The stored trigger, complete with the reference price the route read.
+   *
+   * Written to `agents.trigger_json`, not to the policy row, and the separation
+   * is the point: everything in `enforcedOffChain` refuses something and this
+   * starts something. `null` for an agent with no trigger, which is every
+   * payment agent and any trading agent whose owner has not set a rule yet.
+   *
+   * `unknown` rather than a type, because this is the shape the column holds
+   * and the runtime re-validates it on every cycle. A type here would suggest
+   * the value had been checked at the point it was stored, and the argument
+   * against that is written out on the column itself.
+   */
+  trigger: unknown;
   headroomBps: number;
   windowLedgers: number;
   validUntilLedger: number;

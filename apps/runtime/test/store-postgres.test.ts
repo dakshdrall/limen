@@ -15,7 +15,7 @@
  * production uses — so what passes here is what will happen.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createRuntimeDb, type RuntimeDb } from '@limen/db/runtime';
@@ -230,5 +230,101 @@ describe.runIf(url.length > 0)('what one turn needs about its agent', () => {
 
     const agent = await store!.agentForTurn(AGENT_ID, USER_ID);
     expect(agent?.enforcedOffchain).toEqual({ recipients: [RECIPIENT] });
+  });
+});
+
+/**
+ * The ratchet, against the database that enforces it.
+ *
+ * `restampReference` refuses an upward move and `restamp.test.ts` proves it
+ * over a range. This is the *second* refusal, and it is the one that holds when
+ * the first is bypassed — a future caller, a concurrent cycle finishing second,
+ * a hand-run UPDATE through this method. Asserting it against the fake would be
+ * asserting that the fake agrees with the design; the `WHERE` clause is a
+ * property of Postgres, so it is checked here.
+ */
+describe.runIf(url.length > 0)('the re-stamp guard is in the database, not only in the caller', () => {
+  const stored = (referencePrice: string) => ({
+    kind: 'price_drop' as const,
+    referencePrice,
+    referenceLedger: 4_300_000,
+    dropBps: 500,
+    amount: '20000000',
+  });
+
+  const currentReference = async (): Promise<string | undefined> => {
+    const [row] = await db!.select({ trigger: agents.triggerJson }).from(agents).where(eq(agents.id, AGENT_ID));
+    return (row?.trigger as { referencePrice?: string } | null)?.referencePrice;
+  };
+
+  beforeEach(async () => {
+    await db!.update(agents).set({ triggerJson: stored('2500000') }).where(eq(agents.id, AGENT_ID));
+  });
+
+  it('applies a re-stamp that moves the reference down', async () => {
+    const applied = await store!.restampTrigger({
+      agentId: AGENT_ID,
+      mustBeAbove: '2300000',
+      trigger: stored('2300000'),
+    });
+
+    expect(applied).toBe(true);
+    expect(await currentReference()).toBe('2300000');
+  });
+
+  it('refuses one that would move it up, and leaves the row untouched', async () => {
+    const applied = await store!.restampTrigger({
+      agentId: AGENT_ID,
+      mustBeAbove: '2700000',
+      trigger: stored('2700000'),
+    });
+
+    expect(applied, 'the WHERE clause must match no row').toBe(false);
+    expect(await currentReference()).toBe('2500000');
+  });
+
+  it('refuses one that would not move it at all', async () => {
+    // Equal is not down. A no-op write would be harmless in itself, but it
+    // would report as a re-stamp and put a row in the audit log claiming a
+    // change that did not happen.
+    const applied = await store!.restampTrigger({
+      agentId: AGENT_ID,
+      mustBeAbove: '2500000',
+      trigger: stored('2500000'),
+    });
+
+    expect(applied).toBe(false);
+    expect(await currentReference()).toBe('2500000');
+  });
+
+  it('compares numerically rather than as text', async () => {
+    // `'900000' > '1000000'` is true lexically and false in every sense that
+    // matters here. A text comparison would invert the guard for any pair of
+    // prices with different digit counts, which is most of them.
+    await db!.update(agents).set({ triggerJson: stored('1000000') }).where(eq(agents.id, AGENT_ID));
+
+    const applied = await store!.restampTrigger({
+      agentId: AGENT_ID,
+      mustBeAbove: '900000',
+      trigger: stored('900000'),
+    });
+
+    expect(applied, '900000 is below 1000000 and the write must apply').toBe(true);
+    expect(await currentReference()).toBe('900000');
+  });
+
+  it('loses a race rather than winning it, when the stored reference has already moved below', async () => {
+    // Two cycles finishing out of order. The second carries an older, higher
+    // price; the guard is what stops it walking the reference back up.
+    await db!.update(agents).set({ triggerJson: stored('2100000') }).where(eq(agents.id, AGENT_ID));
+
+    const applied = await store!.restampTrigger({
+      agentId: AGENT_ID,
+      mustBeAbove: '2300000',
+      trigger: stored('2300000'),
+    });
+
+    expect(applied).toBe(false);
+    expect(await currentReference()).toBe('2100000');
   });
 });

@@ -30,6 +30,7 @@ import {
   emptyDraft,
   fromSmallestUnits,
   resolveExpiry,
+  reviveDraft,
   resolveWindow,
   synthesisOptionsFor,
   toSmallestUnits,
@@ -553,5 +554,115 @@ describe('a trading draft carries the two limits the account cannot see', () => 
     if (!result.ok) return;
     expect(result.config.enforcedOffChain.allowedPairs).toEqual([]);
     expect(result.config.enforcedOffChain.maxPositionSize).toBeNull();
+  });
+});
+
+/**
+ * The trigger: the half of a strategy that says *when*.
+ *
+ * Everything else this file checks is a limit — something that refuses. This
+ * block is about the one field that starts a trade, and the failure it guards
+ * against is a screen that looks configured and an agent that never acts: a
+ * fall with no size, a size with no fall, or a trigger on an agent with no pair
+ * to price. Each of those reads as a working strategy on the review step and
+ * trades nothing forever.
+ *
+ * The reference price is deliberately absent from all of this. It is a read
+ * from a venue, the configure route takes it, and a form that asked a person to
+ * type one would be asking them to copy numbers off an explorer.
+ */
+describe('a trigger is both halves or neither', () => {
+  const XLM_CONTRACT = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+  const USDC_CONTRACT = 'CB3TLW74NBIOT3BUWOZ3TUM6RFDF6A4GVIRUQRQZABG5KPOUL4JJOV2F';
+
+  const trading = (overrides: Partial<AgentConfigDraft> = {}): AgentConfigDraft => ({
+    ...emptyDraft(),
+    name: 'Dip buyer',
+    description: 'buy XLM whenever the price drops 5%, spend at most 20 USDC a day',
+    assetContractId: USDC_CONTRACT,
+    assetLabel: 'USDC',
+    assetDecimals: '7',
+    cap: '20',
+    outputAssetContractId: XLM_CONTRACT,
+    outputAssetLabel: 'XLM',
+    triggerDropBps: '500',
+    triggerAmount: '2',
+    ...overrides,
+  });
+
+  it('collects the fall and the size, and leaves the reference to the server', () => {
+    const result = validate(trading());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.trigger).toEqual({ dropBps: 500, amount: '20000000' });
+    // Not in either limit half. A trigger that appeared under "Enforced by
+    // Limen" would read as a constraint, and it is the opposite of one.
+    expect(Object.keys(result.config.enforcedOffChain)).not.toContain('trigger');
+    expect(Object.keys(result.config.onChain)).not.toContain('trigger');
+  });
+
+  it('leaves a payment agent with no trigger and no refusals', () => {
+    // The empty draft is a payment agent's draft. A default in either trigger
+    // field would refuse this for a field it was never asked about.
+    const result = validate(goodDraft());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.trigger).toBeNull();
+  });
+
+  it('refuses a fall with no size', () => {
+    expect(problemsFor(trading({ triggerAmount: '' }), 'triggerAmount')).toHaveLength(1);
+  });
+
+  it('refuses a size with no fall', () => {
+    expect(problemsFor(trading({ triggerDropBps: '' }), 'triggerDropBps')).toHaveLength(1);
+  });
+
+  it('refuses a trigger on an agent with no pair, on the pair field', () => {
+    // The refusal lands where the fix is. A message on the trigger would tell
+    // somebody to change the rule when what is missing is the token to buy.
+    const messages = problemsFor(trading({ outputAssetContractId: '' }), 'outputAssetContractId');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('quoted for a pair');
+  });
+
+  it('refuses a fall of zero, which is not a fall', () => {
+    expect(problemsFor(trading({ triggerDropBps: '0' }), 'triggerDropBps')).toHaveLength(1);
+  });
+
+  it('refuses a fall of ten thousand basis points, which is the price reaching zero', () => {
+    expect(problemsFor(trading({ triggerDropBps: '10000' }), 'triggerDropBps')).toHaveLength(1);
+  });
+
+  it('refuses a fractional basis point', () => {
+    expect(problemsFor(trading({ triggerDropBps: '12.5' }), 'triggerDropBps')).toHaveLength(1);
+  });
+
+  it('refuses a size the asset cannot express, rather than rounding it', () => {
+    const messages = problemsFor(trading({ assetDecimals: '2', triggerAmount: '1.005' }), 'triggerAmount');
+    expect(messages).toHaveLength(1);
+  });
+
+  it('refuses a size larger than the position ceiling, because it could never trade', () => {
+    // Two numbers Limen computes locally, contradicting each other: `gate.ts`
+    // would refuse every cycle this agent ever ran. Unlike the window cap,
+    // which the network governs and which this file deliberately does not
+    // compare against.
+    const messages = problemsFor(trading({ triggerAmount: '10', maxPositionSize: '5' }), 'triggerAmount');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('could never trade');
+  });
+
+  it('allows a size at exactly the position ceiling', () => {
+    const result = validate(trading({ triggerAmount: '5', maxPositionSize: '5' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('survives a round trip through the stored draft', () => {
+    // `agents.draft_json` is how a proposal crosses the navigation, and a field
+    // the reviver drops is a field the review screen silently forgets.
+    const revived = reviveDraft(trading());
+    expect(revived.triggerDropBps).toBe('500');
+    expect(revived.triggerAmount).toBe('2');
   });
 });

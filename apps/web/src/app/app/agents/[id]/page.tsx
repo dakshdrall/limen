@@ -4,7 +4,7 @@ import { readBalance, SOROSWAP_TESTNET_ROUTER } from '@limen/chain';
 import { Address } from '@/components/Address';
 import { ExplorerLink } from '@/components/ExplorerLink';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
-import { RunAgent } from '@/components/app/RunAgent';
+import { RunAgent, type StoredTrigger } from '@/components/app/RunAgent';
 import { chainTxUrl } from '@/lib/explorer';
 import { truncateAddress } from '@/lib/format';
 import { RPC_URL } from '@/lib/chain-config';
@@ -38,6 +38,33 @@ export const metadata = {
  * still installed, still live, or still has room — those are read from the
  * chain when something needs them, which is what `gate.ts` does every turn.
  */
+/**
+ * `agents.trigger_json` into something a screen can render, or null.
+ *
+ * Deliberately strict and deliberately silent. A stored trigger missing its
+ * ledger, or carrying a `dropBps` as a string, is not a trigger this build
+ * understands — and rendering four fields when three parsed would put a number
+ * on screen that the runtime will not act on. The caller distinguishes "no
+ * trigger" from "stored but unreadable" by checking the raw column, which is
+ * why this returns null for both rather than throwing on one.
+ */
+function readTrigger(stored: unknown): StoredTrigger | null {
+  if (typeof stored !== 'object' || stored === null) return null;
+  const row = stored as Record<string, unknown>;
+  if (row.kind !== 'price_drop') return null;
+  if (typeof row.referencePrice !== 'string' || !/^[0-9]+$/.test(row.referencePrice)) return null;
+  if (typeof row.referenceLedger !== 'number' || !Number.isInteger(row.referenceLedger)) return null;
+  if (typeof row.dropBps !== 'number' || !Number.isInteger(row.dropBps)) return null;
+  if (typeof row.amount !== 'string' || !/^[0-9]+$/.test(row.amount)) return null;
+
+  return {
+    referencePrice: row.referencePrice,
+    referenceLedger: row.referenceLedger,
+    dropBps: row.dropBps,
+    amount: row.amount,
+  };
+}
+
 export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -55,6 +82,13 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const offChain = policy?.enforcedOffChain ?? null;
   const pair = offChain?.allowedPairs?.[0] ?? null;
   const [inputAsset, outputAsset] = pair === null ? [null, null] : pair.split('/');
+
+  // The stored rule, narrowed for display only. `agents.trigger_json` is
+  // `unknown` because nothing checked it when it was written, and the runtime
+  // re-validates it on every cycle regardless of what this screen makes of it.
+  // Narrowing to null when it does not fit is what lets the screen say "stored
+  // and unreadable" rather than rendering half a rule.
+  const storedTrigger = readTrigger(agent.trigger);
 
   // Read on this request, never stored. Null when the account is not deployed
   // or the network could not be asked — both render as "not read" rather than
@@ -96,10 +130,8 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
           {inputAsset != null && outputAsset != null && summary?.smartAccount != null ? (
             <RunAgent
               agentId={agent.id}
-              inputAsset={inputAsset}
-              outputAsset={outputAsset}
-              livePrice={null}
-              suggestedAmount={offChain?.maxPositionSize ?? null}
+              trigger={storedTrigger}
+              triggerUnreadable={agent.trigger !== null && storedTrigger === null}
             />
           ) : (
             <div className="panel" data-tone="unproven">
