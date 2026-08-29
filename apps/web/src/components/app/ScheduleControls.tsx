@@ -52,6 +52,15 @@ const everyPhrase = (seconds: number | null): string => {
   return `every ${seconds} seconds`;
 };
 
+/**
+ * The intervals offered, and nothing between them.
+ *
+ * A free-text seconds box invites 30, which the tick cannot honour and which
+ * would silently become 60. These are the values the scheduler can actually
+ * keep, and the shortest is a minute for that reason.
+ */
+const INTERVALS = [60, 300, 900, 1800, 3600, 21_600, 86_400];
+
 const when = (iso: string | null): string => (iso === null ? 'never' : new Date(iso).toLocaleString());
 
 export function ScheduleControls({ agentId, status, schedule }: Props) {
@@ -59,13 +68,20 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
   const [view, setView] = useState(schedule);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [interval, setIntervalSeconds] = useState(view?.intervalSeconds ?? 900);
 
   const paused = current === 'PAUSED';
+  // `disabledAt` is history and is deliberately never cleared, so it alone
+  // cannot mean "stopped now" — a re-armed schedule would then render as
+  // STOPPED BY LIMEN forever, which is the same lie as a stopped one rendering
+  // as running, running the other way. The stop is `enabled === false`; the
+  // columns say who stopped it.
+  const stoppedByBreaker = view !== null && !view.enabled && view.disabledAt !== null;
+  const stoppedByHand = view !== null && !view.enabled && view.disabledAt === null;
   // Only these two can be pressed. Anything else — mid-deploy, errored, not yet
   // deployed — is not a schedule somebody can start or stop, and a button that
   // returned 409 on every press would be a control that lies about what it does.
   const controllable = current === 'ACTIVE' || paused;
-  const trippedAt = view?.disabledAt ?? null;
 
   const toggle = async (): Promise<void> => {
     setBusy(true);
@@ -93,6 +109,47 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const call = async (
+    input: RequestInit & { url: string },
+  ): Promise<{ status?: string; schedule?: ScheduleView | null } | undefined> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(input.url, input);
+      const body = (await response.json()) as {
+        status?: string;
+        schedule?: ScheduleView | null;
+        detail?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        setError(body.detail ?? body.error ?? 'That did not apply, so nothing changed.');
+        return undefined;
+      }
+      return body;
+    } catch {
+      setError('That did not reach the server, so nothing changed.');
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const arm = async (): Promise<void> => {
+    const body = await call({
+      url: `/api/agents/${agentId}/schedule`,
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ intervalSeconds: interval }),
+    });
+    if (body !== undefined) setView(body.schedule ?? null);
+  };
+
+  const disarm = async (): Promise<void> => {
+    const body = await call({ url: `/api/agents/${agentId}/schedule`, method: 'DELETE' });
+    if (body !== undefined) setView(null);
   };
 
   return (
@@ -128,7 +185,13 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
               className="font-mono text-[13px]"
               data-tone={view.enabled && !paused ? undefined : 'unproven'}
             >
-              {trippedAt !== null ? 'STOPPED BY LIMEN' : paused ? 'PAUSED' : view.enabled ? 'RUNNING' : 'OFF'}
+              {stoppedByBreaker
+                ? 'STOPPED BY LIMEN'
+                : paused
+                  ? 'PAUSED'
+                  : stoppedByHand
+                    ? 'OFF'
+                    : 'RUNNING'}
             </dd>
           </div>
           <div className="flex flex-col gap-1">
@@ -141,13 +204,13 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
         </dl>
       ) : null}
 
-      {trippedAt !== null ? (
+      {stoppedByBreaker ? (
         <div className="panel" data-tone="unproven">
           <span className="col-head text-muted">Limen stopped this schedule</span>
           <p className="measure text-[12.5px] leading-relaxed text-muted">
             {view!.consecutiveFailures} consecutive cycles ended as something other than a success
             — the last as <span className="value">{view!.disabledReason ?? 'unknown'}</span> — so
-            the schedule was stopped at {when(trippedAt)}. Each of those cycles reached a ledger
+            the schedule was stopped at {when(view!.disabledAt)}. Each of those cycles reached a ledger
             and paid a fee to be refused, which is what the count is protecting against.
           </p>
           <p className="measure text-[12.5px] leading-relaxed text-muted">
@@ -158,6 +221,14 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
         </div>
       ) : null}
 
+      {view !== null && view.enabled && view.disabledAt !== null ? (
+        <p className="measure text-[12px] leading-relaxed text-faint">
+          Limen stopped this schedule once, at {when(view.disabledAt)}, after a run of{' '}
+          <span className="value">{view.disabledReason ?? 'unknown'}</span>. It is running again
+          because somebody armed it. That record is kept rather than cleared.
+        </p>
+      ) : null}
+
       {paused ? (
         <p className="measure text-[12.5px] leading-relaxed text-muted">
           Paused, so the scheduler does not see this agent at all. A cycle that was already queued
@@ -166,13 +237,44 @@ export function ScheduleControls({ agentId, status, schedule }: Props) {
         </p>
       ) : null}
 
-      {controllable ? (
+      {current === 'ACTIVE' || paused ? (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="col-head text-muted-dim" htmlFor="schedule-interval">
+              run one cycle every
+            </label>
+            <select
+              id="schedule-interval"
+              className="field"
+              value={interval}
+              disabled={busy}
+              onChange={(event) => setIntervalSeconds(Number(event.target.value))}
+            >
+              {INTERVALS.map((option) => (
+                <option key={option} value={option}>
+                  {everyPhrase(option).replace('every ', '')}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="button" className="btn" onClick={() => void arm()} disabled={busy}>
+            {busy ? 'working…' : view === null ? 'Enable schedule' : 'Apply'}
+          </button>
+          {view !== null ? (
+            <button type="button" className="btn" onClick={() => void disarm()} disabled={busy}>
+              Remove schedule
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {controllable && view !== null ? (
         <button type="button" className="btn" onClick={() => void toggle()} disabled={busy}>
           {busy ? 'working…' : paused ? 'Resume schedule' : 'Pause schedule'}
         </button>
-      ) : (
+      ) : controllable ? null : (
         <p className="text-[12px] leading-relaxed text-faint">
-          Only a deployed, active agent can be paused. This one is {current}.
+          Only a deployed, active agent can be scheduled or paused. This one is {current}.
         </p>
       )}
 

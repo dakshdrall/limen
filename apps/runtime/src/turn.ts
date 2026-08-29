@@ -177,7 +177,7 @@ export function turnHandler(deps: TurnDeps): JobHandler {
     const claimed = await deps.store.claimTurn(turnId);
 
     if (claimed === undefined) {
-      await resolveUnclaimed(deps.store, turnId);
+      await resolveUnclaimed(deps, turnId);
       return;
     }
 
@@ -189,7 +189,8 @@ export function turnHandler(deps: TurnDeps): JobHandler {
  * A turn the claim did not take: finished already, or stranded by a dead
  * worker.
  */
-async function resolveUnclaimed(store: RuntimeStore, turnId: string): Promise<void> {
+async function resolveUnclaimed(deps: TurnDeps, turnId: string): Promise<void> {
+  const store = deps.store;
   const existing = await store.turnById(turnId);
   if (existing === undefined || existing.status === 'done') return;
 
@@ -210,6 +211,21 @@ async function resolveUnclaimed(store: RuntimeStore, turnId: string): Promise<vo
       : 'A worker stopped before this turn submitted anything. Nothing was signed and nothing moved.',
     previous: existing.result,
   });
+
+  // A stranded scheduled turn counts, for `scheduler.ts`'s reason: a worker
+  // that dies every cycle would otherwise fail silently forever. This is the
+  // redelivery door onto the same room the tick's expiry reaches.
+  if (existing.scheduledTaskId !== null) {
+    await recordCycleOutcome(
+      { store, notify: deps.notify ?? logScheduleNotifier },
+      {
+        taskId: existing.scheduledTaskId,
+        agentId: existing.agentId,
+        turnId: existing.id,
+        outcome: 'infra_error',
+      },
+    );
+  }
 }
 
 async function runClaimedTurn(
@@ -220,15 +236,15 @@ async function runClaimedTurn(
   const agent = await deps.store.agentForTurn(agentId, userId);
 
   if (agent === undefined) {
-    await deps.store.finishTurn({
-      turnId: turn.id,
-      outcome: 'infra_error',
-      result: {
-        summary:
-          'This agent could not be loaded, so nothing was attempted. It may have been deleted between ' +
-          'the request being accepted and this turn running.',
-        stage: 'agent_not_found',
-      },
+    // Through `finishScheduledTurn`, not `finishTurn`. An agent that cannot be
+    // loaded fails *every* cycle, so this is the branch most in need of a
+    // breaker and the one an early return here quietly excused: the schedule
+    // would claim a slot a minute, fail a minute, and count nothing, forever.
+    await finishScheduledTurn(deps, turn, 'infra_error', {
+      summary:
+        'This agent could not be loaded, so nothing was attempted. It may have been deleted between ' +
+        'the request being accepted and this turn running.',
+      stage: 'agent_not_found',
     });
     return;
   }
@@ -310,21 +326,38 @@ async function runClaimedTurn(
     };
   }
 
-  await deps.store.finishTurn({ turnId: turn.id, outcome: result.outcome, result });
+  await finishScheduledTurn(deps, turn, result.outcome, result);
+}
 
-  // Only a scheduled turn has a breaker to feed. A turn a person started by
-  // hand is not a schedule failing, and counting one would let somebody stop
-  // their own schedule by pressing Run Agent three times against a venue that
-  // happened to be down.
-  if (turn.scheduledTaskId !== null) {
-    await recordCycleOutcome(
-      { store: deps.store, notify: deps.notify ?? logScheduleNotifier },
-      {
-        taskId: turn.scheduledTaskId,
-        agentId: turn.agentId,
-        turnId: turn.id,
-        outcome: result.outcome,
-      },
-    );
-  }
+/**
+ * Close a turn, and count it if it belonged to a schedule.
+ *
+ * **The only way a turn is finished in this file**, so that a branch added
+ * later cannot accidentally opt out of the breaker. It could: the first version
+ * of this handler closed the `agent_not_found` case with a bare `finishTurn`
+ * and returned, which meant an agent whose account row was missing failed every
+ * single cycle and never once counted — a schedule claiming a slot a minute,
+ * failing a minute, and reporting nothing. That is the same silent-forever
+ * failure the staleness bound exists to prevent, reached by a different door,
+ * and it was found by running the thing rather than by reading it.
+ *
+ * Only a scheduled turn has a breaker to feed. A turn a person started by hand
+ * is not a schedule failing, and counting one would let somebody stop their own
+ * schedule by pressing Run Agent three times against a venue that happened to
+ * be down.
+ */
+async function finishScheduledTurn(
+  deps: TurnDeps,
+  turn: TurnRecord,
+  outcome: ToolResult['outcome'],
+  result: unknown,
+): Promise<void> {
+  await deps.store.finishTurn({ turnId: turn.id, outcome, result });
+
+  if (turn.scheduledTaskId === null) return;
+
+  await recordCycleOutcome(
+    { store: deps.store, notify: deps.notify ?? logScheduleNotifier },
+    { taskId: turn.scheduledTaskId, agentId: turn.agentId, turnId: turn.id, outcome },
+  );
 }

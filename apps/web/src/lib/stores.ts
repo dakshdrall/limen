@@ -663,6 +663,72 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
       };
     },
 
+    /**
+     * The only insert into `scheduled_tasks` in this codebase.
+     *
+     * Scoped by a `select` on `agents` first rather than by a join on the
+     * write, because there is no `UPDATE ... FROM` here worth the cleverness and
+     * this file's rule is that it stays boring. The `ACTIVE` check is part of
+     * that read: a schedule on an undeployed agent claims slots for cycles that
+     * cannot run, and the breaker then stops it for something that was never
+     * the agent's fault.
+     */
+    async setSchedule({ agentId, userId, intervalSeconds, firstRunAt }) {
+      const [agent] = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.userId, userId), eq(agents.status, 'ACTIVE')))
+        .limit(1);
+      if (agent === undefined) return undefined;
+
+      const [existing] = await db
+        .select({ id: scheduledTasks.id })
+        .from(scheduledTasks)
+        .where(eq(scheduledTasks.agentId, agentId))
+        .limit(1);
+
+      if (existing === undefined) {
+        // `cron` stays null; the CHECK requires exactly one of the two and this
+        // is the interval half.
+        await db.insert(scheduledTasks).values({
+          agentId,
+          cron: null,
+          intervalSeconds,
+          nextRunAt: firstRunAt,
+          enabled: true,
+        });
+      } else {
+        await db
+          .update(scheduledTasks)
+          .set({
+            intervalSeconds,
+            nextRunAt: firstRunAt,
+            enabled: true,
+            // The count is about the present and is reset. `disabledAt` and
+            // `disabledReason` are history and are deliberately left alone —
+            // a re-armed schedule still says what once stopped it.
+            consecutiveFailures: 0,
+          })
+          .where(eq(scheduledTasks.id, existing.id));
+      }
+
+      return this.schedule(agentId, userId);
+    },
+
+    async clearSchedule({ agentId, userId }) {
+      const [agent] = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, agentId), eq(agents.userId, userId)))
+        .limit(1);
+      if (agent === undefined) return false;
+      const removed = await db
+        .delete(scheduledTasks)
+        .where(eq(scheduledTasks.agentId, agentId))
+        .returning({ id: scheduledTasks.id });
+      return removed.length > 0;
+    },
+
     async agentKeyPublic(agentId, userId) {
       const [row] = await db
         .select({ agentPublicKey: agentKeys.agentPublicKey })

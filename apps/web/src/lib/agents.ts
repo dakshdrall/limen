@@ -235,6 +235,34 @@ export interface AgentStore {
   setPaused(input: { agentId: string; userId: string; paused: boolean }): Promise<AgentRecord | undefined>;
   /** This agent's schedule, for the screens that must show it stopped. */
   schedule(agentId: string, userId: string): Promise<AgentSchedule | undefined>;
+  /**
+   * Give this agent a schedule, or change the one it has, and arm it.
+   *
+   * The only writer of `scheduled_tasks`. Creating and re-arming are one call
+   * on purpose: after the breaker has stopped a schedule, the act that starts it
+   * again is a person deciding the cause has gone, and that is the same
+   * deliberate act as setting one up. A separate "resume" button would be a way
+   * to restart a broken schedule without ever having to look at why it broke.
+   *
+   * `disabledAt` and `disabledReason` are **kept**, not cleared. They are the
+   * history of a stop that really happened, and the screens read `enabled`
+   * beside them so a re-armed schedule shows as running *and* still says what
+   * once stopped it. What is reset is `consecutiveFailures`, because the count
+   * is about the present.
+   *
+   * Refused for an agent that is not `ACTIVE`: a schedule on an undeployed agent
+   * would claim slots for cycles that cannot run, and the breaker would then
+   * stop it for a reason that was never the agent's fault.
+   */
+  setSchedule(input: {
+    agentId: string;
+    userId: string;
+    intervalSeconds: number;
+    /** The first slot. The grid is anchored here, so `due_at` is predictable. */
+    firstRunAt: Date;
+  }): Promise<AgentSchedule | undefined>;
+  /** Remove the schedule entirely. An agent with none is not a stopped agent. */
+  clearSchedule(input: { agentId: string; userId: string }): Promise<boolean>;
   /** The deployment happened and was verified against the ledger. */
   recordDeployment(input: RecordDeploymentInput): Promise<AgentRecord>;
   /**

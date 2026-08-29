@@ -168,6 +168,61 @@ describe('a turn nobody can resolve stops blocking the schedule', () => {
   });
 });
 
+describe('every way a scheduled turn can end reaches the breaker', () => {
+  /**
+   * The regression this file exists for, found by running the scheduler against
+   * a real database rather than by reading it.
+   *
+   * `runClaimedTurn` used to close the "agent could not be loaded" case with a
+   * bare `finishTurn` and return before the breaker. An agent whose account row
+   * is missing fails *every* cycle, so that one early return produced a
+   * schedule claiming a slot a minute, failing a minute, and counting nothing —
+   * forever, with every screen still saying ACTIVE. The same silent-forever
+   * failure the staleness bound prevents, reached by a different door.
+   */
+  it('counts a cycle whose agent could not be loaded at all', async () => {
+    const { turnHandler } = await import('../src/turn.js');
+    // No agent: `agentForTurn` finds nothing, which is the branch under test.
+    const fake = fakeStore({ agent: undefined });
+    fake.recorded.schedules.set(TASK_ID, {
+      taskId: TASK_ID,
+      agentId: AGENT_ID,
+      userId: USER_ID,
+      intervalSeconds: 60,
+      nextRunAt: NOW,
+      enabled: true,
+      consecutiveFailures: BREAKER_THRESHOLD - 1,
+      disabledAt: null,
+      disabledReason: null,
+    });
+
+    const turn = await fake.store.createTurn({
+      agentId: AGENT_ID,
+      channel: 'api',
+      request: { kind: 'cycle' },
+      schedule: { taskId: TASK_ID, dueAt: NOW },
+    });
+
+    const handler = turnHandler({
+      store: fake.store,
+      provider: { open: async () => { throw new Error('never reached'); } } as never,
+      rpcUrl: 'https://example.invalid',
+      notify: (event) => void events.push(event),
+    });
+    await handler({
+      kind: 'turn.run',
+      idempotencyKey: turn.id,
+      enqueuedAt: NOW.toISOString(),
+      payload: { turnId: turn.id, agentId: AGENT_ID, userId: USER_ID },
+    } as never);
+
+    expect(fake.recorded.turns.get(turn.id)!.outcome).toBe('infra_error');
+    // The point: it counted, and at the threshold it stopped the schedule.
+    expect(fake.recorded.schedules.get(TASK_ID)!.enabled).toBe(false);
+    expect(events.some((event) => event.kind === 'schedule_disabled')).toBe(true);
+  });
+});
+
 describe('the breaker does not stop a schedule quietly', () => {
   it('records three facts when it trips, and leaves the agent alone', async () => {
     givenDue({ consecutiveFailures: BREAKER_THRESHOLD - 1 });
