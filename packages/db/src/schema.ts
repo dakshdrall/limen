@@ -644,7 +644,25 @@ export const auditEvents = pgTable(
   (table) => [index('audit_events_created_at_idx').on(table.createdAt), index('audit_events_actor_idx').on(table.actor, table.actorId)],
 );
 
-/** Brief §6's "pay my contractor 20 USDC every Friday". */
+/**
+ * What makes an agent act without anybody pressing anything.
+ *
+ * Brief §6's *"pay my contractor 20 USDC every Friday"*, and — since the
+ * scheduler landed — the row a trading agent ticks on.
+ *
+ * ## `next_run_at` is a claim, not a hint
+ *
+ * The scheduler advances it with a conditional UPDATE (`WHERE id = $1 AND
+ * next_run_at <= now() AND enabled`), and only the caller whose statement
+ * matched a row enqueues anything. That is `turns.started_at`'s single-winner
+ * discipline one layer up: two ticks, two processes or a redelivery, and
+ * exactly one of them owns a due window.
+ *
+ * It advances to the next **future** slot and never to the slot after the one
+ * that was missed. A scheduler that caught up would re-run windows it was down
+ * through, and a turn that may have submitted must never be re-run. Missing
+ * slots is the honest failure of the two, and it is recorded rather than hidden.
+ */
 export const scheduledTasks = pgTable(
   'scheduled_tasks',
   {
@@ -652,10 +670,46 @@ export const scheduledTasks = pgTable(
     agentId: uuid('agent_id')
       .notNull()
       .references(() => agents.id, { onDelete: 'cascade' }),
-    cron: text('cron').notNull(),
+    /**
+     * A cron expression, for the schedules that need one. Null for an interval.
+     *
+     * Nullable since 0009, and unused so far. Reading one means a parser, a
+     * timezone and a DST rule, each of which fails invisibly until the clocks
+     * change — and a trading agent wants "every fifteen minutes", not "every
+     * Friday". A CHECK requires exactly one of this and `intervalSeconds`.
+     */
+    cron: text('cron'),
+    /** Seconds between runs. Null for a cron schedule; exactly one is set. */
+    intervalSeconds: integer('interval_seconds'),
     nextRunAt: instant('next_run_at'),
     lastRunAt: instant('last_run_at'),
     enabled: boolean('enabled').notNull().default(true),
+    /**
+     * Cycles in a row that ended as neither succeeded nor a no-trade.
+     *
+     * A no-trade cycle costs three RPC reads and no fee, and is the ordinary
+     * quiet case — it does not count, or a patient agent would trip its own
+     * breaker. A refused swap does count: an over-cap refusal reaches a ledger,
+     * so retrying it every slot pays a fee every slot, and the burn lands on the
+     * fee account rather than on the capped balance.
+     *
+     * Reset by any cycle that succeeds or that legitimately trades nothing.
+     */
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    /**
+     * When and why the breaker stopped this schedule.
+     *
+     * Two columns rather than an inference from `enabled`, because a schedule a
+     * person turned off and one the breaker tripped are different facts and the
+     * screens have to say which. **The agent's own status stays untouched**: it
+     * is still deployed, its boundary is still installed, and it can still be run
+     * by hand, so writing `ERROR` onto the agent would be false about all three.
+     * A stopped schedule that renders identically to a healthy one is the thing
+     * somebody discovers a week later, so these are read by the detail screen
+     * and by the list.
+     */
+    disabledAt: instant('disabled_at'),
+    disabledReason: text('disabled_reason'),
     createdAt: instant('created_at').notNull().defaultNow(),
   },
   // Partial: a scheduler only ever looks at enabled tasks, and a disabled one
@@ -752,6 +806,30 @@ export const turns = pgTable(
      */
     startedAt: instant('started_at'),
     finishedAt: instant('finished_at'),
+    /**
+     * The schedule slot this turn belongs to. Null for one a person started.
+     *
+     * With `dueAt` it is the fence behind the scheduler's claim. That claim is
+     * a conditional UPDATE and is the mechanism; the unique index below is what
+     * makes one turn per slot a property rather than a hope. If the claim is
+     * ever weakened — a caller that reads then writes, a second scheduler, a
+     * well-meant retry — the index still refuses the second turn, and a
+     * scheduled trade that ran twice is two trades nobody can undo.
+     *
+     * Both refusals, for the same reason the trigger's ratchet has two.
+     */
+    scheduledTaskId: uuid('scheduled_task_id').references(() => scheduledTasks.id, {
+      onDelete: 'set null',
+    }),
+    /** The slot's own instant — the `next_run_at` the claim consumed. */
+    dueAt: instant('due_at'),
   },
-  (table) => [index('turns_agent_id_idx').on(table.agentId, table.createdAt)],
+  (table) => [
+    index('turns_agent_id_idx').on(table.agentId, table.createdAt),
+    // Partial, because every turn started by hand has neither column set and
+    // must not collide with any other.
+    uniqueIndex('turns_scheduled_slot_key')
+      .on(table.scheduledTaskId, table.dueAt)
+      .where(sql`scheduled_task_id is not null`),
+  ],
 );
