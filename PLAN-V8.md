@@ -3286,3 +3286,125 @@ A stored trigger that fails its schema is reported as `trigger_unreadable` —
 distinct from "no trigger configured", because telling somebody their agent has
 no rule when it has one Limen could not read is a lie about which of the two is
 wrong.
+
+---
+
+**RUN — the scheduler, and the two things that must not be silent, 2026-08-29.**
+An agent has had a trigger since 0008 and still waited for a button. This is the
+loop that asks it, and the two failure modes that would otherwise make the loop
+worse than no loop at all.
+
+```
+migration    0009_scheduler
+applied to   throwaway postgres:16, 10 migrations recorded
+verified     CHECK scheduled_tasks_cron_xor_interval live
+             UNIQUE turns_scheduled_slot_key WHERE scheduled_task_id IS NOT NULL live
+```
+
+`cron` becomes nullable beside `interval_seconds`, one of the two required by a
+CHECK. A trading agent wants "every fifteen minutes"; reading a cron expression
+means a parser, a timezone and a DST rule, each of which fails invisibly until
+the clocks change.
+
+**The claim, and why `dueAt` from the candidate row is sound rather than lucky.**
+`claimDueTasks` reads candidates joined to `agents` so `status = 'ACTIVE'` lives
+in the query, then takes each with a conditional UPDATE that repeats the check
+with an `EXISTS` — a person can pause an agent between the two statements, and
+the claim is the statement that has to be right. `next_run_at` only ever advances
+strictly into the future, so a schedule another tick already claimed fails
+`next_run_at <= now` and matches nothing; the only way the UPDATE matches is that
+nobody moved the row.
+
+It advances to the next slot **on the original grid**, not to `now + interval`
+and not to the slot after the one that was missed. No catch-up. A scheduler that
+caught up would re-run windows it was down through, and a turn that may have
+submitted must never be re-run.
+
+**Open item 1 — the staleness bound is ten minutes, and what fires is not a
+retry.** The unresolvable turn is the one this exists for: a worker that died
+between `sendTransaction` and recording leaves a turn `running` with a
+`submitting` marker, and `turn.ts` already refuses to re-run it because "died
+before submitting" and "died after submitting" are indistinguishable. Left alone
+it holds its agent's schedule shut forever while every screen still says ACTIVE.
+
+Ten minutes is more than an order of magnitude above the 15–45s an honest turn
+takes, so no real turn is ever cut short; and it is short enough that an agent
+misses one slot rather than a day of them. The tick is 30s, so the true worst
+case is ten and a half minutes. `queued` is measured from `created_at`,
+`running` from `started_at`.
+
+What gets recorded when it fires, in four places and never a retry:
+
+```
+turns          status done, outcome infra_error, result.stage 'expired',
+               mayHaveSubmitted read from the marker, previous kept
+audit_events   schedule.turn_expired, actor system,
+               result may_have_submitted | nothing_signed, metadata.retried false
+notifier       turn_expired event, carrying mayHaveSubmitted
+breaker        counted as `turn_expired` when the turn carried a slot
+```
+
+That last line is the one that is easy to leave out. Nothing ever calls
+`finishTurn` for a stranded turn, so without it a worker dying every cycle fails
+**silently forever**: the schedule keeps claiming slots it cannot run and nothing
+counts.
+
+**Open item 2 — the breaker leaves three facts, not one.** Three consecutive
+cycles ending as anything other than `succeeded`, and the schedule stops:
+
+```
+1. row          enabled false, disabled_at, disabled_reason
+2. audit        schedule.disabled, actor system, consecutiveFailures,
+                agentStatusUnchanged true
+3. notifier     schedule_disabled -> ScheduleNotifier (log today, Telegram later)
+```
+
+A no-trade cycle is `succeeded` — it ran and it reported — so a patient agent
+cannot trip its own breaker by being patient. A refusal counts: an over-cap
+refusal reaches a ledger, so retrying it every slot pays a fee every slot.
+
+The count and the disable are **one statement**, comparing the threshold against
+the value being written rather than one read a moment earlier. Two cycles
+finishing at once would otherwise both write three and both believe they tripped
+it, which is two notifications for one event, or none.
+
+`agents.status` is deliberately untouched. The agent is still deployed, its
+boundary is still installed, and it can still be run by hand, so `ERROR` would be
+false about all three. What makes the stop visible instead is
+`ScheduleControls`, which renders the agent's status and the schedule's state as
+two separate lines and never infers one from the other — the failure mode being
+designed against is a stopped schedule that looks exactly like a running one, and
+is discovered a week later.
+
+The notification seam is an argument, not an import. `ScheduleNotifier` is passed
+in; `apps/telegram` plugs in without this file changing. A notifier that throws
+is caught and dropped, because a reporting channel with the power to stop a
+schedule would be a reporting path that breaks the thing it reports on.
+
+**Pause** is `ACTIVE <-> PAUSED` on the agent, because the due query already
+filters on status — one status change stops every schedule, in the statement that
+makes the claim. It stops the *next* claim only; a turn already in flight is left
+alone, and the response says so rather than letting it be assumed.
+
+```
+packages/core     53 passed      packages/chain   114 passed
+packages/db       34 passed      packages/custody  36 passed
+packages/kv       37 passed      apps/runtime     143 passed
+apps/web         814 passed      eslint           clean
+```
+
+Six new Postgres cases carry the claim, the single winner among four concurrent
+ticks, the invisibility of a paused agent and a disabled schedule, the unique
+index refusing a bypassed second turn for a slot (asserted on the constraint's
+own name and SQLSTATE 23505, not on a message), the staleness bound with its
+marker, and the breaker's three-and-reset. Seven more drive the tick itself.
+
+Not built, and deliberately: catch-up, and deployment. Deployment stays its own
+milestone — nothing here has run anywhere but a laptop and a throwaway
+`postgres:16`.
+
+One correction to the entry above this one. `apps/web`'s two failures were
+recorded there as pre-existing and were not: `design-system.test.ts` had caught
+the swallowed-space defect on a line that milestone rewrote. Reading a rule's
+finding as somebody else's work is exactly the failure that rule exists to
+prevent, since the defect is invisible in a diff and survives every type check.
