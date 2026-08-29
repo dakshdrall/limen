@@ -19,8 +19,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createRuntimeDb, type RuntimeDb } from '@limen/db/runtime';
-import { agentAccounts, agentKeys, agents, policies, users } from '@limen/db';
-import { drizzleRuntimeStore, type RuntimeStore } from '../src/store.js';
+import { agentAccounts, agentKeys, agents, policies, scheduledTasks, turns, users } from '@limen/db';
+import { BREAKER_THRESHOLD, drizzleRuntimeStore, type RuntimeStore } from '../src/store.js';
 
 const url = process.env.TEST_DATABASE_URL ?? process.env.MIGRATE_DATABASE_URL ?? '';
 const inCi = process.env.CI !== undefined && process.env.CI !== '' && process.env.CI !== 'false';
@@ -326,5 +326,210 @@ describe.runIf(url.length > 0)('the re-stamp guard is in the database, not only 
 
     expect(applied).toBe(false);
     expect(await currentReference()).toBe('2100000');
+  });
+});
+
+/**
+ * The scheduler, against the same real database, for the same reason.
+ *
+ * Every property below is a property of *Postgres serialising two statements*
+ * or of *a constraint refusing a row*. A fake that agreed with the design would
+ * assert nothing here, and the design is what is on trial: the whole argument
+ * for a conditional UPDATE is that two ticks cannot both own a due window, and
+ * the only place that is true or false is in a database.
+ */
+describe.runIf(url.length > 0)('the schedule claim', () => {
+  const TASK_ID = randomUUID();
+  const INTERVAL = 900;
+
+  /** A schedule due at `dueAt`, replaced from scratch so no test inherits state. */
+  const givenSchedule = async (dueAt: Date, overrides: Record<string, unknown> = {}): Promise<void> => {
+    await db!.delete(scheduledTasks).where(eq(scheduledTasks.id, TASK_ID));
+    await db!.insert(scheduledTasks).values({
+      id: TASK_ID,
+      agentId: AGENT_ID,
+      cron: null,
+      intervalSeconds: INTERVAL,
+      nextRunAt: dueAt,
+      enabled: true,
+      ...overrides,
+    });
+  };
+
+  const taskRow = async (): Promise<typeof scheduledTasks.$inferSelect> => {
+    const [row] = await db!.select().from(scheduledTasks).where(eq(scheduledTasks.id, TASK_ID));
+    return row!;
+  };
+
+  beforeEach(async () => {
+    await db!.delete(turns).where(eq(turns.agentId, AGENT_ID));
+    await db!.update(agents).set({ status: 'ACTIVE' }).where(eq(agents.id, AGENT_ID));
+  });
+
+  afterAll(async () => {
+    if (db !== undefined) await db.delete(scheduledTasks).where(eq(scheduledTasks.id, TASK_ID));
+  });
+
+  it('claims a due schedule and advances it to the next future slot, not the missed one', async () => {
+    // Due two and a half intervals ago: the scheduler was down through two
+    // slots. A catch-up scheduler would move to the slot after the one it
+    // missed and then re-run windows it was absent for; this one goes forward.
+    const now = new Date();
+    const dueAt = new Date(now.getTime() - INTERVAL * 2500);
+    await givenSchedule(dueAt);
+
+    const claimed = await store!.claimDueTasks({ now, limit: 10 });
+    const mine = claimed.filter((c) => c.taskId === TASK_ID);
+
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.dueAt.getTime()).toBe(dueAt.getTime());
+    expect(mine[0]!.agentId).toBe(AGENT_ID);
+    expect(mine[0]!.userId).toBe(USER_ID);
+    // Strictly future, and still on the original grid rather than `now + interval`.
+    expect(mine[0]!.nextRunAt.getTime()).toBeGreaterThan(now.getTime());
+    expect((mine[0]!.nextRunAt.getTime() - dueAt.getTime()) % (INTERVAL * 1000)).toBe(0);
+    // Three slots on, because two were missed and the third is the first future one.
+    expect(mine[0]!.nextRunAt.getTime()).toBe(dueAt.getTime() + INTERVAL * 3000);
+  });
+
+  it('lets exactly one of four concurrent ticks own a due window', async () => {
+    // What a redelivery, a second process, or one tick running twice actually
+    // looks like. A SELECT-then-UPDATE lets more than one through here, and
+    // what comes through is a scheduled trade that runs twice.
+    const now = new Date();
+    await givenSchedule(new Date(now.getTime() - 1000));
+
+    const results = await Promise.all([
+      store!.claimDueTasks({ now, limit: 10 }),
+      store!.claimDueTasks({ now, limit: 10 }),
+      store!.claimDueTasks({ now, limit: 10 }),
+      store!.claimDueTasks({ now, limit: 10 }),
+    ]);
+
+    const winners = results.flat().filter((c) => c.taskId === TASK_ID);
+    expect(winners).toHaveLength(1);
+  });
+
+  it('does not see a paused agent, or a schedule somebody turned off', async () => {
+    const now = new Date();
+    await givenSchedule(new Date(now.getTime() - 1000));
+
+    // The filter lives in the query, so a paused agent is not "skipped with a
+    // reason" — the schedule simply does not see it.
+    await db!.update(agents).set({ status: 'PAUSED' }).where(eq(agents.id, AGENT_ID));
+    expect((await store!.claimDueTasks({ now, limit: 10 })).filter((c) => c.taskId === TASK_ID)).toHaveLength(0);
+    // And the slot was not consumed while it was invisible.
+    expect((await taskRow()).nextRunAt?.getTime()).toBe(now.getTime() - 1000);
+
+    await db!.update(agents).set({ status: 'ACTIVE' }).where(eq(agents.id, AGENT_ID));
+    await givenSchedule(new Date(now.getTime() - 1000), { enabled: false });
+    expect((await store!.claimDueTasks({ now, limit: 10 })).filter((c) => c.taskId === TASK_ID)).toHaveLength(0);
+  });
+
+  it('refuses a second turn for a slot even when the claim is bypassed entirely', async () => {
+    // The fence behind the mechanism. This writes the turn directly, as a
+    // weakened caller or a well-meant retry would, and the index still refuses.
+    const now = new Date();
+    await givenSchedule(new Date(now.getTime() - 1000));
+    const dueAt = new Date(now.getTime() - 1000);
+
+    await store!.createTurn({
+      agentId: AGENT_ID,
+      channel: 'api',
+      request: { kind: 'cycle' },
+      schedule: { taskId: TASK_ID, dueAt },
+    });
+
+    // Asserted on the constraint's own name rather than on a message, so this
+    // proves *the partial unique index* refused it and not merely that
+    // something went wrong. Drizzle wraps the driver error, so the cause is
+    // where Postgres's own report survives.
+    const refusal = await store!
+      .createTurn({
+        agentId: AGENT_ID,
+        channel: 'api',
+        request: { kind: 'cycle' },
+        schedule: { taskId: TASK_ID, dueAt },
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(refusal).toBeDefined();
+    expect((refusal as { cause?: { constraint?: string; code?: string } }).cause?.constraint).toBe(
+      'turns_scheduled_slot_key',
+    );
+    expect((refusal as { cause?: { code?: string } }).cause?.code).toBe('23505');
+
+    // A hand-started turn has neither column set and must never collide.
+    await store!.createTurn({ agentId: AGENT_ID, channel: 'web', request: { kind: 'cycle' } });
+    await store!.createTurn({ agentId: AGENT_ID, channel: 'web', request: { kind: 'cycle' } });
+  });
+
+  it('stops letting an unresolvable turn block the schedule, and records which kind it was', async () => {
+    const now = new Date();
+    const turn = await store!.createTurn({ agentId: AGENT_ID, channel: 'api', request: { kind: 'cycle' } });
+    await store!.claimTurn(turn.id);
+    // The turn that can never be resolved: a worker died between
+    // `sendTransaction` and recording, so the marker is the last thing written.
+    await store!.markSubmitting(turn.id, { stage: 'submitting' });
+
+    // Inside the bound it blocks, which is the ordinary case and the one that
+    // stops a second cycle stacking behind a slow first.
+    expect(await store!.blockingTurn({ agentId: AGENT_ID, staleAfterMs: 10 * 60 * 1000, now })).toBeDefined();
+
+    // Past it, it does not.
+    const later = new Date(now.getTime() + 11 * 60 * 1000);
+    expect(await store!.blockingTurn({ agentId: AGENT_ID, staleAfterMs: 10 * 60 * 1000, now: later })).toBeUndefined();
+
+    const cutoff = new Date(later.getTime() - 10 * 60 * 1000);
+    const expired = await store!.expireStaleTurn({ agentId: AGENT_ID, cutoff });
+    expect(expired?.turnId).toBe(turn.id);
+    // The whole point of the marker: this is "a transaction may be on a
+    // ledger", not "nothing was signed", and the record says so rather than hedging.
+    expect(expired?.mayHaveSubmitted).toBe(true);
+
+    const closed = await store!.turnById(turn.id);
+    expect(closed?.status).toBe('done');
+    expect(closed?.outcome).toBe('infra_error');
+    expect((closed?.result as { stage: string }).stage).toBe('expired');
+    expect((closed?.result as { summary: string }).summary).toMatch(/may already be on a ledger/);
+
+    // Single-winner, like every other close in this file: a second ticker
+    // finds nothing and cannot write a second expiry onto one turn.
+    expect(await store!.expireStaleTurn({ agentId: AGENT_ID, cutoff })).toBeUndefined();
+  });
+
+  it('disables the schedule on the third failure in a row, and one success resets the count', async () => {
+    const now = new Date();
+    await givenSchedule(new Date(now.getTime() - 1000));
+
+    const first = await store!.recordScheduleOutcome({ taskId: TASK_ID, counts: true, reason: 'refused_by_limen' });
+    const second = await store!.recordScheduleOutcome({ taskId: TASK_ID, counts: true, reason: 'refused_by_limen' });
+    expect([first.consecutiveFailures, second.consecutiveFailures]).toEqual([1, 2]);
+    expect([first.disabled, second.disabled]).toEqual([false, false]);
+    expect((await taskRow()).enabled).toBe(true);
+
+    const third = await store!.recordScheduleOutcome({ taskId: TASK_ID, counts: true, reason: 'refused_by_limen' });
+    expect(third.consecutiveFailures).toBe(BREAKER_THRESHOLD);
+    expect(third.disabled).toBe(true);
+
+    // Not silent: the two columns say a breaker stopped this, and when, so a
+    // stopped schedule cannot render as a healthy one.
+    const tripped = await taskRow();
+    expect(tripped.enabled).toBe(false);
+    expect(tripped.disabledAt).not.toBeNull();
+    expect(tripped.disabledReason).toBe('refused_by_limen');
+
+    // And the schedule stops being claimed, which is what "disabled" has to mean.
+    await db!.update(scheduledTasks).set({ nextRunAt: new Date(now.getTime() - 1000) }).where(eq(scheduledTasks.id, TASK_ID));
+    expect((await store!.claimDueTasks({ now, limit: 10 })).filter((c) => c.taskId === TASK_ID)).toHaveLength(0);
+
+    // One success resets. A no-trade cycle is a success — it ran and reported —
+    // so a patient agent never trips its own breaker by being patient.
+    await db!.update(scheduledTasks).set({ enabled: true }).where(eq(scheduledTasks.id, TASK_ID));
+    const reset = await store!.recordScheduleOutcome({ taskId: TASK_ID, counts: false, reason: 'succeeded' });
+    expect(reset.consecutiveFailures).toBe(0);
+    expect((await taskRow()).consecutiveFailures).toBe(0);
   });
 });
