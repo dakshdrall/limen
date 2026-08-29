@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { BREAKER_THRESHOLD } from '../src/store.js';
 import type {
   AgentForTurn,
   RuntimeStore,
@@ -45,6 +46,19 @@ export function fakeAgent(overrides: Partial<AgentForTurn> = {}): AgentForTurn {
   };
 }
 
+/** A row of `scheduled_tasks`, reduced to what a tick reads and writes. */
+export interface FakeSchedule {
+  taskId: string;
+  agentId: string;
+  userId: string;
+  intervalSeconds: number;
+  nextRunAt: Date;
+  enabled: boolean;
+  consecutiveFailures: number;
+  disabledAt: Date | null;
+  disabledReason: string | null;
+}
+
 export interface Recorded {
   toolExecutions: { id: string; toolName: string; args: unknown }[];
   /** Every re-stamp the store was asked for, applied or refused by the guard. */
@@ -54,6 +68,16 @@ export interface Recorded {
   transactions: unknown[];
   audits: unknown[];
   turns: Map<string, TurnRecord>;
+  /**
+   * Schedules the tick can claim, seeded by the test that needs them.
+   *
+   * Enough of `scheduled_tasks` to drive a tick and no more. The properties
+   * worth doubting — that two ticks cannot both own a slot, that the breaker's
+   * count and its disable are one statement — are properties of Postgres and
+   * are asserted in `store-postgres.test.ts`. What this reproduces is the
+   * *contract*, so a tick test can reach the branches that matter.
+   */
+  schedules: Map<string, FakeSchedule>;
 }
 
 export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
@@ -70,6 +94,7 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
     transactions: [],
     audits: [],
     turns: new Map(),
+    schedules: new Map(),
   };
 
   const store: RuntimeStore = {
@@ -78,7 +103,7 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
       return agentId === agent.id && userId === agent.userId ? agent : undefined;
     },
 
-    async createTurn({ agentId, channel, request }) {
+    async createTurn({ agentId, channel, request, schedule }) {
       const turn: TurnRecord = {
         // A real id, because the HTTP routes match a uuid shape. A fake that
         // handed out `turn-1` would make a route test pass or fail for a reason
@@ -93,6 +118,7 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
         createdAt: new Date('2026-08-23T00:00:00Z'),
         startedAt: null,
         finishedAt: null,
+        scheduledTaskId: schedule?.taskId ?? null,
       };
       recorded.turns.set(turn.id, turn);
       return turn;
@@ -175,6 +201,87 @@ export function fakeStore(options: { agent?: AgentForTurn | undefined } = {}): {
       const applied = stored === undefined ? true : BigInt(stored) > BigInt(mustBeAbove);
       recorded.restamps.push({ agentId, mustBeAbove, trigger, applied });
       return applied;
+    },
+
+    async claimDueTasks({ now, limit }) {
+      const claimed = [];
+      for (const schedule of [...recorded.schedules.values()].sort(
+        (a, b) => a.nextRunAt.getTime() - b.nextRunAt.getTime(),
+      )) {
+        if (claimed.length >= limit) break;
+        if (!schedule.enabled) continue;
+        if (schedule.nextRunAt.getTime() > now.getTime()) continue;
+        if (agent !== undefined && agent.id === schedule.agentId && agent.status !== 'ACTIVE') continue;
+
+        const dueAt = schedule.nextRunAt;
+        const interval = schedule.intervalSeconds * 1000;
+        // Forward to the next slot on the grid, never to the missed one. The
+        // real advance is the same expression in SQL.
+        const missed = Math.floor((now.getTime() - dueAt.getTime()) / interval) + 1;
+        schedule.nextRunAt = new Date(dueAt.getTime() + missed * interval);
+        claimed.push({
+          taskId: schedule.taskId,
+          agentId: schedule.agentId,
+          userId: schedule.userId,
+          dueAt,
+          nextRunAt: schedule.nextRunAt,
+          consecutiveFailures: schedule.consecutiveFailures,
+        });
+      }
+      return claimed;
+    },
+
+    async blockingTurn({ agentId, staleAfterMs, now }) {
+      const cutoff = now.getTime() - staleAfterMs;
+      const live = [...recorded.turns.values()]
+        .filter((turn) => turn.agentId === agentId && turn.status !== 'done')
+        .filter((turn) => (turn.status === 'running' ? (turn.startedAt ?? turn.createdAt) : turn.createdAt).getTime() >= cutoff)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const turn = live[0];
+      if (turn === undefined) return undefined;
+      return { turnId: turn.id, status: turn.status, startedAt: turn.startedAt };
+    },
+
+    async expireStaleTurn({ agentId, cutoff }) {
+      const stale = [...recorded.turns.values()]
+        .filter((turn) => turn.agentId === agentId && turn.status !== 'done')
+        .filter((turn) => (turn.status === 'running' ? (turn.startedAt ?? turn.createdAt) : turn.createdAt).getTime() < cutoff.getTime())
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      const turn = stale[0];
+      if (turn === undefined) return undefined;
+
+      const marker = turn.result as { stage?: string } | null;
+      const mayHaveSubmitted = marker?.stage === 'submitting';
+      recorded.turns.set(turn.id, {
+        ...turn,
+        status: 'done',
+        outcome: 'infra_error',
+        finishedAt: new Date(),
+        result: { stage: 'expired', mayHaveSubmitted, previous: turn.result },
+      });
+      return {
+        turnId: turn.id,
+        agentId,
+        startedAt: turn.startedAt ?? turn.createdAt,
+        mayHaveSubmitted,
+        scheduledTaskId: turn.scheduledTaskId,
+      };
+    },
+
+    async recordScheduleOutcome({ taskId, counts, reason }) {
+      const schedule = recorded.schedules.get(taskId);
+      if (schedule === undefined) return { consecutiveFailures: 0, disabled: false };
+      if (!counts) {
+        schedule.consecutiveFailures = 0;
+        return { consecutiveFailures: 0, disabled: !schedule.enabled };
+      }
+      schedule.consecutiveFailures += 1;
+      if (schedule.consecutiveFailures >= BREAKER_THRESHOLD && schedule.enabled) {
+        schedule.enabled = false;
+        schedule.disabledAt = new Date();
+        schedule.disabledReason = reason;
+      }
+      return { consecutiveFailures: schedule.consecutiveFailures, disabled: !schedule.enabled };
     },
 
     async audit(input) {

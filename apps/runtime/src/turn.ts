@@ -34,6 +34,7 @@ import { invokeTool, TOOLS } from './tools/index.js';
 import type { ToolResult } from './tools/types.js';
 import type { Job, JobHandler } from './worker-types.js';
 import type { AgentForTurn, RuntimeStore, TurnRecord } from './store.js';
+import { logScheduleNotifier, recordCycleOutcome, type ScheduleNotifier } from './scheduler.js';
 
 /** The one job kind the runtime knows how to run. */
 export const TURN_JOB_KIND = 'turn.run';
@@ -151,6 +152,15 @@ export interface TurnDeps {
   store: RuntimeStore;
   provider: KeyProvider;
   rpcUrl: string;
+  /**
+   * Where a tripped breaker is announced. Defaults to a log line.
+   *
+   * The worker feeds the breaker because the worker is what *finishes* a turn,
+   * and a schedule whose failures were counted by the next tick instead would
+   * disable one cycle later than it should — one more cycle that reaches a
+   * ledger and pays a fee to be refused.
+   */
+  notify?: ScheduleNotifier;
 }
 
 export function turnHandler(deps: TurnDeps): JobHandler {
@@ -301,4 +311,20 @@ async function runClaimedTurn(
   }
 
   await deps.store.finishTurn({ turnId: turn.id, outcome: result.outcome, result });
+
+  // Only a scheduled turn has a breaker to feed. A turn a person started by
+  // hand is not a schedule failing, and counting one would let somebody stop
+  // their own schedule by pressing Run Agent three times against a venue that
+  // happened to be down.
+  if (turn.scheduledTaskId !== null) {
+    await recordCycleOutcome(
+      { store: deps.store, notify: deps.notify ?? logScheduleNotifier },
+      {
+        taskId: turn.scheduledTaskId,
+        agentId: turn.agentId,
+        turnId: turn.id,
+        outcome: result.outcome,
+      },
+    );
+  }
 }

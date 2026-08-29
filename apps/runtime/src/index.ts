@@ -29,6 +29,7 @@ import { drizzleRuntimeStore } from './store.js';
 import { createHttpServer } from './http.js';
 import { Queue } from './queue.js';
 import { TURN_JOB_KIND, turnHandler } from './turn.js';
+import { Ticker } from './scheduler.js';
 import { Worker } from './worker.js';
 
 export async function main(): Promise<void> {
@@ -53,6 +54,12 @@ export async function main(): Promise<void> {
     handlers: { [TURN_JOB_KIND]: turnHandler({ store, provider, rpcUrl: config.rpcUrl }) },
   });
 
+  // §7.5.4 reason 2: *a real scheduler*. Until now the runtime only ever acted
+  // when somebody pressed something, which made every claim about an agent
+  // acting on its own an aspiration. This is the loop that makes it true, and it
+  // starts after the worker so a claimed slot always has something to run it.
+  const ticker = new Ticker({ store, queue });
+
   const server = createHttpServer({
     resolveCaller: (token) => resolveCaller(db, token),
     store,
@@ -65,6 +72,7 @@ export async function main(): Promise<void> {
   });
 
   await worker.start();
+  ticker.start();
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   console.log(`limen runtime: started. HTTP on :${config.port}, RPC ${config.rpcUrl}.`);
 
@@ -77,6 +85,11 @@ export async function main(): Promise<void> {
     // The listener first: no new turns while the worker is draining, so the
     // count of things that can still be in flight only goes down.
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    // Before the worker, and for the listener's reason: nothing new may be
+    // claimed while the worker drains, so the count of things in flight only
+    // goes down. A tick already in progress is waited for rather than cut off —
+    // it may hold a consumed slot whose cycle is not enqueued yet.
+    await ticker.stop();
     await worker.stop();
     await queue.quit();
     await kv.redis.quit();
@@ -102,6 +115,18 @@ export { Worker } from './worker.js';
 export { createHttpServer } from './http.js';
 export { drizzleRuntimeStore } from './store.js';
 export { TURN_JOB_KIND, turnHandler } from './turn.js';
+export {
+  Ticker,
+  countsAgainstBreaker,
+  logScheduleNotifier,
+  recordCycleOutcome,
+  CLAIM_LIMIT,
+  STALE_TURN_MS,
+  TICK_INTERVAL_MS,
+  type CycleOutcome,
+  type ScheduleEvent,
+  type ScheduleNotifier,
+} from './scheduler.js';
 export { TOOLS, invokeTool } from './tools/index.js';
 export { decide, readBoundary, signerFor } from './policy/gate.js';
 export {
@@ -113,7 +138,15 @@ export {
 } from './env.js';
 export type { Job, ReservedJob } from './queue.js';
 export type { JobHandler } from './worker.js';
-export type { AgentForTurn, RuntimeStore, TurnRecord, TurnRequest } from './store.js';
+export { BREAKER_THRESHOLD } from './store.js';
+export type {
+  AgentForTurn,
+  ClaimedSchedule,
+  RuntimeStore,
+  StaleTurn,
+  TurnRecord,
+  TurnRequest,
+} from './store.js';
 export type { ToolResult } from './tools/types.js';
 export {
   executeTradingDecision,
