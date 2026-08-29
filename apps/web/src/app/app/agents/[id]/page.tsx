@@ -5,6 +5,7 @@ import { Address } from '@/components/Address';
 import { ExplorerLink } from '@/components/ExplorerLink';
 import { ScreenHeader } from '@/components/app/ScreenHeader';
 import { RunAgent, type StoredTrigger } from '@/components/app/RunAgent';
+import { ScheduleControls } from '@/components/app/ScheduleControls';
 import { chainTxUrl } from '@/lib/explorer';
 import { truncateAddress } from '@/lib/format';
 import { RPC_URL } from '@/lib/chain-config';
@@ -78,6 +79,9 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const summary = (await store.listForUser(gate.user.id)).find((row) => row.id === id);
   const policy = await store.proposedPolicy(id, gate.user.id);
   const lastTrade = await store.lastTransaction(id, gate.user.id);
+  // Read separately from the agent, and rendered separately, because a stopped
+  // schedule on an ACTIVE agent is the state this screen exists to make visible.
+  const schedule = (await store.schedule(id, gate.user.id)) ?? null;
 
   const offChain = policy?.enforcedOffChain ?? null;
   const pair = offChain?.allowedPairs?.[0] ?? null;
@@ -126,6 +130,8 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
               {agent.description ?? 'No strategy was recorded for this agent.'}
             </p>
           </div>
+
+          <ScheduleControls agentId={agent.id} status={agent.status} schedule={schedule} />
 
           {inputAsset != null && outputAsset != null && summary?.smartAccount != null ? (
             <RunAgent

@@ -9,10 +9,13 @@ import { chainTxUrl } from '@/lib/explorer';
  * One cycle, on a button.
  *
  * The whole of Milestone 3 reachable from a screen: read the price, evaluate,
- * trade if it fires, and show what came back including the hash. There is no
- * scheduler behind it and there is not meant to be — the agent acts when
- * somebody asks it to, once, and an agent that could start itself would be one
- * you cannot stop by stopping asking.
+ * trade if it fires, and show what came back including the hash.
+ *
+ * There is a scheduler behind it now, and this button is deliberately not it.
+ * A cycle a person starts carries no slot, is never counted against the
+ * breaker, and is the way to find out whether a stopped schedule's cause has
+ * gone before the schedule starts paying for it again. `ScheduleControls`
+ * above is the control that starts and stops the unattended kind.
  *
  * ## The trigger is shown here and is no longer asked for here
  *

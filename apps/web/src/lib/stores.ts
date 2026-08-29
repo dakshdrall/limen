@@ -40,7 +40,16 @@
 import 'server-only';
 import { and, desc, eq, gt } from 'drizzle-orm';
 import { generateAgentKey } from '@limen/custody';
-import { agentAccounts, agentKeys, agents, policies, sessions, transactions, users } from '@limen/db';
+import {
+  agentAccounts,
+  agentKeys,
+  agents,
+  policies,
+  scheduledTasks,
+  sessions,
+  transactions,
+  users,
+} from '@limen/db';
 import { keyProvider } from './key-provider';
 import type { WebDb } from '@limen/db/web';
 import type { UserRecord, UserStore } from './auth';
@@ -595,6 +604,62 @@ export function drizzleAgentStore(db: WebDb = webDb()): AgentStore {
         destination: row.destination,
         isBoundaryRefusal: row.isBoundaryRefusal,
         at: row.createdAt.toISOString(),
+      };
+    },
+
+    /**
+     * The transition names both ends, so it cannot invent a third.
+     *
+     * `eq(agents.status, ...)` in the WHERE is what makes this a pause rather
+     * than a status setter with a nicer name: an agent mid-deploy or in ERROR
+     * matches nothing and comes back undefined, and the route reports that
+     * instead of moving a lifecycle nothing else in the system knows about.
+     */
+    async setPaused({ agentId, userId, paused }) {
+      const [row] = await db
+        .update(agents)
+        .set({ status: paused ? 'PAUSED' : 'ACTIVE' })
+        .where(
+          and(
+            eq(agents.id, agentId),
+            eq(agents.userId, userId),
+            eq(agents.status, paused ? 'ACTIVE' : 'PAUSED'),
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : toAgent(row);
+    },
+
+    async schedule(agentId, userId) {
+      const [row] = await db
+        .select({
+          taskId: scheduledTasks.id,
+          intervalSeconds: scheduledTasks.intervalSeconds,
+          nextRunAt: scheduledTasks.nextRunAt,
+          lastRunAt: scheduledTasks.lastRunAt,
+          enabled: scheduledTasks.enabled,
+          consecutiveFailures: scheduledTasks.consecutiveFailures,
+          disabledAt: scheduledTasks.disabledAt,
+          disabledReason: scheduledTasks.disabledReason,
+        })
+        .from(scheduledTasks)
+        // Joined to `agents` rather than trusted from the caller, for this
+        // file's rule about there being no unscoped lookup: a schedule read by
+        // id alone is somebody else's schedule one bug away.
+        .innerJoin(agents, eq(agents.id, scheduledTasks.agentId))
+        .where(and(eq(scheduledTasks.agentId, agentId), eq(agents.userId, userId)))
+        .limit(1);
+
+      if (row === undefined) return undefined;
+      return {
+        taskId: row.taskId,
+        intervalSeconds: row.intervalSeconds,
+        nextRunAt: row.nextRunAt?.toISOString() ?? null,
+        lastRunAt: row.lastRunAt?.toISOString() ?? null,
+        enabled: row.enabled,
+        consecutiveFailures: row.consecutiveFailures,
+        disabledAt: row.disabledAt?.toISOString() ?? null,
+        disabledReason: row.disabledReason,
       };
     },
 

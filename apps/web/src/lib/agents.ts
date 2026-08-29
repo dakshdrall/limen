@@ -37,8 +37,34 @@ import type { PolicyProposal } from '@limen/core';
 import type { InstallPlan } from '@limen/chain/plan';
 import type { AgentConfig } from './agent-config';
 
-/** The lifecycle, as `agent_status` names it. A subset — this flow uses five. */
-export type AgentStatus = 'DRAFT' | 'CONFIGURED' | 'DEPLOYING' | 'ACTIVE' | 'ERROR';
+/** The lifecycle, as `agent_status` names it. A subset — this flow uses six. */
+export type AgentStatus = 'DRAFT' | 'CONFIGURED' | 'DEPLOYING' | 'ACTIVE' | 'PAUSED' | 'ERROR';
+
+/**
+ * A schedule as a screen needs to read it, or nothing at all.
+ *
+ * Read for the agent detail page, and the reason it exists is that a stopped
+ * schedule must not render like a running one. `enabled` alone cannot say which
+ * of the two stopped it, which is why `disabledAt` and `disabledReason` travel
+ * with it: a person turning a schedule off and a breaker tripping are different
+ * facts, and the screen has to say which happened.
+ *
+ * Note what is **not** here: the agent's own status. A tripped breaker does not
+ * touch it, on purpose — the agent is still deployed, its boundary is still
+ * installed, and it can still be run by hand. The two are rendered side by side
+ * so neither can be mistaken for the other.
+ */
+export interface AgentSchedule {
+  taskId: string;
+  intervalSeconds: number | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  enabled: boolean;
+  consecutiveFailures: number;
+  /** Set only when the breaker stopped it. Null when a person did. */
+  disabledAt: string | null;
+  disabledReason: string | null;
+}
 
 /**
  * The largest stored proposal, in characters of JSON.
@@ -192,6 +218,23 @@ export interface AgentStore {
   proposedPolicy(agentId: string, userId: string): Promise<ProposedPolicy | undefined>;
   /** `CONFIGURED` -> `DEPLOYING`, or `DEPLOYING` -> `ERROR`. */
   markStatus(input: { agentId: string; userId: string; status: AgentStatus }): Promise<AgentRecord>;
+  /**
+   * `ACTIVE` <-> `PAUSED`, and nothing else.
+   *
+   * The pause a person presses. It is a status change rather than a flag on the
+   * schedule because the scheduler's due query already filters on
+   * `status = 'ACTIVE'` — so pausing an agent stops every schedule it has, and
+   * stops it in the one place a claim is made, rather than in a caller that
+   * could forget.
+   *
+   * The UPDATE names the status it expects to find, so this can only ever move
+   * between those two. Pausing a `DEPLOYING` agent, or resuming one that
+   * errored, would be a screen inventing a lifecycle transition nothing else
+   * knows about; it returns undefined instead.
+   */
+  setPaused(input: { agentId: string; userId: string; paused: boolean }): Promise<AgentRecord | undefined>;
+  /** This agent's schedule, for the screens that must show it stopped. */
+  schedule(agentId: string, userId: string): Promise<AgentSchedule | undefined>;
   /** The deployment happened and was verified against the ledger. */
   recordDeployment(input: RecordDeploymentInput): Promise<AgentRecord>;
   /**
