@@ -355,6 +355,15 @@ export interface RecordDeploymentInput {
    * ids, and `gate.ts` looks a rule up by its saved id rather than scanning.
    */
   venueContextRuleId: number | null;
+  /**
+   * The transaction that installed the venue rule, null when there is none.
+   *
+   * Its own hash, not the boundary's. One `add_context_rule` per rule is what
+   * `installBoundary` submits, so there are two hashes, and recording the same
+   * one twice would put a transaction that installed the token rule in the
+   * column that says which transaction installed the venue.
+   */
+  venueInstallTxHash: string | null;
   ownerPublicKey: string;
   agentPublicKey: string;
 }

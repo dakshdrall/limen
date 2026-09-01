@@ -268,6 +268,8 @@ export async function recordDeployment(
     contextRuleId: number;
     /** The venue rule's id for a trading agent, null for a payment agent. */
     venueContextRuleId: number | null;
+    /** The transaction that installed the venue rule. Null when there is none. */
+    venueInstallTxHash: string | null;
     ownerPublicKey: string;
     agentPublicKey: string;
   },

@@ -3408,3 +3408,103 @@ recorded there as pre-existing and were not: `design-system.test.ts` had caught
 the swallowed-space defect on a line that milestone rewrote. Reading a rule's
 finding as somebody else's work is exactly the failure that rule exists to
 prevent, since the defect is invisible in a diff and survives every type check.
+
+---
+
+## The two-rule recording defect, found by a real deploy
+
+A trading agent deployed against testnet, both transactions landed, and the
+recording refused:
+
+> The reviewed plan does not describe exactly one context rule.
+
+The refusal was `deployed/route.ts` and the plan was fine. Two bugs sat in the
+same two lines, and only the first was visible:
+
+```ts
+const planned = policy.installPlan.rules[0];
+if (planned === undefined || policy.installPlan.rules.length !== 1) {
+```
+
+The **length check** was correct while a boundary was one rule and became wrong
+the moment a trading agent's became two — the token rule carrying the cap, and
+the venue rule authorizing the router. `installBoundary` was taught to install
+both at V8's start; this check was not.
+
+The **index** would have survived deleting the length check. `lower()` sorts a
+plan's rules by contract address, so position says nothing about which rule is
+which. For the pair this product ships — Soroswap's router `CCJUD5…` and the XLM
+SAC `CDLZFC…` — `rules[0]` is the *venue*: no policies, no cap, no asset.
+Relaxing the length check alone would have compared the reviewed cap against a
+rule that carries none and failed on `The installed rule carries no spending
+limit` — a message about the ledger, describing a mistake made here.
+
+The fix moves the question into `lib/deployment-shape.ts`, pure and tested: the
+boundary is the rule that *carries the cap*, a venue is a rule that carries
+nothing, and a plan is recordable only as exactly one boundary plus at most one
+venue. `DeployStep` already picked the boundary that way; this is the same claim
+made on the server, where it is checked rather than reported. The fixture puts
+the venue at `rules[0]`, in `lower()`'s own order, so it fails against the bug.
+
+**A venue rule the plan describes must also have been reported.** `gate.ts`
+finds a venue rule by the id saved at deployment or not at all, so a trading
+agent recorded without one is `ACTIVE` and refused at every swap — the failure
+this route's header already calls the most expensive one it can let through,
+*because it looks like success*. Now refused.
+
+**One transaction hash per rule.** `installBoundary` submits one
+`add_context_rule` per rule so each id comes from the return value that produced
+it, and the loop's *last* result was being recorded as both the boundary's and
+the venue's install hash. `venue_install_tx_hash` held a transaction that
+installed the token rule. `onInstalled` now carries each rule's own hash.
+
+### The account was recovered, not abandoned
+
+Read back from testnet before anything was changed:
+
+```
+CAD6BEJY…GUED   rule 0  multisig  Default
+                rule 1  limen-0   CCJUD5…  policies []            <- venue
+                rule 2  limen-1   CDLZFC…  limit 200000000/17280  <- boundary
+```
+
+Both rules were installed. The browser only ever showed one `add_context_rule`
+because both submissions share a single `log.run('install', …)` slot and only the
+last result renders — the venue's transaction, `c34dd7fb…8b66`, appeared nowhere.
+Horizon has all four writes under the owner `GBB2KTOO…4T7Z`:
+
+```
+13:26:12  ccee08c4…a48a  create_account          friendbot -> owner
+13:26:27  f57ef561…7ba6  CreateContractV2        the smart account
+13:26:37  88007526…cfd7  transfer                seeding it
+13:26:47  c34dd7fb…8b66  add_context_rule        the venue rule  (never shown)
+13:26:57  8db5da38…5012  add_context_rule        the boundary
+```
+
+Every check the route makes was verified against the ledger by hand — contract,
+`valid_until`, cap, window, the venue's emptiness, the agent key against the one
+Limen holds — so re-posting the same body records it. Nothing was replayed on
+chain and no key was re-derived.
+
+### The strategy direction is a real gap, and is recorded as one
+
+`readPrice(input, output)` returns **output units per one unit of input**, and
+`price_drop` fires when that number falls. So the trigger always means *the asset
+this agent sells got cheaper*. The agent above is XLM in, USDC out: it sells XLM
+into a fall. That is a stop-loss, not a dip buy.
+
+Buying XLM on a dip needs **two** things this product does not have, not one:
+
+1. an account funded with the quote asset, since the input asset is the one that
+   leaves — a USDC-funded agent, and the deploy flow funds XLM from Friendbot;
+2. a **rise** trigger. Inverting the pair inverts the price: with USDC in and XLM
+   out, `outFor` is XLM-per-USDC, and XLM getting cheaper makes that number go
+   *up*. `price_drop` on a USDC→XLM agent fires when XLM *rises*.
+
+`TradingTrigger` already carries `TODO(roadmap)` for rises. The second half is
+the one that would surprise somebody: the trigger's direction is relative to the
+input asset, and no screen says so.
+
+`move-the-pool.mjs` sells XLM into the pair, which lowers the XLM→USDC quote. It
+provokes the deployed agent's trigger for real, and it would push a dip-buying
+agent further from firing.

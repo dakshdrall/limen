@@ -61,6 +61,7 @@
 
 import { StrKey } from '@stellar/stellar-sdk';
 import { readAllContextRules, readSpendingLimit } from '@limen/chain';
+import { deploymentShape } from '@/lib/deployment-shape';
 import { clientIp, createRateLimit } from '@/lib/rate-limit';
 import { requireUser } from '@/lib/route-session';
 import { simulationSource } from '@/lib/simulation-source';
@@ -117,6 +118,7 @@ export async function POST(
     const agentPublicKey = String(body.agentPublicKey ?? '');
     const contextRuleId = body.contextRuleId;
     const venueContextRuleId = body.venueContextRuleId ?? null;
+    const venueInstallTxHash = String(body.venueInstallTxHash ?? '');
 
     if (!StrKey.isValidContract(smartAccountContractId)) {
       return bad('smartAccountContractId is not a contract address.');
@@ -170,6 +172,15 @@ export async function POST(
     ) {
       return bad('venueContextRuleId must be a non-negative integer, or absent.');
     }
+    // The venue rule is installed by its own transaction — `installBoundary`
+    // submits one per rule so that each returned id comes from the return value
+    // that produced it — so it is recorded with its own hash. Required exactly
+    // when there is a venue rule, for the same reason the id is.
+    if (venueContextRuleId !== null && !TX_HASH.test(venueInstallTxHash)) {
+      return bad(
+        'venueInstallTxHash must be a 64-character hex hash when a venue rule id is reported.',
+      );
+    }
 
     const policy = await store.proposedPolicy(id, gate.user.id);
     if (policy === undefined) {
@@ -179,10 +190,13 @@ export async function POST(
       );
     }
 
-    const planned = policy.installPlan.rules[0];
-    if (planned === undefined || policy.installPlan.rules.length !== 1) {
-      return unverified('The reviewed plan does not describe exactly one context rule.');
-    }
+    // Which rule is the boundary is a question about what the rules carry, not
+    // about where they sit — `deployment-shape.ts` says why at length, and the
+    // short version is that a plan's rules are sorted by contract address, so
+    // for a trading agent `rules[0]` is the venue.
+    const shape = deploymentShape(policy.installPlan, { venueContextRuleId });
+    if (!shape.ok) return unverified(shape.message);
+    const planned = shape.boundary;
 
     const rpcUrl = process.env.SOROBAN_RPC_URL;
     const source = simulationSource();
@@ -319,6 +333,7 @@ export async function POST(
       // rule this browser claims but the account does not carry, or that the
       // plan did not name, is refused rather than recorded.
       venueContextRuleId,
+      venueInstallTxHash: venueContextRuleId === null ? null : venueInstallTxHash,
       ownerPublicKey,
       agentPublicKey,
     });

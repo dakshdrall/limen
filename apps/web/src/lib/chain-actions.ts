@@ -381,11 +381,13 @@ export async function installBoundary({
   /**
    * The rule id, read out of what `add_context_rule` returned, not assumed.
    *
-   * Called once per installed rule, with the contract it was installed for, so
-   * a caller holding a two-rule plan can tell the token rule from the venue
-   * rule without matching on order.
+   * Called once per installed rule, with the contract it was installed for and
+   * the hash of the transaction that installed it, so a caller holding a
+   * two-rule plan can tell the token rule from the venue rule without matching
+   * on order — and can record each rule's own transaction rather than the last
+   * one submitted.
    */
-  onInstalled: (ruleId: number, contract: string | null) => void;
+  onInstalled: (ruleId: number, contract: string | null, txHash: string) => void;
 }): Promise<SubmitResultLike> {
   const chain = await loadChain();
   const { rpc } = await import('@stellar/stellar-sdk');
@@ -460,7 +462,7 @@ export async function installBoundary({
     });
 
     if (result.stage !== 'ledger' || !result.ok) return result;
-    onInstalled(chain.contextRuleIdFrom(result.returnValue), rule?.contract ?? null);
+    onInstalled(chain.contextRuleIdFrom(result.returnValue), rule?.contract ?? null, result.hash ?? '');
     last = result;
   }
 

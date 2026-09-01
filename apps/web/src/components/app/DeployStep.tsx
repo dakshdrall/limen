@@ -180,7 +180,9 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
     // back in — the plan sorts its rules by contract address, so position is
     // not a fact about which is which.
     let ruleId: number | null = null;
+    let ruleTxHash: string | null = null;
     let venueRuleId: number | null = null;
+    let venueTxHash: string | null = null;
     const tokenContract = started.plan.rules.find((rule) =>
       rule.policies.some((policy) => policy.kind === 'spending_limit'),
     )?.contract;
@@ -194,13 +196,23 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
           accountId: account,
           plan: started.plan,
           agentPublicKey: started.agentPublicKey,
-          onInstalled: (id, contract) => {
+          onInstalled: (id, contract, hash) => {
             // The rule carrying the spending limit is the boundary; anything
             // else in the plan is a venue. Matching on the contract means a
             // plan that grows a third rule fails loudly here rather than
             // silently recording the wrong id as the boundary.
-            if (contract === tokenContract) ruleId = id;
-            else venueRuleId = id;
+            //
+            // Each rule's own hash travels with its id for the same reason.
+            // The loop submits one transaction per rule and only the last one
+            // is the value `log.run` returns, so recording that hash for both
+            // would write down a transaction that did not install the venue.
+            if (contract === tokenContract) {
+              ruleId = id;
+              ruleTxHash = hash;
+            } else {
+              venueRuleId = id;
+              venueTxHash = hash;
+            }
           },
         }),
     );
@@ -213,9 +225,14 @@ export function DeployStep({ agentId, plan }: { agentId: string; plan: InstallPl
       const recorded = await recordDeployment(agentId, {
         smartAccountContractId: account,
         deployTxHash: deployed.hash,
-        installTxHash: installed.hash,
+        // The boundary's own transaction, not whichever install happened to be
+        // submitted last. `installed.hash` is the last of the loop's results,
+        // and the plan's rules are sorted by contract address, so the two are
+        // the same transaction only by coincidence.
+        installTxHash: ruleTxHash ?? installed.hash,
         contextRuleId: ruleId,
         venueContextRuleId: venueRuleId,
+        venueInstallTxHash: venueTxHash,
         ownerPublicKey: k.owner.publicKey,
         agentPublicKey: started.agentPublicKey,
       });
