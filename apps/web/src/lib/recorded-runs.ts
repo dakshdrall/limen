@@ -270,6 +270,88 @@ export const RECORDED_AGENT_BUILD_RUN = recorded.agentBuilderRun as {
   verifiedBy: string;
 };
 
+/**
+ * The C0 trading run: one swap under the cap, one over it, both on a ledger.
+ *
+ * The narrative surface's cap demonstration is drawn from this and from nothing
+ * else. Every number it renders — the cap, the two amounts, the window, both
+ * hashes and the contract error — is a field here, because the drawing makes a
+ * quantitative claim and a bar chart whose proportions were chosen by eye is an
+ * illustration rather than evidence.
+ *
+ * `cap` and both `amount`s are stroop strings at 7 decimals, so the widths are
+ * computed from the same integers the network compared, not from a decimal the
+ * page rounded first.
+ *
+ * The window is the one figure the recording does not carry as a number: it is
+ * stated inside `capNote` as prose. `recordedTradingWindowLedgers` reads it back
+ * out rather than letting a page type "daily", so the word the drawing uses is
+ * derived from the same sentence that justifies it and goes away if that
+ * sentence ever stops saying it.
+ */
+export interface RecordedTradingSwap {
+  /** `under the cap` or `over the cap`, as the recording words it. */
+  which: string;
+  /** Stroops, 7 decimals. */
+  amount: string;
+  outcome: string;
+  hash: string;
+  /** Present only on the refusal. `SpendingLimitExceeded#3221`, unspaced. */
+  contractError?: string;
+}
+
+export interface RecordedTrading {
+  note: string;
+  ranAt: string;
+  smartAccount: string;
+  deployTx: string;
+  cap: string;
+  capNote: string;
+  swaps: RecordedTradingSwap[];
+}
+
+/**
+ * The run itself.
+ *
+ * Cast rather than validated, exactly as every accessor above is: the shape is
+ * asserted by `evidence.test.ts` against the file, and a second runtime check
+ * here would be a second definition of what the recording contains.
+ */
+export const RECORDED_TRADING = recorded.tradingRun as RecordedTrading;
+
+/**
+ * The two swaps, found by outcome rather than by index.
+ *
+ * `swaps[0]` and `swaps[1]` would render a refusal as a settlement the day the
+ * recording is regenerated in a different order, and that is the one error this
+ * page cannot survive making — its whole claim is which of the two was refused.
+ * So each is matched on the field that says what happened to it, and a run that
+ * stops containing one of them yields `undefined` rather than the other one.
+ */
+export const RECORDED_TRADING_SETTLED = RECORDED_TRADING.swaps.find(
+  (swap) => swap.outcome === 'succeeded',
+);
+
+export const RECORDED_TRADING_REFUSED = RECORDED_TRADING.swaps.find(
+  (swap) => swap.outcome === 'refused_by_network',
+);
+
+/**
+ * The cap's window, in ledgers, read out of the recording's own prose.
+ *
+ * `capNote` reads "1 XLM at 7 decimals, per 17280 ledgers." — the number is
+ * there, it is simply in a sentence rather than in a field. Parsing it is worth
+ * more than hardcoding 17280 beside it: the page calls the window "daily", and
+ * that word is only true because of this number. If the run is ever re-recorded
+ * against a different window, this returns the new one and the label follows;
+ * if the sentence changes shape, this returns `undefined` and the caller has to
+ * decide what to say rather than confidently saying the wrong thing.
+ */
+export const recordedTradingWindowLedgers = ((): number | undefined => {
+  const found = /(\d+)\s*ledgers/.exec(RECORDED_TRADING.capNote);
+  return found === null ? undefined : Number(found[1]);
+})();
+
 /** When the most recent run in the recording was made. */
 export const RECORDED_AT = recorded.recordedAt;
 

@@ -1,0 +1,737 @@
+/* ===========================================================================
+   THE NARRATIVE SURFACE
+
+   Ported from `prototype/limen-landing.html`, which is the design spec for this
+   route. Structure, spacing and type scale are the prototype's; what changed
+   and why is recorded at each point below rather than in a commit message.
+
+   Three classes of change, and no others:
+
+   1. Colour literals became the scoped tokens declared in `globals.css` and
+      pinned in `lib/theme.ts`. The values are identical apart from
+      `--muted-dim`, which the prototype set under AA — see `LANDING_TEXT`.
+   2. The page's own `.wrap` became the `.screen` shell. The prototype centred a
+      1180px box; `--screen-max` is 74rem, which computes to 1184px, so the
+      measure is within four pixels of the drawing and the site's one rule about
+      width is not broken to save them.
+   3. The cap demonstration is redrawn to scale. The prototype's proportions
+      predate the recorded figure and were placeholders; see `.track`.
+
+   No `system-ui` anywhere, matching the rule `globals.css` is held to. The
+   families resolve through `next/font`, which supplies its own metrics-matched
+   fallback for the swap frame.
+   =========================================================================== */
+
+.landing {
+  /* The prototype's page gutter, renamed onto the shell's so the bleeding
+     background art below does its arithmetic against the real one. */
+  --gutter: var(--screen-pad);
+
+  background: var(--background);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: clamp(1rem, 0.96rem + 0.2vw, 1.075rem);
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The shell supplies the measure; the sections supply the rhythm. `.screen`
+   sets 3.5rem of block padding and a 3rem row gap, both of which would add to
+   the prototype's own section padding and open a gap between every section. */
+.landing .screen {
+  padding-block: 0;
+  row-gap: 0;
+}
+
+.landing-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ---- silver, grainy, in motion ------------------------------------------ */
+
+.landing .silver {
+  background-image: linear-gradient(
+    168deg,
+    #ffffff 0%,
+    #c8ccd2 26%,
+    #7d848c 48%,
+    #eef0f3 62%,
+    #8f959c 82%,
+    #dfe3e8 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: url(#limen-landing-silver-grain);
+  will-change: filter;
+}
+
+.landing .silver.lite {
+  filter: url(#limen-landing-silver-grain-lite);
+}
+
+/* Set by the IntersectionObserver in `SilverHeading`, and set on first paint:
+   an animated SVG filter is expensive enough that running nine of them for
+   headings nobody has scrolled to is measurable. */
+.landing .silver.paused {
+  filter: none;
+}
+
+/* ---- background furniture ----------------------------------------------- */
+
+/* Fixed rather than absolute, so the grain belongs to the viewport and not to
+   the document — a 6000px page would otherwise stretch one 220px tile over the
+   whole scroll and the texture would disappear. */
+.landing .pagegrain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Every piece of background art is `.art`: absolute, inert, and beneath a
+   content layer that is explicitly raised above it. The pairing is what keeps
+   the art from shifting layout or catching a click — neither half works
+   alone. */
+.landing section,
+.landing .hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing .art {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing section > *:not(.art),
+.landing .hero > *:not(.art) {
+  position: relative;
+  z-index: 1;
+}
+
+/* the simulated market tape behind the hero */
+.landing .art-candles {
+  right: -5%;
+  bottom: 1.5rem;
+  width: 74%;
+  height: 76%;
+  opacity: 0.62;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.25) 26%, #000 58%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.25) 26%, #000 58%, #000 100%);
+}
+
+/* the sill, as architecture */
+.landing .art-sill {
+  top: -8%;
+  right: -14%;
+  height: 132%;
+  width: auto;
+  opacity: 0.85;
+}
+
+.landing .art-sill rect {
+  fill: #080603;
+}
+
+.landing .art-sill .lip {
+  fill: #0d0a04;
+}
+
+@media (max-width: 820px) {
+  .landing .art-sill {
+    right: -46%;
+    opacity: 0.75;
+  }
+}
+
+/* price + volume tape, behind the ledger sections */
+.landing .art-price,
+.landing .art-vol {
+  left: calc(-1 * var(--gutter));
+  right: calc(-1 * var(--gutter));
+  bottom: 0.25rem;
+  width: auto;
+  height: auto;
+  opacity: 0.95;
+}
+
+.landing .art-price .area {
+  fill: url(#limen-landing-tape-fade);
+}
+
+.landing .art-price .line {
+  fill: none;
+  stroke: #413720;
+  stroke-width: 1.5;
+}
+
+.landing .art-vol .bars rect {
+  fill: #171109;
+}
+
+.landing .ticks text {
+  font-family: var(--font-body-mono);
+  font-size: 11px;
+  fill: #2a2214;
+  letter-spacing: 0.06em;
+}
+
+/* ---- page frame --------------------------------------------------------- */
+
+.landing a {
+  color: inherit;
+}
+
+/* The global ring is declared once in `globals.css` and is not restated here.
+   What is restated is the colour, because this surface repaints the token the
+   ring already reads — so every link and button on the page keeps the one ring
+   the rest of the site uses, drawn in gold. */
+.landing :focus-visible {
+  outline: 2px solid var(--landing-gold-leaf);
+  outline-offset: 3px;
+}
+
+/* ---- hero --------------------------------------------------------------- */
+
+.landing .hero {
+  padding: clamp(4rem, 13vh, 8.5rem) 0 clamp(3rem, 7vh, 5rem);
+}
+
+.landing .hero::before {
+  content: '';
+  position: absolute;
+  inset: -6rem -20% auto -30%;
+  height: 40rem;
+  z-index: 0;
+  background: radial-gradient(
+    46% 40% at 34% 52%,
+    rgba(242, 210, 120, 0.1),
+    rgba(140, 106, 43, 0.045) 44%,
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.landing h1 {
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 0, 'WONK' 1;
+  font-weight: 300;
+  font-size: clamp(2.5rem, 7.4vw, 5.1rem);
+  line-height: 1.03;
+  letter-spacing: -0.022em;
+  margin: 0 0 1.6rem;
+  max-width: 17ch;
+}
+
+.landing .lede {
+  max-width: 52ch;
+  margin: 0 0 2.4rem;
+  color: var(--muted);
+  font-size: clamp(1.02rem, 1vw + 0.78rem, 1.2rem);
+}
+
+.landing .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem 1.4rem;
+}
+
+.landing .btn {
+  display: inline-block;
+  text-decoration: none;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+  padding: 0.78rem 1.5rem;
+  border-radius: 2px;
+  color: #120d04;
+  background: linear-gradient(
+    155deg,
+    var(--landing-gold-leaf),
+    var(--landing-gold) 55%,
+    var(--landing-gold-deep)
+  );
+  box-shadow: 0 1px 0 rgba(255, 225, 160, 0.35) inset;
+}
+
+.landing .btn:hover {
+  background: linear-gradient(155deg, #fbe6ab, var(--landing-gold-leaf) 60%, var(--landing-gold));
+}
+
+.landing .btn.ghost {
+  background: none;
+  color: var(--landing-gold-leaf);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  padding: 0.72rem 1.3rem;
+}
+
+.landing .btn.ghost:hover {
+  border-color: var(--landing-gold-deep);
+  background: rgba(201, 162, 39, 0.06);
+}
+
+/* ---- section rhythm: the sill ------------------------------------------- */
+
+.landing section {
+  padding: clamp(3.5rem, 9vh, 6.5rem) 0;
+}
+
+.landing .sill {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--landing-gold-deep) 12%,
+    var(--landing-gold) 50%,
+    var(--landing-gold-deep) 88%,
+    transparent
+  );
+  opacity: 0.5;
+}
+
+.landing h2 {
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 0, 'WONK' 1;
+  font-weight: 300;
+  font-size: clamp(1.75rem, 3.4vw, 2.7rem);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 1rem;
+  max-width: 20ch;
+}
+
+.landing .say {
+  max-width: 62ch;
+  margin: 0 0 2.6rem;
+}
+
+.landing .say:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- the cap, drawn to scale -------------------------------------------- */
+
+/*  The one place this file departs from the prototype's drawing rather than its
+    palette, and it is a correction rather than a preference.
+
+    The prototype put the cap line at 64% and filled the settled bar to 22% of
+    the track, which encodes a cap of roughly 1.4 XLM against a 0.3 XLM trade.
+    Those proportions were drawn before the run existed. The recording says the
+    cap is 1 XLM and the two swaps were 0.3 and 5 — so the drawing was showing a
+    ratio that never happened, beside two hashes that did.
+
+    Redrawn from the recorded integers:
+
+      cap line      40% of the track
+      0.3 XLM       0.3 / 1.0 of that distance   = 12% of the track
+      5 XLM         5 x the cap, so 200% of the track — gold to the line, then
+                    hatched, running off the right edge and clipped
+
+    The refused bar is deliberately not fitted to the container. A bar that
+    stops at the edge reads as a quantity the drawing could show; one that
+    leaves reads as a quantity that did not fit, which is the fact. Its gold
+    stop is at 20% of its own 200% width, which is the 40% line.
+
+    The percentages here and the amounts in the markup both come from the same
+    recorded stroop integers — see `capGeometry` in `page.tsx`. Nothing in this
+    file is free to disagree with the numbers rendered beside it. */
+
+.landing .proof {
+  margin-top: 2.8rem;
+}
+
+.landing .track {
+  position: relative;
+  padding: 1.9rem 0 0.6rem;
+}
+
+.landing .capline {
+  position: absolute;
+  left: 40%;
+  top: 0.1rem;
+  height: 1.5rem;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--landing-gold));
+}
+
+.landing .capline span {
+  position: absolute;
+  top: -0.35rem;
+  left: 0.6rem;
+  white-space: nowrap;
+  font-family: var(--font-body-mono);
+  font-size: 0.74rem;
+  color: var(--landing-gold-leaf);
+  letter-spacing: 0.04em;
+}
+
+.landing .row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+  padding: 1.05rem 0;
+}
+
+.landing .row + .row {
+  border-top: 1px solid rgba(42, 33, 19, 0.75);
+}
+
+/* `overflow: hidden` is what clips the refused bar. Without it the 200% fill
+   widens the grid row and the whole page scrolls sideways. */
+.landing .bar {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  position: relative;
+  overflow: hidden;
+}
+
+.landing .bar::after {
+  content: '';
+  position: absolute;
+  left: 40%;
+  top: -9px;
+  bottom: -9px;
+  width: 1px;
+  background: var(--landing-gold);
+  opacity: 0.85;
+  z-index: 1;
+}
+
+.landing .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  transition: width 1.15s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.landing .fill.settled {
+  background: linear-gradient(90deg, var(--landing-gold-deep), var(--landing-gold-leaf));
+}
+
+.landing .fill.refused {
+  background:
+    linear-gradient(90deg, var(--landing-gold-deep) 0 20%, transparent 20%),
+    repeating-linear-gradient(115deg, rgba(154, 160, 166, 0.42) 0 2px, transparent 2px 7px);
+}
+
+.landing .visible .fill.settled {
+  width: 12%;
+}
+
+.landing .visible .fill.refused {
+  width: 200%;
+}
+
+.landing .meta {
+  max-width: 58%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  align-items: baseline;
+  font-family: var(--font-body-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+  color: var(--muted-dim);
+}
+
+.landing .amount {
+  color: var(--landing-silver-1);
+  font-size: 0.94rem;
+  min-width: 6.5rem;
+}
+
+.landing .verdict {
+  color: var(--landing-gold-leaf);
+}
+
+.landing .verdict.no {
+  color: var(--landing-silver-2);
+}
+
+.landing .meta a {
+  color: var(--muted-dim);
+  text-decoration: none;
+  border-bottom: 1px dotted #3a3020;
+}
+
+.landing .meta a:hover {
+  color: var(--landing-gold-leaf);
+}
+
+.landing .err {
+  max-width: 52ch;
+  margin: 0.55rem 0 0;
+  font-family: var(--font-body-mono);
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--muted-dim);
+}
+
+.landing .err b {
+  color: var(--landing-silver-2);
+  font-weight: 500;
+}
+
+@media (max-width: 700px) {
+  .landing .meta {
+    max-width: 100%;
+  }
+
+  .landing .capline span {
+    font-size: 0.68rem;
+  }
+
+  .landing .amount {
+    min-width: 0;
+  }
+}
+
+.landing .aside {
+  max-width: 58ch;
+  margin-top: 1.6rem;
+  font-size: 0.95rem;
+  color: var(--muted-dim);
+}
+
+/* ---- flow --------------------------------------------------------------- */
+
+.landing .flow {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  border-block: 1px solid var(--border);
+  margin-top: 2.4rem;
+}
+
+@media (min-width: 760px) {
+  .landing .flow {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.landing .step {
+  background: var(--surface);
+  padding: 1.7rem 1.5rem 1.9rem;
+}
+
+.landing .step h3 {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 1.02rem;
+  color: var(--landing-silver-1);
+  margin: 0 0 0.55rem;
+  letter-spacing: 0.01em;
+}
+
+.landing .step p {
+  margin: 0;
+  font-size: 0.95rem;
+  max-width: 34ch;
+}
+
+.landing .step .tick {
+  display: block;
+  width: 1.4rem;
+  height: 1px;
+  background: var(--landing-gold);
+  margin-bottom: 1.1rem;
+}
+
+/* ---- two columns -------------------------------------------------------- */
+
+.landing .pair {
+  display: grid;
+  gap: 2.4rem;
+  margin-top: 2.4rem;
+}
+
+@media (min-width: 820px) {
+  .landing .pair {
+    grid-template-columns: 1fr 1fr;
+    gap: 3.2rem;
+  }
+}
+
+.landing .col h3 {
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 0, 'WONK' 1;
+  font-weight: 400;
+  font-size: 1.32rem;
+  margin: 0 0 0.2rem;
+}
+
+.landing .col > p {
+  font-size: 0.95rem;
+  margin: 0.4rem 0 1.2rem;
+  max-width: 44ch;
+}
+
+.landing .col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+.landing .col li {
+  padding: 0.62rem 0 0.62rem 1.4rem;
+  position: relative;
+  border-top: 1px solid rgba(42, 33, 19, 0.7);
+}
+
+.landing .col li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1.35rem;
+  width: 0.5rem;
+  height: 1px;
+  background: var(--landing-gold-deep);
+}
+
+.landing .col.network li::before {
+  background: var(--landing-gold);
+}
+
+.landing code {
+  font-family: var(--font-body-mono);
+  font-size: 0.86em;
+  color: var(--landing-gold-leaf);
+}
+
+/* ---- derived ------------------------------------------------------------ */
+
+.landing .derive {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  margin-top: 2.2rem;
+  border: 1px solid var(--border);
+}
+
+@media (min-width: 700px) {
+  .landing .derive {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.landing .cell {
+  background: var(--surface);
+  padding: 1.6rem 1.5rem;
+}
+
+.landing .cell.now {
+  background: var(--surface-raised);
+}
+
+.landing .cell h4 {
+  margin: 0 0 0.8rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--landing-silver-2);
+}
+
+.landing .cell.now h4 {
+  color: var(--landing-gold-leaf);
+}
+
+.landing .cell p {
+  margin: 0;
+  font-size: 0.94rem;
+  max-width: 38ch;
+}
+
+/* The unfilled form fields. `--faint` is 2.25:1 and is allowed to be: this is a
+   picture of a blank form, and its legibility is the point being made against
+   it. It carries no information a reader needs to read. */
+.landing .fake-field {
+  display: block;
+  border: 1px dashed #33291a;
+  color: var(--faint);
+  font-family: var(--font-body-mono);
+  font-size: 0.78rem;
+  padding: 0.42rem 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.landing .observed {
+  font-family: var(--font-body-mono);
+  font-size: 0.82rem;
+  color: var(--landing-silver-2);
+  line-height: 1.9;
+  margin-bottom: 0.9rem;
+}
+
+.landing .observed b {
+  color: var(--landing-gold-leaf);
+  font-weight: 500;
+}
+
+/* ---- close -------------------------------------------------------------- */
+
+.landing .close {
+  padding-bottom: clamp(4rem, 10vh, 7rem);
+}
+
+.landing .close h2 {
+  max-width: 15ch;
+}
+
+/* ---- responsive --------------------------------------------------------- */
+
+/*  Below 820 the tape stops sitting behind the hero and becomes a strip under
+    it. The hero's bottom padding opens to 15rem to make the room, so the strip
+    lands in space the hero reserved rather than over the CTAs — which is the
+    one overlap this layout could produce and the reason the padding and the
+    strip's height are set in the same block. */
+@media (max-width: 820px) {
+  .landing .hero {
+    padding-bottom: 15rem;
+  }
+
+  .landing .art-candles {
+    left: calc(-1 * var(--gutter));
+    right: calc(-1 * var(--gutter));
+    width: auto;
+    height: 8.5rem;
+    bottom: 1.5rem;
+    opacity: 0.6;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 34%);
+    mask-image: linear-gradient(180deg, transparent 0, #000 34%);
+  }
+}
+
+/* ---- reduced motion ----------------------------------------------------- */
+
+/*  The grain comes off the text entirely rather than being paused, the bars
+    arrive at their end state without travelling, and `CandleTape` renders one
+    frame and never starts its loop. The page is still fully present: nothing
+    here hides anything, which is the same rule `.reveal` is built on. */
+@media (prefers-reduced-motion: reduce) {
+  .landing .silver {
+    filter: none;
+  }
+
+  .landing .fill {
+    transition: none;
+  }
+
+  .landing .visible .fill.settled {
+    width: 12%;
+  }
+
+  .landing .visible .fill.refused {
+    width: 200%;
+  }
+}
