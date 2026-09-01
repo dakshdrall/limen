@@ -1,6 +1,6 @@
 'use client';
 
-import { type ElementType, useEffect, useRef, useState } from 'react';
+import { type ElementType, useEffect, useRef } from 'react';
 
 /**
  * A heading in grainy silver.
@@ -29,13 +29,22 @@ import { type ElementType, useEffect, useRef, useState } from 'react';
  * `rootMargin` is the prototype's 120px: the filter is on slightly before the
  * heading arrives, so the grain is never seen switching on.
  *
- * ## The starting state is paused, deliberately
+ * ## The class is toggled on the node, not held in state
  *
- * `paused` is set in the initial render rather than in an effect. The server
- * and the first client render therefore agree — there is no hydration mismatch
- * — and, more usefully, no filter runs during the first paint of a page whose
- * headings are mostly below the fold. The observer removes it on the ones that
- * are actually visible, a frame later.
+ * `paused` is rendered on the server and then driven by the observer through
+ * the ref, rather than by `useState`. Two reasons, and the second is the real
+ * one:
+ *
+ * It is presentational — nothing else on the page reads it, and it carries no
+ * information a re-render would need to propagate. Holding it in state means
+ * every heading re-renders each time it crosses the viewport edge, which on a
+ * page with nine of them is a render storm produced entirely by scrolling.
+ *
+ * And it keeps the server and the first client render identical: the markup
+ * ships with `paused`, so no filter runs during the first paint of a page whose
+ * headings are mostly below the fold, and there is nothing for hydration to
+ * disagree about. The observer removes the class a frame later on the headings
+ * that are actually visible.
  *
  * Under `prefers-reduced-motion` no observer is created at all. The filter is
  * already gone: `landing.css` drops it from `.silver` under that query, so
@@ -56,22 +65,25 @@ export function SilverHeading({
   children: React.ReactNode;
 } & Record<string, unknown>) {
   const ref = useRef<HTMLElement>(null);
-  const [paused, setPaused] = useState(true);
 
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
 
-    // Both are reasons not to arm, and neither is a reason to hide anything.
+    // No observer: run the filter rather than leave every heading flat. The
+    // effect is decoration, and the degraded case should be the page as drawn.
     if (typeof IntersectionObserver === 'undefined') {
-      setPaused(false);
+      element.classList.remove('paused');
       return;
     }
+
+    // Reduced motion: the filter is already gone from `.silver` in CSS, so
+    // there is nothing to pause and nothing worth watching for.
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) setPaused(!entry.isIntersecting);
+        for (const entry of entries) entry.target.classList.toggle('paused', !entry.isIntersecting);
       },
       { rootMargin: '120px' },
     );
@@ -82,9 +94,7 @@ export function SilverHeading({
   return (
     <Tag
       ref={ref}
-      className={`silver${lite ? ' lite' : ''}${paused ? ' paused' : ''}${
-        className === '' ? '' : ` ${className}`
-      }`}
+      className={`silver${lite ? ' lite' : ''} paused${className === '' ? '' : ` ${className}`}`}
       {...rest}
     >
       {children}

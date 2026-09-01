@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * The cap demonstration: two bars against the line that separated them.
@@ -22,10 +22,15 @@ import { useEffect, useRef, useState } from 'react';
  *
  * `visible` is added rather than removed, and the CSS gives `.fill` a width of
  * zero until it arrives. That means a reader with no `IntersectionObserver`
- * would see two empty bars — so the fallback below sets `visible` immediately
+ * would see two empty bars — so the fallback below adds the class immediately
  * in that case. Under `prefers-reduced-motion` the class is still added and the
  * transition is removed in CSS, so the bars are simply already drawn. Neither
  * path hides anything; both end at the same picture.
+ *
+ * The class goes onto the node through the ref rather than into `useState`.
+ * It is set once and never read by anything else, so putting it in state would
+ * buy a re-render of the whole track to change one string that only CSS
+ * consumes.
  */
 export function CapTrack({
   capLabel,
@@ -43,14 +48,13 @@ export function CapTrack({
   }[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
 
     if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true);
+      element.classList.add('visible');
       return;
     }
 
@@ -58,7 +62,7 @@ export function CapTrack({
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          setVisible(true);
+          entry.target.classList.add('visible');
           observer.unobserve(entry.target);
         }
       },
@@ -69,7 +73,7 @@ export function CapTrack({
   }, []);
 
   return (
-    <div ref={ref} className={`track${visible ? ' visible' : ''}`}>
+    <div ref={ref} className="track">
       <div className="capline">
         <span>{capLabel}</span>
       </div>
