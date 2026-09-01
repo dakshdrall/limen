@@ -7,6 +7,7 @@ import {
   type AgentConfigDraft,
   type FieldProblem,
 } from '@/lib/agent-config';
+import { triggerDirection } from '@/lib/trigger-direction';
 
 /**
  * The configuration, as fields, split by who refuses.
@@ -64,6 +65,8 @@ export function AgentConfigForm({
 
   const messagesFor = (field: keyof AgentConfigDraft) =>
     problems.filter((problem) => problem.field === field).map((problem) => problem.message);
+
+  const direction = triggerDirection(draft);
 
   return (
     <div className="flex flex-col gap-8">
@@ -289,7 +292,7 @@ export function AgentConfigForm({
           label="Fires on a fall of"
           htmlFor="agent-trigger-drop"
           messages={messagesFor('triggerDropBps')}
-          hint="Optional, in basis points — 500 is five percent. This is what makes the agent trade: a cycle reads the price and acts only if it has fallen this far from the reference. The reference is read from the venue when you configure this agent, not typed here."
+          hint="Optional, in basis points — 500 is five percent. This is what makes the agent trade: a cycle reads the price of the token this agent spends, quoted in the pair above, and acts only if it has fallen this far from the reference. The reference is read from the venue when you configure this agent, not typed here."
         >
           <input
             id="agent-trigger-drop"
@@ -302,6 +305,8 @@ export function AgentConfigForm({
             onChange={(event) => set('triggerDropBps', event.target.value)}
           />
         </Field>
+
+        <TriggerDirectionNote direction={direction} />
 
         <Field
           label="Trade size when it fires"
@@ -346,6 +351,51 @@ export function AgentConfigForm({
           />
         </Field>
       </section>
+    </div>
+  );
+}
+
+/**
+ * What the trigger actually does, in the two assets the form names.
+ *
+ * The gap this closes is not a missing feature, it is a sentence that reads the
+ * opposite way to the strategy somebody wrote. *"Buy XLM when the price drops"*
+ * with XLM in the token field produces an agent that **sells** XLM on a drop,
+ * because the price a trigger measures is the price of the asset the agent
+ * spends — `trigger-direction.ts` has the arithmetic. Everything about that
+ * configuration looks right on this screen, and the first thing to contradict it
+ * is a trade.
+ *
+ * So it is said here, beside the number that causes it, in the assets' own
+ * names, computed from the pair on this form. It is not a refusal and must not
+ * render as one: the configuration is legitimate and somebody may well want it.
+ * `pending` is the tone this application uses for a statement about what will
+ * happen rather than about what did, which is what this is.
+ *
+ * Nothing renders when the pair or the fall is missing. A note that guessed at a
+ * half-filled form would be the same defect in a new place.
+ */
+function TriggerDirectionNote({ direction }: { direction: ReturnType<typeof triggerDirection> }) {
+  if (direction === null) return null;
+
+  return (
+    <div className="panel" data-tone="pending">
+      <span className="col-head text-muted-dim">what this trigger means</span>
+      <p className="measure text-[12.5px] leading-relaxed text-foreground">
+        A fall of {direction.dropBps} basis points ({direction.percent}) in the price of{' '}
+        <span className="value">{direction.sells}</span>, measured in{' '}
+        <span className="value">{direction.buys}</span> — a fall is{' '}
+        <strong className="font-semibold">{direction.fallMeans}</strong>. When it fires, this agent
+        sells <span className="value">{direction.sells}</span> and buys{' '}
+        <span className="value">{direction.buys}</span>.
+      </p>
+      <p className="measure text-[12.5px] leading-relaxed text-muted">
+        The direction comes from the pair, not from the strategy you wrote. A trigger measures the
+        price of the token this agent <em>spends</em>, so it fires when that token gets cheaper. An
+        agent that bought <span className="value">{direction.sells}</span> on a fall would spend{' '}
+        <span className="value">{direction.buys}</span>{' '}
+        instead, and Limen cannot express that today.
+      </p>
     </div>
   );
 }

@@ -3508,3 +3508,40 @@ input asset, and no screen says so.
 `move-the-pool.mjs` sells XLM into the pair, which lowers the XLM→USDC quote. It
 provokes the deployed agent's trigger for real, and it would push a dip-buying
 agent further from firing.
+
+### The direction is now said on the review screen
+
+The trap was never a missing feature. *"Buy XLM when the price drops"* with XLM
+in the token field produces an agent that **sells** XLM on a drop, every field on
+the screen looks right, and the first thing to contradict the sentence is a
+trade. The two halves of the fix that would make dip-buying real — quote-asset
+funding, and a rise trigger — are their own milestone; saying what the
+configuration *does* is not.
+
+`lib/trigger-direction.ts` derives it from the pair on the form: which asset is
+sold, which is bought, and what a fall is in the two assets' own names. Nothing
+is static copy, because copy naming XLM and USDC would be right for one pair and
+silently wrong for the next — the same failure in a new place. It renders beside
+the basis-points field, in `pending` tone, not as a refusal: the configuration is
+legitimate and somebody may want it.
+
+```
+what this trigger means
+A fall of 100 basis points (1%) in the price of XLM, measured in USDC — a fall
+is fewer USDC for one XLM. When it fires, this agent sells XLM and buys USDC.
+
+The direction comes from the pair, not from the strategy you wrote. A trigger
+measures the price of the token this agent spends, so it fires when that token
+gets cheaper. An agent that bought XLM on a fall would spend USDC instead, and
+Limen cannot express that today.
+```
+
+Six cases in `test/trigger-direction.test.ts`, and the load-bearing one reverses
+the pair: USDC in, XLM out, the same 100 basis points, and a fall must read as
+*fewer XLM for one USDC*. A test asserting only that a sentence appeared would
+pass against the bug.
+
+`design-system.test.ts` caught one swallowed space in the new prose before it
+shipped — `</span> instead, and Limen cannot express that` running past a line
+break, which renders as `USDCinstead`. That rule has now caught the same writing
+habit in three separate milestones.
