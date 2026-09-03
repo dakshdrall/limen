@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { FooterClaim } from '@/components/site/FooterClaim';
 import { SiteLinkGlyph } from '@/components/site/SiteLinks';
 import { StatusLabels } from '@/components/StatusLabel';
 import { SITE_LINKS } from '@/lib/site-links';
@@ -24,6 +25,11 @@ import { SITE_LINKS } from '@/lib/site-links';
  * `components/`, not across the landing alone, so the sentence was already true
  * everywhere and was only being said in one place.
  *
+ * It is true everywhere the check reaches, which is not quite everywhere the
+ * footer now goes: `/landing` draws two things it does not read, so the sentence
+ * is narrowed on that one route and left alone on the others. `FooterClaim`
+ * holds both wordings and the reasoning for the split.
+ *
  * ## Why `.screen` and not `.scene`
  *
  * It used to be a scene, because it only ever sat under the argument. It now
@@ -41,6 +47,10 @@ import { SITE_LINKS } from '@/lib/site-links';
  * Nothing here is interactive, `StatusLabels` reads a frozen record, and the two
  * off-site links are anchors. Marking it `'use client'` would put a footer that
  * renders identically on every route into the client bundle of every route.
+ *
+ * `FooterClaim` is a client component, and it is one paragraph rather than this
+ * whole file for that reason: it needs `usePathname` to know which surface it is
+ * on, and everything around it stays on the server.
  */
 export function SiteFooter() {
   return (
@@ -48,12 +58,7 @@ export function SiteFooter() {
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <StatusLabels names={['OPEN SOURCE', 'MIT', 'IN DEVELOPMENT', 'TESTNET ONLY']} />
-          <p className="text-[12.5px] leading-relaxed text-muted-dim measure">
-            Every figure on this site is read from{' '}
-            <span className="value">deployments/testnet.json</span>{' '}or from a generated evidence
-            file, and a check fails the build when either drifts. Nothing on this page is typed by
-            hand.
-          </p>
+          <FooterClaim />
         </div>
 
         {/* Two columns, and the off-site one is a real column rather than two

@@ -162,3 +162,6 @@ playwright-report/
 .scratch/
 .vercel
 .env*
+
+.scratch-*
+dump.rdb

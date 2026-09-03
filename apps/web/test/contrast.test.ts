@@ -35,6 +35,13 @@ import {
   APP_VERDICT,
   GROUND,
   GRID,
+  LANDING_ACCENT,
+  LANDING_GOLD,
+  LANDING_GRID,
+  LANDING_GROUND,
+  LANDING_RULES,
+  LANDING_SILVER,
+  LANDING_TEXT,
   RULES,
   TEXT,
   VERDICT,
@@ -461,5 +468,192 @@ describe('the two palettes stay separate', () => {
     expect(ACCENT.accent).toBe('#155e96');
     expect(RULES.border).toBe('#d8d4ca');
     expect(GRID.gridMinor).toBe('rgb(26 34 48 / 0.014)');
+  });
+});
+
+/* ===========================================================================
+   THE NARRATIVE SURFACE
+
+   Added, not substituted. Every assertion above still measures the palette it
+   measured before; these measure a third set at the same thresholds, against
+   its own ground.
+
+   The prototype this palette is ported from stated no ratios anywhere — it was
+   drawn by eye, which is exactly the condition the top of this file says a
+   measurement recorded only in a comment decays into. So the numbers below are
+   the first time these colours have been measured at all, and one of them
+   failed: `--body-dim` at `#6f6858` is 3.80:1 on black while carrying the
+   aside, the meta row and the footer. It is `#837b68` here for that reason and
+   for no other. See `LANDING_TEXT`.
+   =========================================================================== */
+
+const landingGround = LANDING_GROUND.background;
+const landingRaised = LANDING_GROUND.surfaceRaised;
+
+describe('the narrative text ramp', () => {
+  it('hits its four targets against the ground', () => {
+    near(contrast(LANDING_TEXT.foreground, landingGround), 19.59);
+    near(contrast(LANDING_TEXT.muted, landingGround), 7.71);
+    near(contrast(LANDING_TEXT.mutedDim, landingGround), 5.0);
+    near(contrast(LANDING_TEXT.faint, landingGround), 2.25);
+  });
+
+  it('keeps the four steps ordered and distinct', () => {
+    // The same shape the other two ramps are held to: a ramp whose steps
+    // converge is not a ramp, whichever ground it is drawn on.
+    const ratios = [
+      LANDING_TEXT.foreground,
+      LANDING_TEXT.muted,
+      LANDING_TEXT.mutedDim,
+      LANDING_TEXT.faint,
+    ].map((c) => contrast(c, landingGround));
+    for (let i = 1; i < ratios.length; i++) {
+      expect(ratios[i], `step ${i} is not below step ${i - 1}`).toBeLessThan(ratios[i - 1]);
+      expect(ratios[i - 1] / ratios[i], `steps ${i - 1} and ${i} are too close`).toBeGreaterThan(1.4);
+    }
+  });
+
+  it('clears AA on both steps that carry body text', () => {
+    // The floor is measured against `surfaceRaised` — the lightest thing text
+    // ever sits on here — which is the stricter direction on a dark ground and
+    // the one `APP_TEXT` is held to.
+    expect(contrast(LANDING_TEXT.muted, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_TEXT.mutedDim, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_TEXT.muted, landingRaised)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_TEXT.mutedDim, landingRaised)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('refuses the prototype value that put an aside under AA', () => {
+    // The regression this palette was measured to catch, pinned so a later
+    // edit cannot quietly restore it by eye.
+    expect(contrast('#6f6858', landingGround)).toBeLessThan(4.5);
+    expect(LANDING_TEXT.mutedDim).not.toBe('#6f6858');
+  });
+});
+
+describe('the narrative surface ladder', () => {
+  it('lifts every surface off the ground, as a dark ground allows', () => {
+    for (const step of [
+      LANDING_GROUND.surfaceSunken,
+      LANDING_GROUND.surface,
+      LANDING_GROUND.surfaceHover,
+      LANDING_GROUND.surfaceRaised,
+    ]) {
+      expect(luminance(step)).toBeGreaterThan(luminance(landingGround));
+    }
+  });
+
+  it('orders the ladder, so each step is a step', () => {
+    const ladder = [
+      LANDING_GROUND.surfaceSunken,
+      LANDING_GROUND.surface,
+      LANDING_GROUND.surfaceHover,
+      LANDING_GROUND.surfaceRaised,
+    ].map(luminance);
+    for (let i = 1; i < ladder.length; i++) {
+      expect(ladder[i], `surface ${i} does not sit above ${i - 1}`).toBeGreaterThan(ladder[i - 1]);
+    }
+  });
+
+  it('keeps each surface actually visible against the ground', () => {
+    expect(contrast(LANDING_GROUND.surface, landingGround)).toBeGreaterThan(1.03);
+    expect(contrast(LANDING_GROUND.surfaceRaised, landingGround)).toBeGreaterThan(1.05);
+  });
+});
+
+describe('the narrative rules stay ordered', () => {
+  it('draws three weights, each heavier than the last', () => {
+    const weights = [
+      LANDING_RULES.borderSubtle,
+      LANDING_RULES.border,
+      LANDING_RULES.borderBright,
+    ].map((rule) => contrast(rule, landingGround));
+    for (let i = 1; i < weights.length; i++) {
+      expect(weights[i], `rule ${i} is not heavier than ${i - 1}`).toBeGreaterThan(weights[i - 1]);
+    }
+  });
+});
+
+describe('gold and silver, in the jobs each is given', () => {
+  it('carries the accent as text on the ground and on both surfaces', () => {
+    expect(contrast(LANDING_ACCENT.accent, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_ACCENT.accent, LANDING_GROUND.surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_ACCENT.accent, landingRaised)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('carries an active-nav fill that is visible but not a second surface', () => {
+    const fill = contrast(LANDING_ACCENT.accentDim, landingGround);
+    expect(fill).toBeGreaterThan(1.03);
+    expect(fill).toBeLessThan(1.3);
+    expect(contrast(LANDING_ACCENT.accent, LANDING_ACCENT.accentDim)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('lights the focus ring brighter than the rule it replaces', () => {
+    // `:focus-visible` is drawn in gold-leaf. A ring that reads as a border is
+    // not a ring, and this page draws borders in the same hue family.
+    expect(contrast(LANDING_GOLD.goldLeaf, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_GOLD.goldLeaf, LANDING_RULES.borderBright)).toBeGreaterThan(2.5);
+  });
+
+  it('keeps the structural gold out of the text jobs', () => {
+    // `goldDeep` is 4.21:1 — under AA — and is allowed to be, because it only
+    // ever draws a gradient, a rule or the hatch. This states that in a place
+    // that fails if somebody sets prose in it, by pinning it below the floor.
+    expect(contrast(LANDING_GOLD.goldDeep, landingGround)).toBeLessThan(4.5);
+    expect(contrast(LANDING_GOLD.gold, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_GOLD.goldLeaf, landingGround)).toBeGreaterThan(
+      contrast(LANDING_GOLD.gold, landingGround),
+    );
+  });
+
+  it('sets the two silvers that carry text above AA', () => {
+    // `silver1` is the amount column and the gradient's highlight; `silver2`
+    // carries the refused verdict and the error's subject. Both are prose-sized
+    // and both are measured. `silver3` is decorative and is not asserted here.
+    expect(contrast(LANDING_SILVER.silver1, landingGround)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(LANDING_SILVER.silver2, landingGround)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps the refused verdict separable from the settled one without hue', () => {
+    // The cap demonstration marks its two outcomes in gold and silver. Reduced
+    // to greyscale they must still part, because a reader who cannot separate
+    // the hues is exactly the reader the refusal matters most to.
+    expect(Math.abs(greyscale(LANDING_GOLD.goldLeaf) - greyscale(LANDING_SILVER.silver2))).toBeGreaterThan(30);
+  });
+});
+
+describe('the narrative grid stays below the threshold of distraction', () => {
+  it('draws both pitches at the same depth cue the other two sets carry', () => {
+    const minor = contrast(composite(LANDING_GRID.gridMinor, landingGround), landingGround);
+    const major = contrast(composite(LANDING_GRID.gridMajor, landingGround), landingGround);
+    expect(minor).toBeGreaterThan(1.0);
+    expect(minor).toBeLessThan(1.05);
+    expect(major).toBeLessThan(1.1);
+  });
+
+  it('keeps the minor rule quieter than the major one', () => {
+    expect(
+      contrast(composite(LANDING_GRID.gridMinor, landingGround), landingGround),
+    ).toBeLessThan(contrast(composite(LANDING_GRID.gridMajor, landingGround), landingGround));
+  });
+});
+
+describe('the narrative palette stays separate from both of the others', () => {
+  it('shares no ground with the site or the console', () => {
+    expect(LANDING_GROUND.background).not.toBe(GROUND.background);
+    expect(LANDING_GROUND.background).not.toBe(APP_GROUND.background);
+    expect(luminance(LANDING_GROUND.background)).toBeLessThan(luminance(APP_GROUND.background));
+  });
+
+  it('leaves every site and console token exactly as it was', () => {
+    // The narrative set was added by declaring new tokens, never by editing one
+    // the other two surfaces read. Restated here as the thing it must not
+    // touch, in the same shape the console makes the same promise in.
+    expect(GROUND.background).toBe('#fbfaf7');
+    expect(TEXT.foreground).toBe('#191c21');
+    expect(ACCENT.accent).toBe('#155e96');
+    expect(APP_GROUND.background).toBe('#0b0f14');
+    expect(APP_TEXT.foreground).toBe('#eaf1fa');
+    expect(APP_ACCENT.accent).toBe('#6cb8ff');
   });
 });

@@ -252,6 +252,43 @@
   --app-grid-minor: rgb(150 180 220 / 0.018);
   --app-grid-major: rgb(150 180 220 / 0.0394);
 
+  /* ── the narrative surface ───────────────────────────────────────────────
+     Black, gold and grainy silver, for `/landing` only. Declared here so
+     `lib/theme.ts` pins every one of them, exactly as the console set is —
+     a `--landing-` value edited by eye is a red build, not a drift.
+
+     These are declarations, not application. Nothing reads them until
+     `.landing` aliases them below, so `/`, `/docs` and `/app/*` resolve
+     precisely as they did before this block existed. */
+  --landing-background: #000000;
+  --landing-surface: #0d0a05;
+  --landing-surface-raised: #151007;
+  --landing-surface-hover: #120e06;
+  --landing-surface-sunken: #060402;
+
+  --landing-border-subtle: #1c1710;
+  --landing-border: #2a2113;
+  --landing-border-bright: #3a2f1c;
+
+  --landing-foreground: #f6f7f9;
+  --landing-muted: #a49c8c;
+  --landing-muted-dim: #837b68;
+  --landing-faint: #4e4636;
+
+  --landing-gold: #c9a227;
+  --landing-gold-leaf: #f2d278;
+  --landing-gold-deep: #8c6a2b;
+
+  --landing-silver-1: #f6f7f9;
+  --landing-silver-2: #9aa0a6;
+  --landing-silver-3: #6f757c;
+
+  --landing-accent: #c9a227;
+  --landing-accent-dim: #1a1408;
+
+  --landing-grid-minor: rgb(201 162 39 / 0.020);
+  --landing-grid-major: rgb(201 162 39 / 0.042);
+
   --grid-pitch: 32px;
   --grid-pitch-major: 160px;
   --grid-image:
@@ -715,6 +752,49 @@ body::before {
 
     --grid-minor: var(--app-grid-minor);
     --grid-major: var(--app-grid-major);
+
+    color-scheme: dark;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* ── the narrative surface ───────────────────────────────────────────────
+     `/landing`, aliased exactly the way `.console` is, and for the same
+     reason: the shared chrome reads `var(--background)`, `var(--foreground)`
+     and `var(--border-subtle)`, so re-pointing the tokens on `body` carries
+     the header and the footer with the page rather than leaving light chrome
+     bolted to a black one. No pathname check, no client component, nothing for
+     hydration to disagree about.
+
+     Every alias is a `var()` and never a literal, so this block introduces no
+     colour and escapes no pin — it only chooses which set is in scope. See the
+     `.console` block above, which this is modelled on line for line.
+
+     The verdict tokens are deliberately *not* aliased. Nothing on this page
+     renders a verdict badge, and inventing a gold PERMIT here would put a
+     fourth definition of the verdicts in the codebase to serve no caller. */
+  .landing,
+  body:has(.landing) {
+    --background: var(--landing-background);
+    --surface: var(--landing-surface);
+    --surface-raised: var(--landing-surface-raised);
+    --surface-hover: var(--landing-surface-hover);
+    --surface-sunken: var(--landing-surface-sunken);
+
+    --border-subtle: var(--landing-border-subtle);
+    --border: var(--landing-border);
+    --border-bright: var(--landing-border-bright);
+
+    --foreground: var(--landing-foreground);
+    --muted: var(--landing-muted);
+    --muted-dim: var(--landing-muted-dim);
+    --faint: var(--landing-faint);
+
+    --accent: var(--landing-accent);
+    --accent-dim: var(--landing-accent-dim);
+
+    --grid-minor: var(--landing-grid-minor);
+    --grid-major: var(--landing-grid-major);
 
     color-scheme: dark;
     background-color: var(--background);

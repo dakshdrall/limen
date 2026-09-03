@@ -362,6 +362,111 @@ export const APP_GRID = {
   gridMajor: 'rgb(150 180 220 / 0.0394)',
 } as const satisfies Record<string, string>;
 
+/* ===========================================================================
+   THE NARRATIVE SURFACE — black, gold, grainy silver
+
+   A third scoped set, added the way `APP_*` was: the site and the console keep
+   the tokens they had, and this one is aliased over them by `.landing` in
+   `globals.css`. Nothing here is a new *kind* of token — the shape is exactly
+   the four ground steps, three rules, four text steps, an accent and the grid,
+   so the shared chrome (header, footer, status labels) re-points wholesale and
+   none of it learns that a third surface exists.
+
+   ## Why a third set rather than a repaint
+
+   `globals.css` records, at length, that the site is light on purpose: PLAN-V6
+   reaffirmed it because a dark Limen with a scroll narrative would resemble
+   markov.fyi, its nearest conceptual neighbour, visually as well as
+   conceptually. That argument is untouched here. This set does not replace the
+   light one and is not proposed as a replacement — it paints one route, so the
+   two can be compared side by side before anything is decided.
+
+   ## The one value that is not the prototype's
+
+   `mutedDim` is `#837b68` where the prototype's `--body-dim` was `#6f6858`.
+   That original measures 3.80:1 on black — under AA — and it carries real
+   prose: the aside under the cap demonstration, the transaction meta row, and
+   the footer. Lifted along its own hue until it clears 4.5 against the
+   lightest ground it can sit on (4.51 against `surfaceRaised`, 5.00 against the
+   page), which is the floor `APP_TEXT` is held to and the same discipline.
+   Every other value is the prototype's, unchanged.
+   =========================================================================== */
+
+/** The narrative ground. True black, and four warm surfaces that lift off it. */
+export const LANDING_GROUND = {
+  background: '#000000',
+  surface: '#0d0a05',
+  surfaceRaised: '#151007',
+  surfaceHover: '#120e06',
+  surfaceSunken: '#060402',
+} as const satisfies Record<string, Hex>;
+
+/** Three ordered rule weights: 1.18:1, 1.33:1 and 1.60:1 against the ground. */
+export const LANDING_RULES = {
+  borderSubtle: '#1c1710',
+  border: '#2a2113',
+  borderBright: '#3a2f1c',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * The four-step ramp, measured against the ground rather than inverted.
+ *
+ *     foreground  19.59:1   display headings, amounts
+ *     muted        7.71:1   running prose
+ *     muted-dim    5.00:1   annotations, meta rows, the footer
+ *     faint        2.25:1   decorative only — the unfilled form fields
+ *
+ * The AA floor is enforced against `surfaceRaised`, the lightest thing text
+ * ever sits on here, exactly as `APP_TEXT` is.
+ */
+export const LANDING_TEXT = {
+  foreground: '#f6f7f9',
+  muted: '#a49c8c',
+  mutedDim: '#837b68',
+  faint: '#4e4636',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * Gold, in three weights.
+ *
+ * `gold` is the accent proper and the only one that carries text at size.
+ * `goldLeaf` is the lit edge — the focus ring, a hovered link, the cap label.
+ * `goldDeep` is structural: gradients, rules and the hatch, never text, which
+ * is why it is allowed to sit at 4.21:1.
+ */
+export const LANDING_GOLD = {
+  gold: '#c9a227',
+  goldLeaf: '#f2d278',
+  goldDeep: '#8c6a2b',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * Silver, in three weights, for the grain-filtered headings and the values
+ * beside them. `silver1` is the gradient's highlight and the amount column;
+ * `silver2` carries the refused verdict and the error's subject.
+ */
+export const LANDING_SILVER = {
+  silver1: '#f6f7f9',
+  silver2: '#9aa0a6',
+  silver3: '#6f757c',
+} as const satisfies Record<string, Hex>;
+
+/** The accent in its three jobs: text, focus ring, active-nav fill. */
+export const LANDING_ACCENT = {
+  accent: '#c9a227',
+  accentDim: '#1a1408',
+} as const satisfies Record<string, Hex>;
+
+/**
+ * The ruled ground, at the same depth cue the other two sets carry rather than
+ * the same alpha. Warm rather than blue, so the grid reads as part of the gold
+ * ground and not as a cool film laid over it.
+ */
+export const LANDING_GRID = {
+  gridMinor: 'rgb(201 162 39 / 0.020)',
+  gridMajor: 'rgb(201 162 39 / 0.042)',
+} as const satisfies Record<string, string>;
+
 /**
  * Every colour token, keyed by its CSS custom property name.
  *
@@ -438,4 +543,36 @@ export const THEME = {
 
   '--app-grid-minor': APP_GRID.gridMinor,
   '--app-grid-major': APP_GRID.gridMajor,
+
+  // The narrative palette. Same pin, same rules: a `--landing-` token added to
+  // `globals.css` and not listed here fails `design-system.test.ts` exactly as
+  // a site or console token would.
+  '--landing-background': LANDING_GROUND.background,
+  '--landing-surface': LANDING_GROUND.surface,
+  '--landing-surface-raised': LANDING_GROUND.surfaceRaised,
+  '--landing-surface-hover': LANDING_GROUND.surfaceHover,
+  '--landing-surface-sunken': LANDING_GROUND.surfaceSunken,
+
+  '--landing-border-subtle': LANDING_RULES.borderSubtle,
+  '--landing-border': LANDING_RULES.border,
+  '--landing-border-bright': LANDING_RULES.borderBright,
+
+  '--landing-foreground': LANDING_TEXT.foreground,
+  '--landing-muted': LANDING_TEXT.muted,
+  '--landing-muted-dim': LANDING_TEXT.mutedDim,
+  '--landing-faint': LANDING_TEXT.faint,
+
+  '--landing-gold': LANDING_GOLD.gold,
+  '--landing-gold-leaf': LANDING_GOLD.goldLeaf,
+  '--landing-gold-deep': LANDING_GOLD.goldDeep,
+
+  '--landing-silver-1': LANDING_SILVER.silver1,
+  '--landing-silver-2': LANDING_SILVER.silver2,
+  '--landing-silver-3': LANDING_SILVER.silver3,
+
+  '--landing-accent': LANDING_ACCENT.accent,
+  '--landing-accent-dim': LANDING_ACCENT.accentDim,
+
+  '--landing-grid-minor': LANDING_GRID.gridMinor,
+  '--landing-grid-major': LANDING_GRID.gridMajor,
 } as const;
