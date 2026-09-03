@@ -729,10 +729,28 @@
     padding-bottom: 15rem;
   }
 
+  /*  The width is stated, and it has to be. A `canvas` is a replaced element:
+      with `width: auto` it takes its *intrinsic* width — the `width` attribute,
+      300 until `resize()` writes one — and an over-constrained inset drops the
+      `right` one rather than stretching the box. So `left`/`right` alone left
+      the strip 272px wide at every viewport, ending 70px short of the gutter at
+      390 and hard against nothing in particular at 360, which is what the
+      committed screenshot shows. It also closed a loop: `resize()` measures the
+      rendered box and writes `cv.width` from it, so the intrinsic width fed the
+      measurement that set the intrinsic width.
+
+      `calc(100% + 2 * var(--gutter))` is the inset box written out. The
+      percentage resolves against the hero's padding box, which carries no
+      inline padding, so this is the content column plus both gutters — the
+      viewport, at every width below the breakpoint. The gutters themselves are
+      clipped by the `overflow: hidden` every section carries, exactly as the
+      desktop rule's `right: -5%` is: art on this surface draws past its frame
+      and the frame cuts it. What changes here is only that the strip now fills
+      the frame. */
   .landing .art-candles {
     left: calc(-1 * var(--gutter));
-    right: calc(-1 * var(--gutter));
-    width: auto;
+    right: auto;
+    width: calc(100% + 2 * var(--gutter));
     height: 8.5rem;
     bottom: 1.5rem;
     opacity: 0.6;
