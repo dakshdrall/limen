@@ -128,6 +128,35 @@
   mask-image: linear-gradient(90deg, transparent 0, rgba(0, 0, 0, 0.25) 26%, #000 58%, #000 100%);
 }
 
+/*  The tape says what it is, to the reader and not only to the next person to
+    open `CandleTape.tsx`. Every candle there is a seeded random walk, so the
+    footer's provenance sentence is narrowed on this route rather than stretched
+    to cover a drawing — and a narrowed claim is only honest if the thing it no
+    longer covers is labelled where it is looked at.
+
+    Set at the tape's bottom edge rather than beside the heading: it belongs to
+    the chart, and the hero's argument should not have to open with a caveat
+    about its own wallpaper. `bottom` clears the tape's own 1.5rem, which is the
+    room the hero already reserves under it in both layouts, so the strip
+    arrangement below 820 needs no rule of its own.
+
+    Mono and `--muted-dim`, the dim body colour this surface uses for the meta
+    rows under the proof — the quietest text on the page that still passes AA
+    against the black. `.art` gives it the absolute positioning and the layer;
+    `pointer-events` is handed back because this one is a sentence to read and
+    copy, not wallpaper to click through. */
+.landing .art-candles-note {
+  right: 0;
+  bottom: 0.35rem;
+  margin: 0;
+  pointer-events: auto;
+  font-family: var(--font-body-mono);
+  font-size: 0.72rem;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  color: var(--muted-dim);
+}
+
 /* the sill, as architecture */
 .landing .art-sill {
   top: -8%;

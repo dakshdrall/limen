@@ -5,6 +5,10 @@ import { useEffect, useRef } from 'react';
 /**
  * THIS IS DECORATION. IT IS NOT A PRICE FEED.
  *
+ * Said on the page as well as here — `art-candles-note`, below — because a
+ * comment in this file protects the next person to edit it and nobody looking
+ * at the tape.
+ *
  * Every candle below comes from a seeded random walk computed in this file. It
  * is not connected to Soroswap, the Route API, Horizon, the RPC, `readPrice`,
  * or anything in `packages/chain`, and it makes no fetch, opens no socket and
@@ -301,5 +305,20 @@ export function CandleTape() {
     };
   }, []);
 
-  return <canvas ref={ref} className="art art-candles" aria-hidden="true" />;
+  // The label is the reader's copy of the paragraph at the top of this file.
+  // A chart that ticks reads as a feed unless it says otherwise, and the
+  // footer's provenance sentence is scoped away from the tape rather than
+  // stretched over it — so the disclosure has to be here, next to the thing it
+  // is about, in text a person sees rather than a comment only we read.
+  //
+  // Not `aria-hidden`, unlike the canvas: the canvas is decoration a screen
+  // reader gains nothing from, and this sentence is the one part of it that
+  // carries information. It is `.art` so it is positioned and click-through
+  // like the tape rather than taking a row in the hero's flow.
+  return (
+    <>
+      <canvas ref={ref} className="art art-candles" aria-hidden="true" />
+      <p className="art art-candles-note">simulated tape — not a live price feed</p>
+    </>
+  );
 }
